@@ -1399,6 +1399,15 @@ ctrl_entity_store_apply_events(CTRL_EntityCtxRWStore *store, CTRL_EventList *lis
           }
         }
       }break;
+      
+      //- rjf: address range annotations
+      case CTRL_EventKind_SetVAddrRangeNote:
+      {
+        CTRL_Entity *process = ctrl_entity_from_handle(&store->ctx, event->parent);
+        CTRL_Entity *annotation = ctrl_entity_alloc(store, process, CTRL_EntityKind_AddressRangeAnnotation, Arch_Null, ctrl_handle_zero(), 0);
+        annotation->vaddr_range = event->vaddr_rng;
+        ctrl_entity_equip_string(store, annotation, event->string);
+      }break;
     }
   }
 }
@@ -3980,13 +3989,8 @@ ctrl_thread__module_open(CTRL_Handle process, CTRL_Handle module, Rng1U64 vaddr_
                                       file_header_off + sizeof(COFF_FileHeader) + opt_ext_size);
     
     //- rjf: read optional header
-    U16 optional_magic = 0;
-    U64 image_base = 0;
     U64 entry_point = 0;
     U32 data_dir_count = 0;
-    U64 virt_section_align = 0;
-    U64 file_section_align = 0;
-    Rng1U64 *data_dir_franges = 0;
     if(opt_ext_size > 0)
     {
       // rjf: read magic number
@@ -4002,10 +4006,7 @@ ctrl_thread__module_open(CTRL_Handle process, CTRL_Handle module, Rng1U64 vaddr_
         {
           PE_OptionalHeader32 pe_optional = {0};
           dmn_process_read_struct(process.dmn_handle, vaddr_range.min + opt_ext_off_range.min, &pe_optional);
-          image_base = pe_optional.image_base;
           entry_point = pe_optional.entry_point_va;
-          virt_section_align = pe_optional.section_alignment;
-          file_section_align = pe_optional.file_alignment;
           reported_data_dir_offset = sizeof(pe_optional);
           reported_data_dir_count = pe_optional.data_dir_count;
         }break;
@@ -4013,10 +4014,7 @@ ctrl_thread__module_open(CTRL_Handle process, CTRL_Handle module, Rng1U64 vaddr_
         {
           PE_OptionalHeader32Plus pe_optional = {0};
           dmn_process_read_struct(process.dmn_handle, vaddr_range.min + opt_ext_off_range.min, &pe_optional);
-          image_base = pe_optional.image_base;
           entry_point = pe_optional.entry_point_va;
-          virt_section_align = pe_optional.section_alignment;
-          file_section_align = pe_optional.file_alignment;
           reported_data_dir_offset = sizeof(pe_optional);
           reported_data_dir_count = pe_optional.data_dir_count;
         }break;
@@ -4666,6 +4664,15 @@ ctrl_thread__next_dmn_event(Arena *arena, DMN_CtrlCtx *ctrl_ctx, CTRL_Msg *msg, 
       out_evt->entity_id  = event->code;
       out_evt->rgba       = event->user_data;
     }break;
+    case DMN_EventKind_SetVAddrRangeNote:
+    {
+      CTRL_Event *out_evt = ctrl_event_list_push(scratch.arena, &evts);
+      out_evt->kind       = CTRL_EventKind_SetVAddrRangeNote;
+      out_evt->parent     = ctrl_handle_make(CTRL_MachineID_Local, event->process);
+      out_evt->msg_id     = msg->msg_id;
+      out_evt->vaddr_rng  = r1u64(event->address, event->address + event->size);
+      out_evt->string     = event->string;
+    }
     case DMN_EventKind_SetBreakpoint:
     {
       CTRL_Event *out_evt = ctrl_event_list_push(scratch.arena, &evts);

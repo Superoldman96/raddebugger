@@ -60,7 +60,7 @@ str8_lit_comp(""),
 str8_lit_comp(""),
 };
 
-RD_VocabInfo rd_vocab_info_table[343] =
+RD_VocabInfo rd_vocab_info_table[345] =
 {
 {str8_lit_comp("type_view"), str8_lit_comp("type_views"), str8_lit_comp("Type View"), str8_lit_comp("Type Views"), RD_IconKind_Binoculars},
 {str8_lit_comp("file_path_map"), str8_lit_comp("file_path_maps"), str8_lit_comp("File Path Map"), str8_lit_comp("File Path Maps"), RD_IconKind_FileOutline},
@@ -275,6 +275,8 @@ RD_VocabInfo rd_vocab_info_table[343] =
 {str8_lit_comp("open_recent_project"), str8_lit_comp(""), str8_lit_comp("Open Recent Project"), str8_lit_comp(""), RD_IconKind_Briefcase},
 {str8_lit_comp("save_user"), str8_lit_comp(""), str8_lit_comp("Save User"), str8_lit_comp(""), RD_IconKind_Save},
 {str8_lit_comp("save_project"), str8_lit_comp(""), str8_lit_comp("Save Project"), str8_lit_comp(""), RD_IconKind_Save},
+{str8_lit_comp("record_user_as_last_opened"), str8_lit_comp(""), str8_lit_comp("Record User As Last Opened"), str8_lit_comp(""), RD_IconKind_Null},
+{str8_lit_comp("record_project_in_user"), str8_lit_comp(""), str8_lit_comp("Records Project In User"), str8_lit_comp(""), RD_IconKind_Null},
 {str8_lit_comp("write_user_data"), str8_lit_comp(""), str8_lit_comp("Write User Data"), str8_lit_comp(""), RD_IconKind_Null},
 {str8_lit_comp("write_project_data"), str8_lit_comp(""), str8_lit_comp("Write Project Data"), str8_lit_comp(""), RD_IconKind_Null},
 {str8_lit_comp("user_settings"), str8_lit_comp(""), str8_lit_comp("User Settings"), str8_lit_comp(""), RD_IconKind_Gear},
@@ -417,7 +419,7 @@ RD_NameSchemaInfo rd_name_schema_info_table[24] =
 {str8_lit_comp("watch"), str8_lit_comp("@inherit(tab) x:\n{\n  @override @display_name('Tab Row Height') @description(\"Controls the tab's row height, in multiples of the font size.\")\n  'row_height': @range[1.75f, 5.f] f32,\n  'label': code_string,\n  @description(\"The root expression which is evaluated to produce the watch window.\")\n  'expression': expr_string,\n  @no_expand 'watches': query,\n}\n")},
 {str8_lit_comp("text"), str8_lit_comp("@inherit(tab) x:\n{\n  @description(\"An expression to describe data which should be viewed as text or code.\")\n  'expression': expr_string,\n  @description(\"The language that the text should be interpreted as being within. Used for syntax highlighting and other parsing features.\")\n  'lang': code_string,\n  @default(1) @description(\"Controls whether or not line numbers are shown.\")\n  'show_line_numbers':bool,\n  @no_callee_helper @default(0) @display_name('Scroll To Bottom On Change') @description(\"Scrolls to the bottom if the text is changed.\")\n  'scroll_to_bottom_on_change':bool,\n  @no_callee_helper @no_revert @default(0) @display_name('Transient') @description(\"Controls whether or not this tab will be automatically replaced by the debugger when it snaps to new source code locations.\")\n  'auto': bool,\n}\n")},
 {str8_lit_comp("disasm"), str8_lit_comp("@inherit(tab) x:\n{\n  @description(\"An expression to describe the base address or offset of the disassembly.\")\n  'expression': expr_string,\n  'arch':        code_string,\n  'syntax':      code_string,\n  'size':        expr_string,\n  @no_callee_helper @default(1) @description(\"Controls whether or not addresses are shown in the disassembly text.\")\n  'show_addresses':    bool,\n  @no_callee_helper @default(0) @description(\"Controls whether or not code bytes are shown in the disassembly text.\")\n  'show_code_bytes':   bool,\n  @no_callee_helper @default(1) @description(\"Controls whether or not source lines, corresponding to disassembly instruction ranges, are shown in the disassembly text.\")\n  'show_source_lines': bool,\n  @no_callee_helper @default(1) @description(\"Controls whether or not disassembly text is decorated with symbol names.\")\n  'show_symbol_names': bool,\n  @no_callee_helper @default(1) @description(\"Controls whether or not line numbers are shown.\")\n  'show_line_numbers': bool,\n}\n")},
-{str8_lit_comp("memory"), str8_lit_comp("@inherit(tab) x:\n{\n  @description(\"An expression which refers to the base address of data which should be viewed as memory.\")\n  'expression': expr_string,\n  @display_name(\"Address Range Size\") @description(\"The number of bytes of the viewed memory range.\")\n  'size': expr_string,\n  @display_name(\"Cursor Address\") @description(\"The address of the cursor.\")\n  'cursor': expr_string,\n  @display_name(\"Cursor Size\") @description(\"The size, in bytes, of the cursor.\")\n  'cursor_size': @range[1, 16] u64,\n  @default(16) @description(\"The number of columns to build before building new rows.\")\n  'num_columns': @range[1, 64] u64,\n}\n")},
+{str8_lit_comp("memory"), str8_lit_comp("@inherit(tab) x:\n{\n  @description(\"An expression which refers to the base address of data which should be viewed as memory.\")\n  'expression': expr_string,\n  @display_name(\"Address Range Size\") @description(\"The number of bytes of the viewed memory range.\")\n  'size': expr_string,\n  @display_name(\"Cursor Address\") @description(\"The address of the cursor.\")\n  'cursor': expr_string,\n  @display_name(\"Cursor Size\") @description(\"The size, in bytes, of the cursor.\")\n  'cursor_size': @range[1, 16] u64,\n  @default(16) @description(\"The number of columns to build before building new rows.\")\n  'num_columns': @range[1, 64] u64,\n  @default(1) @display_name(\"Track Mark To Cursor\") @description(\"Ensures that the mark always follows the cursor, if the cursor value is updated.\")\n  'track_mark_to_cursor': bool,\n}\n")},
 {str8_lit_comp("bitmap"), str8_lit_comp("@inherit(tab) x:\n{\n  @description(\"An expression which refers to the base address of data which should be viewed as a bitmap.\")\n  'expression': expr_string,\n  @description(\"An expression describing the width of the bitmap, in pixels.\") @order(0) 'w': u64,\n  @description(\"An expression describing the height of the bitmap, in pixels.\") @order(1) 'h': u64,\n  @display_name(\"Bitmap Format\") @description(\"The pixel format that the bitmap data should be interpreted as being within.\")\n  'fmt': code_string,\n}\n")},
 {str8_lit_comp("color"), str8_lit_comp("@inherit(tab) x:\n{\n  @display_name(\"Value\") @description(\"An expression to describe the value or location of the color.\")\n  'expression': expr_string,\n}\n")},
 {str8_lit_comp("geo3d"), str8_lit_comp("@inherit(tab) x:\n{\n  @display_name(\"Expression\") @description(\"An expression to describe the base address of the index buffer.\")\n  'expression': expr_string,\n  'count': expr_string,\n  'vtx': expr_string,\n  'vtx_size': expr_string,\n  'yaw': @range[0, 1] f32,\n  'pitch': @range[-0.5, 0] f32,\n  'zoom': @range[0, 100] f32,\n}\n")},
@@ -435,7 +437,7 @@ RD_NameSchemaInfo rd_name_schema_info_table[24] =
 {str8_lit_comp("thread"), str8_lit_comp("x:{'label':code_string, 'id':u64, @no_expand 'active':bool, 'call_stack':query}")},
 };
 
-Rng1U64 rd_reg_slot_range_table[44] =
+Rng1U64 rd_reg_slot_range_table[48] =
 {
 {0},
 {OffsetOf(RD_Regs, machine), OffsetOf(RD_Regs, machine) + sizeof(CTRL_Handle)},
@@ -451,6 +453,7 @@ Rng1U64 rd_reg_slot_range_table[44] =
 {OffsetOf(RD_Regs, dst_panel), OffsetOf(RD_Regs, dst_panel) + sizeof(RD_CfgID)},
 {OffsetOf(RD_Regs, cfg), OffsetOf(RD_Regs, cfg) + sizeof(RD_CfgID)},
 {OffsetOf(RD_Regs, cfg_list), OffsetOf(RD_Regs, cfg_list) + sizeof(RD_CfgIDList)},
+{OffsetOf(RD_Regs, eval_space), OffsetOf(RD_Regs, eval_space) + sizeof(E_Space)},
 {OffsetOf(RD_Regs, unwind_count), OffsetOf(RD_Regs, unwind_count) + sizeof(U64)},
 {OffsetOf(RD_Regs, inline_depth), OffsetOf(RD_Regs, inline_depth) + sizeof(U64)},
 {OffsetOf(RD_Regs, file_path), OffsetOf(RD_Regs, file_path) + sizeof(String8)},
@@ -466,6 +469,7 @@ Rng1U64 rd_reg_slot_range_table[44] =
 {OffsetOf(RD_Regs, voff_range), OffsetOf(RD_Regs, voff_range) + sizeof(Rng1U64)},
 {OffsetOf(RD_Regs, expr), OffsetOf(RD_Regs, expr) + sizeof(String8)},
 {OffsetOf(RD_Regs, ui_key), OffsetOf(RD_Regs, ui_key) + sizeof(UI_Key)},
+{OffsetOf(RD_Regs, src_ui_key), OffsetOf(RD_Regs, src_ui_key) + sizeof(UI_Key)},
 {OffsetOf(RD_Regs, off_px), OffsetOf(RD_Regs, off_px) + sizeof(Vec2F32)},
 {OffsetOf(RD_Regs, reg_slot), OffsetOf(RD_Regs, reg_slot) + sizeof(RD_RegSlot)},
 {OffsetOf(RD_Regs, pid), OffsetOf(RD_Regs, pid) + sizeof(U32)},
@@ -476,6 +480,8 @@ Rng1U64 rd_reg_slot_range_table[44] =
 {OffsetOf(RD_Regs, do_implicit_root), OffsetOf(RD_Regs, do_implicit_root) + sizeof(B32)},
 {OffsetOf(RD_Regs, do_lister), OffsetOf(RD_Regs, do_lister) + sizeof(B32)},
 {OffsetOf(RD_Regs, do_big_rows), OffsetOf(RD_Regs, do_big_rows) + sizeof(B32)},
+{OffsetOf(RD_Regs, all_windows), OffsetOf(RD_Regs, all_windows) + sizeof(B32)},
+{OffsetOf(RD_Regs, non_graphical), OffsetOf(RD_Regs, non_graphical) + sizeof(B32)},
 {OffsetOf(RD_Regs, dir2), OffsetOf(RD_Regs, dir2) + sizeof(Dir2)},
 {OffsetOf(RD_Regs, string), OffsetOf(RD_Regs, string) + sizeof(String8)},
 {OffsetOf(RD_Regs, cmd_name), OffsetOf(RD_Regs, cmd_name) + sizeof(String8)},
@@ -483,7 +489,7 @@ Rng1U64 rd_reg_slot_range_table[44] =
 {OffsetOf(RD_Regs, os_event), OffsetOf(RD_Regs, os_event) + sizeof(OS_Event *)},
 };
 
-RD_CmdKindInfo rd_cmd_kind_info_table[236] =
+RD_CmdKindInfo rd_cmd_kind_info_table[238] =
 {
 {0},
 { str8_lit_comp("launch_and_run"), str8_lit_comp("Starts debugging a new instance of a target, then runs."), str8_lit_comp("launch,start,run,target"), str8_lit_comp(""), (RD_CmdKindFlag_ListInUI*1)|(RD_CmdKindFlag_ListInIPCDocs*1)|(RD_CmdKindFlag_ListInTextPt*0)|(RD_CmdKindFlag_ListInTextRng*0), {(RD_QueryFlag_AllowFiles*0)|(RD_QueryFlag_AllowFolders*0)|(RD_QueryFlag_CodeInput*0)|(RD_QueryFlag_KeepOldInput*0)|(RD_QueryFlag_SelectOldInput*0)|(RD_QueryFlag_Floating*1)|(RD_QueryFlag_Required*1), RD_RegSlot_Cfg, str8_lit_comp("query:targets"), str8_lit_comp(""), CTRL_EntityKind_Null}},
@@ -591,6 +597,8 @@ RD_CmdKindInfo rd_cmd_kind_info_table[236] =
 { str8_lit_comp("open_recent_project"), str8_lit_comp("Opens a recently used project file."), str8_lit_comp("project,project,session"), str8_lit_comp(""), (RD_CmdKindFlag_ListInUI*1)|(RD_CmdKindFlag_ListInIPCDocs*1)|(RD_CmdKindFlag_ListInTextPt*0)|(RD_CmdKindFlag_ListInTextRng*0), {(RD_QueryFlag_AllowFiles*0)|(RD_QueryFlag_AllowFolders*0)|(RD_QueryFlag_CodeInput*0)|(RD_QueryFlag_KeepOldInput*0)|(RD_QueryFlag_SelectOldInput*0)|(RD_QueryFlag_Floating*1)|(RD_QueryFlag_Required*1), RD_RegSlot_Cfg, str8_lit_comp("query:recent_projects"), str8_lit_comp(""), CTRL_EntityKind_Null}},
 { str8_lit_comp("save_user"), str8_lit_comp("Saves user data to a file, and sets the current user path as that path."), str8_lit_comp("load,user,project,layout"), str8_lit_comp(""), (RD_CmdKindFlag_ListInUI*1)|(RD_CmdKindFlag_ListInIPCDocs*1)|(RD_CmdKindFlag_ListInTextPt*0)|(RD_CmdKindFlag_ListInTextRng*0), {(RD_QueryFlag_AllowFiles*1)|(RD_QueryFlag_AllowFolders*0)|(RD_QueryFlag_CodeInput*0)|(RD_QueryFlag_KeepOldInput*0)|(RD_QueryFlag_SelectOldInput*0)|(RD_QueryFlag_Floating*1)|(RD_QueryFlag_Required*1), RD_RegSlot_FilePath, str8_lit_comp("folder:\"$input\""), str8_lit_comp(""), CTRL_EntityKind_Null}},
 { str8_lit_comp("save_project"), str8_lit_comp("Saves project data to a file, and sets the current project path as that path."), str8_lit_comp("project,project,session"), str8_lit_comp(""), (RD_CmdKindFlag_ListInUI*1)|(RD_CmdKindFlag_ListInIPCDocs*1)|(RD_CmdKindFlag_ListInTextPt*0)|(RD_CmdKindFlag_ListInTextRng*0), {(RD_QueryFlag_AllowFiles*1)|(RD_QueryFlag_AllowFolders*0)|(RD_QueryFlag_CodeInput*0)|(RD_QueryFlag_KeepOldInput*0)|(RD_QueryFlag_SelectOldInput*0)|(RD_QueryFlag_Floating*1)|(RD_QueryFlag_Required*1), RD_RegSlot_FilePath, str8_lit_comp("folder:\"$input\""), str8_lit_comp(""), CTRL_EntityKind_Null}},
+{ str8_lit_comp("record_user_as_last_opened"), str8_lit_comp("Records a file path as the last opened user."), str8_lit_comp(""), str8_lit_comp(""), (RD_CmdKindFlag_ListInUI*0)|(RD_CmdKindFlag_ListInIPCDocs*0)|(RD_CmdKindFlag_ListInTextPt*0)|(RD_CmdKindFlag_ListInTextRng*0), {(RD_QueryFlag_AllowFiles*0)|(RD_QueryFlag_AllowFolders*0)|(RD_QueryFlag_CodeInput*0)|(RD_QueryFlag_KeepOldInput*0)|(RD_QueryFlag_SelectOldInput*0)|(RD_QueryFlag_Floating*0)|(RD_QueryFlag_Required*0), RD_RegSlot_Null, str8_lit_comp(""), str8_lit_comp(""), CTRL_EntityKind_Null}},
+{ str8_lit_comp("record_project_in_user"), str8_lit_comp("Records a file path as a recent project in user data."), str8_lit_comp(""), str8_lit_comp(""), (RD_CmdKindFlag_ListInUI*0)|(RD_CmdKindFlag_ListInIPCDocs*0)|(RD_CmdKindFlag_ListInTextPt*0)|(RD_CmdKindFlag_ListInTextRng*0), {(RD_QueryFlag_AllowFiles*0)|(RD_QueryFlag_AllowFolders*0)|(RD_QueryFlag_CodeInput*0)|(RD_QueryFlag_KeepOldInput*0)|(RD_QueryFlag_SelectOldInput*0)|(RD_QueryFlag_Floating*0)|(RD_QueryFlag_Required*0), RD_RegSlot_Null, str8_lit_comp(""), str8_lit_comp(""), CTRL_EntityKind_Null}},
 { str8_lit_comp("write_user_data"), str8_lit_comp("Writes user data to the active user file."), str8_lit_comp(""), str8_lit_comp(""), (RD_CmdKindFlag_ListInUI*0)|(RD_CmdKindFlag_ListInIPCDocs*1)|(RD_CmdKindFlag_ListInTextPt*0)|(RD_CmdKindFlag_ListInTextRng*0), {(RD_QueryFlag_AllowFiles*0)|(RD_QueryFlag_AllowFolders*0)|(RD_QueryFlag_CodeInput*0)|(RD_QueryFlag_KeepOldInput*0)|(RD_QueryFlag_SelectOldInput*0)|(RD_QueryFlag_Floating*0)|(RD_QueryFlag_Required*0), RD_RegSlot_Null, str8_lit_comp(""), str8_lit_comp(""), CTRL_EntityKind_Null}},
 { str8_lit_comp("write_project_data"), str8_lit_comp("Writes project data to the active project file."), str8_lit_comp(""), str8_lit_comp(""), (RD_CmdKindFlag_ListInUI*0)|(RD_CmdKindFlag_ListInIPCDocs*1)|(RD_CmdKindFlag_ListInTextPt*0)|(RD_CmdKindFlag_ListInTextRng*0), {(RD_QueryFlag_AllowFiles*0)|(RD_QueryFlag_AllowFolders*0)|(RD_QueryFlag_CodeInput*0)|(RD_QueryFlag_KeepOldInput*0)|(RD_QueryFlag_SelectOldInput*0)|(RD_QueryFlag_Floating*0)|(RD_QueryFlag_Required*0), RD_RegSlot_Null, str8_lit_comp(""), str8_lit_comp(""), CTRL_EntityKind_Null}},
 { str8_lit_comp("user_settings"), str8_lit_comp("Opens user settings."), str8_lit_comp(""), str8_lit_comp(""), (RD_CmdKindFlag_ListInUI*1)|(RD_CmdKindFlag_ListInIPCDocs*1)|(RD_CmdKindFlag_ListInTextPt*0)|(RD_CmdKindFlag_ListInTextRng*0), {(RD_QueryFlag_AllowFiles*0)|(RD_QueryFlag_AllowFolders*0)|(RD_QueryFlag_CodeInput*0)|(RD_QueryFlag_KeepOldInput*0)|(RD_QueryFlag_SelectOldInput*0)|(RD_QueryFlag_Floating*0)|(RD_QueryFlag_Required*0), RD_RegSlot_Null, str8_lit_comp(""), str8_lit_comp(""), CTRL_EntityKind_Null}},

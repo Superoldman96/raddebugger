@@ -5,64 +5,17 @@
 #define RDI_FROM_PDB_H
 
 ////////////////////////////////
-//~ rjf: Export Artifact Flags
-
-typedef U32 P2R_ConvertFlags;
-enum
-{
-  P2R_ConvertFlag_Strings                 = (1<<0),
-  P2R_ConvertFlag_IndexRuns               = (1<<1),
-  P2R_ConvertFlag_BinarySections          = (1<<2),
-  P2R_ConvertFlag_Units                   = (1<<3),
-  P2R_ConvertFlag_Procedures              = (1<<4),
-  P2R_ConvertFlag_GlobalVariables         = (1<<5),
-  P2R_ConvertFlag_ThreadVariables         = (1<<6),
-  P2R_ConvertFlag_Scopes                  = (1<<7),
-  P2R_ConvertFlag_Locals                  = (1<<8),
-  P2R_ConvertFlag_Types                   = (1<<9),
-  P2R_ConvertFlag_UDTs                    = (1<<10),
-  P2R_ConvertFlag_LineInfo                = (1<<11),
-  P2R_ConvertFlag_GlobalVariableNameMap   = (1<<12),
-  P2R_ConvertFlag_ThreadVariableNameMap   = (1<<13),
-  P2R_ConvertFlag_ProcedureNameMap        = (1<<14),
-  P2R_ConvertFlag_TypeNameMap             = (1<<15),
-  P2R_ConvertFlag_LinkNameProcedureNameMap= (1<<16),
-  P2R_ConvertFlag_NormalSourcePathNameMap = (1<<17),
-  P2R_ConvertFlag_Deterministic           = (1<<18),
-  P2R_ConvertFlag_All = 0xffffffff,
-};
-
-////////////////////////////////
 //~ rjf: Conversion Stage Inputs/Outputs
 
-typedef struct P2R_User2Convert P2R_User2Convert;
-struct P2R_User2Convert
+typedef struct P2R_ConvertParams P2R_ConvertParams;
+struct P2R_ConvertParams
 {
   String8 input_pdb_name;
   String8 input_pdb_data;
   String8 input_exe_name;
   String8 input_exe_data;
-  String8 output_name;
-  P2R_ConvertFlags flags;
-  String8List errors;
-};
-
-typedef struct P2R_Convert2Bake P2R_Convert2Bake;
-struct P2R_Convert2Bake
-{
-  RDIM_BakeParams bake_params;
-};
-
-typedef struct P2R_Bake2Serialize P2R_Bake2Serialize;
-struct P2R_Bake2Serialize
-{
-  RDIM_BakeResults bake_results;
-};
-
-typedef struct P2R_Serialize2File P2R_Serialize2File;
-struct P2R_Serialize2File
-{
-  RDIM_SerializedSectionBundle bundle;
+  RDIM_SubsetFlags subset_flags;
+  B32 deterministic;
 };
 
 ////////////////////////////////
@@ -131,6 +84,21 @@ struct P2R_CompUnitContributionsParseIn
   COFF_SectionHeaderArray coff_sections;
 };
 
+//- rjf: comp unit contribution table bucketing by unit
+
+typedef struct P2R_CompUnitContributionsBucketIn P2R_CompUnitContributionsBucketIn;
+struct P2R_CompUnitContributionsBucketIn
+{
+  U64 comp_unit_count;
+  PDB_CompUnitContributionArray contributions;
+};
+
+typedef struct P2R_CompUnitContributionsBucketOut P2R_CompUnitContributionsBucketOut;
+struct P2R_CompUnitContributionsBucketOut
+{
+  RDIM_Rng1U64ChunkList *unit_ranges;
+};
+
 ////////////////////////////////
 //~ rjf: Conversion Data Structure & Task Types
 
@@ -196,7 +164,7 @@ struct P2R_UnitConvertIn
   PDB_Strtbl *pdb_strtbl;
   COFF_SectionHeaderArray coff_sections;
   PDB_CompUnit *comp_unit;
-  PDB_CompUnitContributionArray *comp_unit_contributions;
+  RDIM_Rng1U64ChunkList comp_unit_ranges;
   CV_SymParsed *comp_unit_syms;
   CV_C13Parsed *comp_unit_c13s;
   P2R_SrcFileMap *src_file_map;
@@ -217,28 +185,6 @@ struct P2R_SrcFileSeqEquipIn
 {
   RDIM_SrcFileChunkList src_files;
   RDIM_LineTableChunkList line_tables;
-};
-
-//- rjf: units conversion tasks
-
-typedef struct P2R_UnitsConvertIn P2R_UnitsConvertIn;
-struct P2R_UnitsConvertIn
-{
-  PDB_Strtbl *pdb_strtbl;
-  COFF_SectionHeaderArray coff_sections;
-  PDB_CompUnitArray *comp_units;
-  PDB_CompUnitContributionArray *comp_unit_contributions;
-  CV_SymParsed **comp_unit_syms;
-  CV_C13Parsed **comp_unit_c13s;
-  P2R_SrcFileMap *src_file_map;
-};
-
-typedef struct P2R_UnitsConvertOut P2R_UnitsConvertOut;
-struct P2R_UnitsConvertOut
-{
-  RDIM_UnitChunkList units;
-  RDIM_LineTableChunkList line_tables;
-  RDIM_LineTable **units_first_inline_site_line_tables;
 };
 
 //- rjf: link name map building tasks
@@ -327,20 +273,9 @@ struct P2R_SymbolStreamConvertOut
 };
 
 ////////////////////////////////
-//~ rjf: Top-Level State
-
-typedef struct P2R_State P2R_State;
-struct P2R_State
-{
-  Arena *arena;
-  U64 work_thread_arenas_count;
-  Arena **work_thread_arenas;
-};
-
-////////////////////////////////
 //~ rjf: Globals
 
-global P2R_State *p2r_state = 0;
+global ASYNC_Root *p2r_async_root = 0;
 
 ////////////////////////////////
 //~ rjf: Basic Helpers
@@ -351,7 +286,9 @@ internal U64 p2r_hash_from_voff(U64 voff);
 ////////////////////////////////
 //~ rjf: Command Line -> Conversion Inputs
 
-internal P2R_User2Convert *p2r_user2convert_from_cmdln(Arena *arena, CmdLine *cmdline);
+#if 0
+internal P2R_ConvertParams *p2r_user2convert_from_cmdln(Arena *arena, CmdLine *cmdline);
+#endif
 
 ////////////////////////////////
 //~ rjf: COFF => RDI Canonical Conversions
@@ -383,6 +320,7 @@ ASYNC_WORK_DEF(p2r_symbol_stream_parse_work);
 ASYNC_WORK_DEF(p2r_c13_stream_parse_work);
 ASYNC_WORK_DEF(p2r_comp_unit_parse_work);
 ASYNC_WORK_DEF(p2r_comp_unit_contributions_parse_work);
+ASYNC_WORK_DEF(p2r_comp_unit_contributions_bucket_work);
 
 ////////////////////////////////
 //~ rjf: Unit Source File Gathering Tasks
@@ -393,11 +331,6 @@ ASYNC_WORK_DEF(p2r_gather_unit_src_file_work);
 //~ rjf: Unit Conversion Tasks
 
 ASYNC_WORK_DEF(p2r_unit_convert_work);
-
-////////////////////////////////
-//~ rjf: Units Conversion Tasks
-
-ASYNC_WORK_DEF(p2r_units_convert_work);
 
 ////////////////////////////////
 //~ rjf: Source File Sequence Equipping Task
@@ -428,22 +361,7 @@ ASYNC_WORK_DEF(p2r_symbol_stream_convert_work);
 ////////////////////////////////
 //~ rjf: Top-Level Conversion Entry Point
 
-internal P2R_Convert2Bake *p2r_convert(Arena *arena, P2R_User2Convert *in);
-
-////////////////////////////////
-//~ rjf: Top-Level Initialization
-
-internal void p2r_init(void);
-
-////////////////////////////////
-//~ rjf: Top-Level Baking Entry Point
-
-internal P2R_Bake2Serialize *p2r_bake(Arena *arena, P2R_Convert2Bake *in);
-
-////////////////////////////////
-//~ rjf: Top-Level Compression Entry Point
-
-internal P2R_Serialize2File *p2r_compress(Arena *arena, P2R_Serialize2File *in);
+internal RDIM_BakeParams p2r_convert(Arena *arena, ASYNC_Root *async_root, P2R_ConvertParams *in);
 
 ////////////////////////////////
 
