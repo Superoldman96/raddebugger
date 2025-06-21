@@ -22,6 +22,7 @@ RD_RegSlot_PrevTab,
 RD_RegSlot_DstPanel,
 RD_RegSlot_Cfg,
 RD_RegSlot_CfgList,
+RD_RegSlot_EvalSpace,
 RD_RegSlot_UnwindCount,
 RD_RegSlot_InlineDepth,
 RD_RegSlot_FilePath,
@@ -37,6 +38,7 @@ RD_RegSlot_VaddrRange,
 RD_RegSlot_VoffRange,
 RD_RegSlot_Expr,
 RD_RegSlot_UIKey,
+RD_RegSlot_SrcUIKey,
 RD_RegSlot_OffPx,
 RD_RegSlot_RegSlot,
 RD_RegSlot_PID,
@@ -47,10 +49,11 @@ RD_RegSlot_NoRichTooltip,
 RD_RegSlot_DoImplicitRoot,
 RD_RegSlot_DoLister,
 RD_RegSlot_DoBigRows,
+RD_RegSlot_AllWindows,
+RD_RegSlot_NonGraphical,
 RD_RegSlot_Dir2,
 RD_RegSlot_String,
 RD_RegSlot_CmdName,
-RD_RegSlot_ParamsTree,
 RD_RegSlot_OSEvent,
 RD_RegSlot_COUNT,
 } RD_RegSlot;
@@ -93,6 +96,7 @@ RD_CmdKind_Attach,
 RD_CmdKind_Exit,
 RD_CmdKind_OpenPalette,
 RD_CmdKind_RunCommand,
+RD_CmdKind_RunExternalDriverTextCommand,
 RD_CmdKind_OSEvent,
 RD_CmdKind_SelectThread,
 RD_CmdKind_SelectUnwind,
@@ -163,6 +167,8 @@ RD_CmdKind_OpenProject,
 RD_CmdKind_OpenRecentProject,
 RD_CmdKind_SaveUser,
 RD_CmdKind_SaveProject,
+RD_CmdKind_RecordUserAsLastOpened,
+RD_CmdKind_RecordProjectInUser,
 RD_CmdKind_WriteUserData,
 RD_CmdKind_WriteProjectData,
 RD_CmdKind_UserSettings,
@@ -238,9 +244,11 @@ RD_CmdKind_AddBreakpoint,
 RD_CmdKind_AddAddressBreakpoint,
 RD_CmdKind_AddFunctionBreakpoint,
 RD_CmdKind_ToggleBreakpoint,
+RD_CmdKind_RemoveBreakpoint,
 RD_CmdKind_EnableBreakpoint,
 RD_CmdKind_DisableBreakpoint,
 RD_CmdKind_ClearBreakpoints,
+RD_CmdKind_ListBreakpoints,
 RD_CmdKind_AddWatchPin,
 RD_CmdKind_ToggleWatchPin,
 RD_CmdKind_AddTypeView,
@@ -256,6 +264,7 @@ RD_CmdKind_AddTarget,
 RD_CmdKind_SelectTarget,
 RD_CmdKind_EnableTarget,
 RD_CmdKind_DisableTarget,
+RD_CmdKind_RemoveTarget,
 RD_CmdKind_RegisterAsJITDebugger,
 RD_CmdKind_FindCodeLocation,
 RD_CmdKind_Search,
@@ -267,6 +276,8 @@ RD_CmdKind_PushQuery,
 RD_CmdKind_CompleteQuery,
 RD_CmdKind_CancelQuery,
 RD_CmdKind_UpdateQuery,
+RD_CmdKind_OpenEventBuffer,
+RD_CmdKind_CloseEventBuffer,
 RD_CmdKind_ToggleDevMenu,
 RD_CmdKind_LogMarker,
 RD_CmdKind_OpenWatch,
@@ -445,6 +456,7 @@ RD_CfgID prev_tab;
 RD_CfgID dst_panel;
 RD_CfgID cfg;
 RD_CfgIDList cfg_list;
+E_Space eval_space;
 U64 unwind_count;
 U64 inline_depth;
 String8 file_path;
@@ -460,6 +472,7 @@ Rng1U64 vaddr_range;
 Rng1U64 voff_range;
 String8 expr;
 UI_Key ui_key;
+UI_Key src_ui_key;
 Vec2F32 off_px;
 RD_RegSlot reg_slot;
 U32 pid;
@@ -470,10 +483,11 @@ B32 no_rich_tooltip;
 B32 do_implicit_root;
 B32 do_lister;
 B32 do_big_rows;
+B32 all_windows;
+B32 non_graphical;
 Dir2 dir2;
 String8 string;
 String8 cmd_name;
-MD_Node * params_tree;
 OS_Event * os_event;
 };
 
@@ -539,6 +553,7 @@ Z(getting_started)\
 .dst_panel = rd_regs()->dst_panel,\
 .cfg = rd_regs()->cfg,\
 .cfg_list = rd_regs()->cfg_list,\
+.eval_space = rd_regs()->eval_space,\
 .unwind_count = rd_regs()->unwind_count,\
 .inline_depth = rd_regs()->inline_depth,\
 .file_path = rd_regs()->file_path,\
@@ -554,6 +569,7 @@ Z(getting_started)\
 .voff_range = rd_regs()->voff_range,\
 .expr = rd_regs()->expr,\
 .ui_key = rd_regs()->ui_key,\
+.src_ui_key = rd_regs()->src_ui_key,\
 .off_px = rd_regs()->off_px,\
 .reg_slot = rd_regs()->reg_slot,\
 .pid = rd_regs()->pid,\
@@ -564,18 +580,20 @@ Z(getting_started)\
 .do_implicit_root = rd_regs()->do_implicit_root,\
 .do_lister = rd_regs()->do_lister,\
 .do_big_rows = rd_regs()->do_big_rows,\
+.all_windows = rd_regs()->all_windows,\
+.non_graphical = rd_regs()->non_graphical,\
 .dir2 = rd_regs()->dir2,\
 .string = rd_regs()->string,\
 .cmd_name = rd_regs()->cmd_name,\
-.params_tree = rd_regs()->params_tree,\
 .os_event = rd_regs()->os_event,\
 
 C_LINKAGE_BEGIN
 extern String8 rd_tab_fast_path_view_name_table[24];
 extern String8 rd_tab_fast_path_query_name_table[24];
-extern RD_VocabInfo rd_vocab_info_table[343];
+extern RD_VocabInfo rd_vocab_info_table[351];
 extern RD_NameSchemaInfo rd_name_schema_info_table[24];
-extern Rng1U64 rd_reg_slot_range_table[44];
+extern String8 rd_reg_slot_code_name_table[47];
+extern Rng1U64 rd_reg_slot_range_table[47];
 extern String8 rd_binding_version_remap_old_name_table[8];
 extern String8 rd_binding_version_remap_new_name_table[8];
 extern String8 rd_icon_kind_text_table[75];

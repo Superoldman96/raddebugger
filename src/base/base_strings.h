@@ -286,6 +286,11 @@ internal String8      str8_list_join(Arena *arena, String8List *list, StringJoin
 internal void         str8_list_from_flags(Arena *arena, String8List *list, U32 flags, String8 *flag_string_table, U32 flag_string_count);
 
 ////////////////////////////////
+//~ rjf: Basic Data Stringification Helpers
+
+internal String8List numeric_str8_list_from_data(Arena *arena, U32 radix, String8 data, U64 stride);
+
+////////////////////////////////
 //~ rjf; String Arrays
 
 internal String8Array str8_array_zero(void);
@@ -327,6 +332,29 @@ internal void        str8_path_list_resolve_dots_in_place(String8List *path, Pat
 internal String8     str8_path_list_join_by_style(Arena *arena, String8List *path, PathStyle style);
 
 internal String8TxtPtPair str8_txt_pt_pair_from_string(String8 string);
+
+////////////////////////////////
+//~ rjf: Relative <-> Absolute Path
+
+internal String8 path_relative_dst_from_absolute_dst_src(Arena *arena, String8 dst, String8 src);
+internal String8 path_absolute_dst_from_relative_dst_src(Arena *arena, String8 dst, String8 src);
+
+////////////////////////////////
+//~ rjf: Path Normalization
+
+internal String8List path_normalized_list_from_string(Arena *arena, String8 path, PathStyle *style_out);
+internal String8     path_normalized_from_string(Arena *arena, String8 path);
+internal B32         path_match_normalized(String8 left, String8 right);
+
+////////////////////////////////
+//~ rjf: Misc. Path Helpers
+
+internal PathStyle        path_style_from_string(String8 string);
+internal String8          string_from_path_style(PathStyle style);
+internal String8          path_separator_string_from_style(PathStyle style);
+internal StringMatchFlags path_match_flags_from_os(OperatingSystem os);
+internal String8          path_convert_slashes(Arena *arena, String8 path, PathStyle path_style);
+internal String8          path_replace_file_extension(Arena *arena, String8 file_name, String8 ext);
 
 ////////////////////////////////
 //~ rjf: UTF-8 & UTF-16 Decoding/Encoding
@@ -432,5 +460,11 @@ internal U64    str8_deserial_read_windows_utf16_string16(String8 string, U64 of
 internal U64    str8_deserial_read_block(String8 string, U64 off, U64 size, String8 *block_out);
 #define str8_deserial_read_array(string, off, ptr, count) str8_deserial_read((string), (off), (ptr), sizeof(*(ptr))*(count), sizeof(*(ptr)))
 #define str8_deserial_read_struct(string, off, ptr)       str8_deserial_read_array(string, off, ptr, 1)
+
+////////////////////////////////
+//~ rjf: Basic String Hashes
+
+internal U64 u64_hash_from_seed_str8(U64 seed, String8 string);
+internal U64 u64_hash_from_str8(String8 string);
 
 #endif // BASE_STRINGS_H

@@ -531,7 +531,6 @@ di_close(DI_Key *key)
     DI_Slot *slot = &di_shared->slots[slot_idx];
     DI_Stripe *stripe = &di_shared->stripes[stripe_idx];
     log_infof("close_debug_info: {\"%S\", 0x%I64x}\n", key_normalized.path, key_normalized.min_timestamp);
-    B32 closed = 0;
     OS_MutexScopeW(stripe->rw_mutex)
     {
       //- rjf: find existing node
@@ -544,7 +543,8 @@ di_close(DI_Key *key)
         if(node->ref_count == 0) for(;;)
         {
           //- rjf: release
-          if(ins_atomic_u64_eval(&node->touch_count) == 0)
+          if(ins_atomic_u64_eval(&node->touch_count) == 0 &&
+             ins_atomic_u64_eval(&node->is_working) == 0)
           {
             di_string_release__stripe_mutex_w_guarded(stripe, node->key.path);
             if(node->file_base != 0)
@@ -568,7 +568,7 @@ di_close(DI_Key *key)
             break;
           }
           
-          //- rjf: wait for touch count to go to 0
+          //- rjf: wait for touch count / working marker to go to 0
           os_condition_variable_wait_rw_w(stripe->cv, stripe->rw_mutex, max_U64);
         }
       }
@@ -582,7 +582,7 @@ di_close(DI_Key *key)
 //~ rjf: Debug Info Cache Lookups
 
 internal RDI_Parsed *
-di_rdi_from_key(DI_Scope *scope, DI_Key *key, U64 endt_us)
+di_rdi_from_key(DI_Scope *scope, DI_Key *key, B32 high_priority, U64 endt_us)
 {
   ProfBeginFunction();
   RDI_Parsed *result = &rdi_parsed_nil;
@@ -631,7 +631,7 @@ di_rdi_from_key(DI_Scope *scope, DI_Key *key, U64 endt_us)
           ins_atomic_u64_eval_assign(&node->is_working, 1);
           DeferLoop(os_rw_mutex_drop_r(stripe->rw_mutex), os_rw_mutex_take_r(stripe->rw_mutex))
           {
-            async_push_work(di_parse_work);
+            async_push_work(di_parse_work, .priority = high_priority ? ASYNC_Priority_High : ASYNC_Priority_Low);
           }
         }
       }
@@ -1026,15 +1026,16 @@ ASYNC_WORK_DEF(di_parse_work)
         params.inherit_env = 1;
         params.consoleless = 1;
         str8_list_pushf(scratch.arena, &params.cmd_line, "raddbg");
-        str8_list_pushf(scratch.arena, &params.cmd_line, "--convert");
+        str8_list_pushf(scratch.arena, &params.cmd_line, "--bin");
         str8_list_pushf(scratch.arena, &params.cmd_line, "--quiet");
         if(should_compress)
         {
           str8_list_pushf(scratch.arena, &params.cmd_line, "--compress");
         }
         // str8_list_pushf(scratch.arena, &params.cmd_line, "--capture");
-        str8_list_pushf(scratch.arena, &params.cmd_line, "--pdb:%S", og_path);
+        str8_list_pushf(scratch.arena, &params.cmd_line, "--rdi");
         str8_list_pushf(scratch.arena, &params.cmd_line, "--out:%S", rdi_path);
+        str8_list_pushf(scratch.arena, &params.cmd_line, "%S", og_path);
         process = os_process_launch(&params);
       }
       
@@ -1391,7 +1392,7 @@ di_search_thread__entry_point(void *p)
     RDI_Parsed **rdis = push_array(scratch.arena, RDI_Parsed *, rdis_count);
     for EachIndex(idx, rdis_count)
     {
-      rdis[idx] = di_rdi_from_key(di_scope, &params.dbgi_keys.v[idx], max_U64);
+      rdis[idx] = di_rdi_from_key(di_scope, &params.dbgi_keys.v[idx], 1, max_U64);
     }
     
     //- rjf: kick off search tasks
@@ -1797,7 +1798,7 @@ ASYNC_WORK_DEF(di_match_work)
       {
         DI_Scope *di_scope = di_scope_open();
         DI_Key key = params_keys.v[dbgi_idx];
-        RDI_Parsed *rdi = di_rdi_from_key(di_scope, &key, os_now_microseconds()+1000);
+        RDI_Parsed *rdi = di_rdi_from_key(di_scope, &key, 1, os_now_microseconds()+1000);
         for EachElement(name_map_kind_idx, name_map_kinds)
         {
           RDI_NameMap *name_map = rdi_element_from_name_idx(rdi, NameMaps, name_map_kinds[name_map_kind_idx]);

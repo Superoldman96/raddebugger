@@ -33,14 +33,11 @@
 
 #include "base/base_inc.h"
 #include "os/os_inc.h"
-#include "path/path.h"
 #include "coff/coff.h"
-#include "coff/coff_enum.h"
 #include "coff/coff_parse.h"
 #include "pe/pe.h"
 #include "codeview/codeview.h"
 #include "codeview/codeview_parse.h"
-#include "codeview/codeview_enum.h"
 #include "msf/msf.h"
 #include "msf/msf_parse.h"
 #include "pdb/pdb.h"
@@ -48,13 +45,10 @@
 
 #include "base/base_inc.c"
 #include "os/os_inc.c"
-#include "path/path.c"
 #include "coff/coff.c"
-#include "coff/coff_enum.c"
 #include "coff/coff_parse.c"
 #include "pe/pe.c"
 #include "codeview/codeview.c"
-#include "codeview/codeview_enum.c"
 #include "codeview/codeview_parse.c"
 #include "msf/msf.c"
 #include "msf/msf_parse.c"
@@ -69,10 +63,8 @@
 // RDI
 
 #include "rdi/rdi_overrides.h"
-#include "lib_rdi_format/rdi_format.h"
-#include "rdi/rdi.h"
-#include "lib_rdi_format/rdi_format.c"
-#include "rdi/rdi.c"
+#include "lib_rdi/rdi.h"
+#include "lib_rdi/rdi.c"
 
 ////////////////////////////////
 // Code Base Extensions

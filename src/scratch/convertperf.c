@@ -16,7 +16,6 @@
 //- rjf: [h]
 #include "base/base_inc.h"
 #include "os/os_inc.h"
-#include "path/path.h"
 #include "async/async.h"
 #include "rdi_format/rdi_format_local.h"
 #include "dbgi/dbgi.h"
@@ -24,7 +23,6 @@
 //- rjf: [c]
 #include "base/base_inc.c"
 #include "os/os_inc.c"
-#include "path/path.c"
 #include "async/async.c"
 #include "rdi_format/rdi_format_local.c"
 #include "dbgi/dbgi.c"
@@ -53,7 +51,7 @@ entry_point(CmdLine *cmdline)
       String8 dll_name = str8_skip_last_slash(dll_path_no_ext);
       String8 pdb_path = push_str8f(arena, "%S.pdb", dll_path_no_ext);
       String8 rdi_path = push_str8f(arena, "dump/%S.rdi", dll_name);
-      OS_Handle handle = os_cmd_line_launchf("raddbg --convert --pdb:%S --out:%S", pdb_path, rdi_path);
+      OS_Handle handle = os_cmd_line_launchf("raddbg --bin %S --out:%S", pdb_path, rdi_path);
       os_handle_list_push(arena, &processes, handle);
       if(processes_first_path_n == 0)
       {
