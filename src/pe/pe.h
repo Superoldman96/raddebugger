@@ -993,49 +993,37 @@ struct PE_HandlerScope
 typedef struct PE_BinInfo PE_BinInfo;
 struct PE_BinInfo
 {
-  Arch            arch;
-  U64             image_base;
-  U64             entry_point;
-  B32             is_pe32;
-  U64             virt_section_align;
-  U64             file_section_align;
-  U64             section_count;
-  U64             symbol_count;
-  Rng1U64         section_table_range;
-  Rng1U64         symbol_table_range;
-  Rng1U64         string_table_range;
-  Rng1U64        *data_dir_franges;
-  U32             data_dir_count;
-  PE_TLSHeader64  tls_header;
+  Arch                 arch;
+  U64                  image_base;
+  U64                  entry_point;
+  B32                  is_pe32;
+  PE_WindowsSubsystem  subsystem;
+  U32                 *check_sum;
+  U64                  virt_section_align;
+  U64                  file_section_align;
+  U64                  section_count;
+  U64                  symbol_count;
+  U64                  optional_header_off;
+  Rng1U64              section_table_range;
+  Rng1U64              symbol_table_range;
+  Rng1U64              string_table_range;
+  Rng1U64              data_dir_range;
+  Rng1U64             *data_dir_franges;
+  Rng1U64             *data_dir_vranges;
+  U32                  data_dir_count;
+  PE_TLSHeader64       tls_header;
 };
 
 typedef struct PE_DebugInfo
 {
   PE_DebugDirectory header;
-  union
-  {
-    union
-    {
-      U32 magic;
-      struct
-      {
-        PE_CvHeaderPDB20 header;
-        String8          path;
-      } pdb20;
-      struct
-      {
-        PE_CvHeaderPDB70 header;
-        String8          path;
-      } pdb70;
-      struct
-      {
-        PE_CvHeaderRDI header;
-        String8        path;
-      } rdi;
-    } codeview;
-    String8 raw_data;
-  } u;
-} PE_DebugInfo;
+  U32 cv_magic;
+  PE_CvHeaderPDB20 cv_pdb20_header;
+  PE_CvHeaderPDB70 cv_pdb70_header;
+  PE_CvHeaderRDI cv_rdi_header;
+  String8 path;
+}
+PE_DebugInfo;
 
 typedef struct PE_DebugInfoNode
 {
@@ -1075,7 +1063,9 @@ internal String8 pe_string_from_dll_characteristics(Arena *arena, PE_DllCharacte
 internal B32        pe_check_magic(String8 data);
 internal PE_BinInfo pe_bin_info_from_data(Arena *arena, String8 data);
 
+internal PE_DataDirectory *         pe_data_directory_from_idx(String8 file_data, PE_BinInfo pe, PE_DataDirectoryIndex dir_idx);
 internal PE_DebugInfoList           pe_parse_debug_directory(Arena *arena, String8 raw_image, String8 raw_debug_dir);
+internal PE_DebugInfoList           pe_debug_info_list_from_raw_debug_dir(Arena *arena, String8 raw_image, String8 raw_debug_dir);
 internal PE_ParsedStaticImportTable pe_static_imports_from_data(Arena *arena, B32 is_pe32, U64 section_count, COFF_SectionHeader *sections, String8 raw_data, Rng1U64 dir_file_range);
 internal PE_ParsedDelayImportTable  pe_delay_imports_from_data(Arena *arena, B32 is_pe32, U64 section_count, COFF_SectionHeader *sections, String8 raw_data, Rng1U64 dir_file_range);
 internal PE_ParsedExportTable       pe_exports_from_data(Arena *arena, U64 section_count, COFF_SectionHeader *sections, String8 raw_data, Rng1U64 dir_file_range, Rng1U64 dir_virt_range);
@@ -1116,5 +1106,9 @@ internal String8 pe_make_debug_header_rdi(Arena *arena, Guid guid, String8 rdi_p
 //~ Image Checksum
 
 internal U32 pe_compute_checksum(U8 *buffer, U64 buffer_size);
+
+////////////////////////////////
+
+internal void pe_pdata_sort(COFF_MachineType machine, String8 raw_pdata);
 
 #endif // PE_H

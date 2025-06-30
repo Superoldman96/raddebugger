@@ -15,13 +15,6 @@ thread_static UI_State *ui_state = 0;
 # include "third_party/xxHash/xxhash.h"
 #endif
 
-internal U64
-ui_hash_from_string(U64 seed, String8 string)
-{
-  U64 result = XXH3_64bits_withSeed(string.str, string.size, seed);
-  return result;
-}
-
 internal String8
 ui_hash_part_from_key_string(String8 string)
 {
@@ -68,7 +61,7 @@ ui_key_from_string(UI_Key seed_key, String8 string)
   if(string.size != 0)
   {
     String8 hash_part = ui_hash_part_from_key_string(string);
-    result.u64[0] = ui_hash_from_string(seed_key.u64[0], hash_part);
+    result.u64[0] = u64_hash_from_seed_str8(seed_key.u64[0], hash_part);
   }
   ProfEnd();
   return result;
@@ -2606,6 +2599,21 @@ ui_build_box_from_key(UI_BoxFlags flags, UI_Key key)
         box->text_color = ui_color_from_name(str8_lit("text"));
       }
     }
+    if(box->flags & (UI_BoxFlag_DrawBorder|
+                     UI_BoxFlag_DrawSideRight|
+                     UI_BoxFlag_DrawSideLeft|
+                     UI_BoxFlag_DrawSideTop|
+                     UI_BoxFlag_DrawSideBottom))
+    {
+      if(ui_state->border_color_stack.top != &ui_state->border_color_nil_stack_top)
+      {
+        box->border_color = ui_state->border_color_stack.top->v;
+      }
+      else
+      {
+        box->border_color = ui_color_from_name(str8_lit("border"));
+      }
+    }
   }
   
   //- rjf: auto-pop all stacks
@@ -2773,11 +2781,7 @@ ui_box_text_position(UI_Box *box)
   FNT_Tag font = box->font;
   F32 font_size = box->font_size;
   FNT_Metrics font_metrics = fnt_metrics_from_tag_size(font, font_size);
-  result.y = floor_f32((box->rect.p0.y + box->rect.p1.y)/2.f) + font_metrics.ascent/2.f - 2.f;
-  if(!fnt_tag_match(font, ui_icon_font()))
-  {
-    result.y += font_metrics.descent/2;
-  }
+  result.y = floor_f32((box->rect.p0.y + box->rect.p1.y)/2.f + font_metrics.ascent/2.f - font_metrics.descent/2.f);
   switch(box->text_align)
   {
     default:

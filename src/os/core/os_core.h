@@ -156,6 +156,7 @@ internal B32            os_append_data_to_file_path(String8 path, String8 data);
 internal OS_FileID      os_id_from_file_path(String8 path);
 internal S64            os_file_id_compare(OS_FileID a, OS_FileID b);
 internal String8        os_string_from_file_range(Arena *arena, OS_Handle file, Rng1U64 range);
+internal String8        os_file_read_cstring(Arena *arena, OS_Handle file, U64 off);
 
 ////////////////////////////////
 //~ rjf: Process Launcher Helpers
@@ -254,7 +255,9 @@ internal void        os_sleep_milliseconds(U32 msec);
 
 internal OS_Handle os_process_launch(OS_ProcessLaunchParams *params);
 internal B32       os_process_join(OS_Handle handle, U64 endt_us);
+internal B32       os_process_join_exit_code(OS_Handle handle, U64 endt_us, int *exit_code_out);
 internal void      os_process_detach(OS_Handle handle);
+internal B32       os_process_kill(OS_Handle handle);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Threads (Implemented Per-OS)
