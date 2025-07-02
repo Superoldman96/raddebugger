@@ -5,7 +5,7 @@
 //~ rjf: UI Widgets: Fancy Title Strings
 
 internal DR_FStrList
-rd_title_fstrs_from_cfg(Arena *arena, RD_Cfg *cfg)
+rd_title_fstrs_from_cfg(Arena *arena, RD_Cfg *cfg, B32 include_extras)
 {
   DR_FStrList result = {0};
   {
@@ -288,7 +288,12 @@ rd_title_fstrs_from_cfg(Arena *arena, RD_Cfg *cfg)
     //- rjf: push text location
     if(loc.file_path.size != 0)
     {
-      String8 location_string = push_str8f(arena, "%S:%I64d:%I64d", str8_skip_last_slash(loc.file_path), loc.pt.line, loc.pt.column);
+      String8 path = loc.file_path;
+      if(!include_extras)
+      {
+        path = str8_skip_last_slash(loc.file_path);
+      }
+      String8 location_string = push_str8f(arena, "%S:%I64d:%I64d", path, loc.pt.line, loc.pt.column);
       dr_fstrs_push_new(arena, &result, &params, location_string);
       dr_fstrs_push_new(arena, &result, &params, str8_lit("  "));
       start_secondary();
@@ -548,22 +553,32 @@ rd_title_fstrs_from_ctrl_entity(Arena *arena, CTRL_Entity *entity, B32 include_e
     Arch arch = entity->arch;
     B32 call_stack_high_priority = ctrl_handle_match(entity->handle, rd_base_regs()->thread);
     CTRL_CallStack call_stack = ctrl_call_stack_from_thread(ctrl_scope, &d_state->ctrl_entity_store->ctx, entity, call_stack_high_priority, call_stack_high_priority ? rd_state->frame_eval_memread_endt_us : 0);
-    for(U64 idx = 0, limit = 10; idx < call_stack.frames_count && idx < limit; idx += 1)
+    B32 did_first_known = 0;
+    for(U64 idx = 0, limit = 10;
+        idx < call_stack.frames_count && idx < limit;
+        idx += 1)
     {
       CTRL_CallStackFrame *f = &call_stack.frames[call_stack.frames_count - 1 - idx];
       U64 rip_vaddr = regs_rip_from_arch_block(arch, f->regs);
       CTRL_Entity *module = ctrl_module_from_process_vaddr(process, rip_vaddr);
       U64 rip_voff = ctrl_voff_from_vaddr(module, rip_vaddr);
-      DI_Key dbgi_key = ctrl_dbgi_key_from_module(module);
-      RDI_Parsed *rdi = di_rdi_from_key(di_scope, &dbgi_key, 0);
-      if(rdi != &rdi_parsed_nil)
+      String8 name = {0};
       {
-        RDI_Procedure *procedure = rdi_procedure_from_voff(rdi, rip_voff);
-        String8 name = {0};
-        name.str = rdi_string_from_idx(rdi, procedure->name_string_idx, &name.size);
-        name = push_str8_copy(arena, name);
+        DI_Key dbgi_key = ctrl_dbgi_key_from_module(module);
+        RDI_Parsed *rdi = di_rdi_from_key(di_scope, &dbgi_key, 1, 0);
+        if(rdi != &rdi_parsed_nil)
+        {
+          RDI_Procedure *procedure = rdi_procedure_from_voff(rdi, rip_voff);
+          name.str = rdi_string_from_idx(rdi, procedure->name_string_idx, &name.size);
+          name = push_str8_copy(arena, name);
+        }
+        if(name.size == 0 && did_first_known)
+        {
+          name = str8_lit("???");
+        }
         if(name.size != 0)
         {
+          did_first_known = 1;
           dr_fstrs_push_new(arena, &result, &params, name, .size = extras_size, .color = symbol_color);
           if(idx+1 < call_stack.frames_count)
           {
@@ -585,7 +600,7 @@ rd_title_fstrs_from_ctrl_entity(Arena *arena, CTRL_Entity *entity, B32 include_e
   {
     DI_Scope *di_scope = di_scope_open();
     DI_Key dbgi_key = ctrl_dbgi_key_from_module(entity);
-    RDI_Parsed *rdi = di_rdi_from_key(di_scope, &dbgi_key, 0);
+    RDI_Parsed *rdi = di_rdi_from_key(di_scope, &dbgi_key, 1, 0);
     if(rdi->raw_data_size == 0)
     {
       dr_fstrs_push_new(arena, &result, &params, str8_lit(" "));

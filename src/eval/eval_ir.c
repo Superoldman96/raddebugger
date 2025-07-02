@@ -686,10 +686,16 @@ e_push_irtree_and_type_from_expr(Arena *arena, E_IRTreeAndType *root_parent, E_I
           }
           
           // rjf: call into hook to do access
-          result = lhs_access(arena, parent, expr, lhs_irtree_try);
+          E_IRTreeAndType new_result_maybe = lhs_access(arena, parent, expr, lhs_irtree_try);
           
-          // rjf: end chain if we found a result
-          if(result.root != &e_irnode_nil)
+          // rjf: if we got a valid result -> store
+          if(new_result_maybe.root != &e_irnode_nil && (result.root == &e_irnode_nil || lhs_irtree_try->auto_hook == 0))
+          {
+            result = new_result_maybe;
+          }
+          
+          // rjf: end chain if we found a result that is not an autohook
+          if(new_result_maybe.root != &e_irnode_nil && lhs_irtree_try->auto_hook == 0)
           {
             break;
           }
@@ -1599,7 +1605,6 @@ e_push_irtree_and_type_from_expr(Arena *arena, E_IRTreeAndType *root_parent, E_I
         String8 qualifier = expr->qualifier;
         String8 string = expr->string;
         String8 string__redirected = string;
-        String8List namespaceified_strings = {0};
         B32 string_mapped = 0;
         B32 string_is_implicit_member_name = 0;
         E_TypeKey mapped_type_key = zero_struct;
@@ -1617,7 +1622,7 @@ e_push_irtree_and_type_from_expr(Arena *arena, E_IRTreeAndType *root_parent, E_I
         {
           //- rjf: try to map identifier via this path
           E_IdentifierResolutionPath path = identifier_resolution_rule->paths[path_idx];
-          switch(path)
+          ProfScope("identifier resolution %i", path) switch(path)
           {
             default:{}break;
             
@@ -1673,7 +1678,8 @@ e_push_irtree_and_type_from_expr(Arena *arena, E_IRTreeAndType *root_parent, E_I
               for(E_IRTreeAndType *prev = parent; prev != 0; prev = prev->prev)
               {
                 E_Expr *access = e_expr_irext_member_access(scratch.arena, &e_expr_nil, prev, string);
-                E_IRTreeAndType access_irtree = e_push_irtree_and_type_from_expr(scratch.arena, root_parent, &e_default_identifier_resolution_rule, disallow_autohooks, 1, access);
+                E_IRTreeAndType access_parent = {&e_irnode_nil};
+                E_IRTreeAndType access_irtree = e_push_irtree_and_type_from_expr(scratch.arena, prev->prev ? prev->prev : &access_parent, &e_default_identifier_resolution_rule, 1, 1, access);
                 if(access_irtree.root != &e_irnode_nil)
                 {
                   string_mapped = 1;
@@ -1682,7 +1688,10 @@ e_push_irtree_and_type_from_expr(Arena *arena, E_IRTreeAndType *root_parent, E_I
                   mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
                   mapped_bytecode_mode = access_irtree.mode;
                   e_msg_list_concat_in_place(&result.msgs, &access_irtree.msgs);
-                  break;
+                  if(!prev->auto_hook)
+                  {
+                    break;
+                  }
                 }
               }
             }break;
@@ -1739,238 +1748,165 @@ e_push_irtree_and_type_from_expr(Arena *arena, E_IRTreeAndType *root_parent, E_I
               }
             }break;
             
-            //- rjf: globals / procedures / types / constants
-            case E_IdentifierResolutionPath_Globals:
-            case E_IdentifierResolutionPath_Procedures:
-            case E_IdentifierResolutionPath_ThreadLocals:
-            case E_IdentifierResolutionPath_Constants:
+            //- rjf: built-in constants
+            case E_IdentifierResolutionPath_BuiltInConstants:
             {
-              //- rjf: form namespaceified fallback versions of this lookup string
-              if(!string_mapped)
+              // rjf: "true"
+              if(!string_mapped && str8_match(string, str8_lit("true"), 0))
               {
-                E_Module *module = e_base_ctx->primary_module;
-                RDI_Parsed *rdi = module->rdi;
-                RDI_Procedure *procedure = e_cache->thread_ip_procedure;
-                U64 name_size = 0;
-                U8 *name_ptr = rdi_string_from_idx(rdi, procedure->name_string_idx, &name_size);
-                String8 containing_procedure_name = str8(name_ptr, name_size);
-                U64 last_past_scope_resolution_pos = 0;
-                for(;;)
-                {
-                  U64 past_next_dbl_colon_pos = str8_find_needle(containing_procedure_name, last_past_scope_resolution_pos, str8_lit("::"), 0)+2;
-                  U64 past_next_dot_pos = str8_find_needle(containing_procedure_name, last_past_scope_resolution_pos, str8_lit("."), 0)+1;
-                  U64 past_next_scope_resolution_pos = Min(past_next_dbl_colon_pos, past_next_dot_pos);
-                  if(past_next_scope_resolution_pos >= containing_procedure_name.size)
-                  {
-                    break;
-                  }
-                  String8 new_namespace_prefix_possibility = str8_prefix(containing_procedure_name, past_next_scope_resolution_pos);
-                  String8 namespaceified_string = push_str8f(scratch.arena, "%S%S", new_namespace_prefix_possibility, string);
-                  str8_list_push_front(scratch.arena, &namespaceified_strings, namespaceified_string);
-                  last_past_scope_resolution_pos = past_next_scope_resolution_pos;
-                }
+                string_mapped = 1;
+                E_OpList oplist = {0};
+                e_oplist_push_uconst(arena, &oplist, 1);
+                mapped_type_key = e_type_key_basic(E_TypeKind_Bool);
+                mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
+                mapped_bytecode_mode = E_Mode_Value;
               }
               
-              //- rjf: try globals
-              if(path == E_IdentifierResolutionPath_Globals && !string_mapped && (qualifier.size == 0 || str8_match(qualifier, str8_lit("global"), 0)))
+              // rjf: "false"
+              if(!string_mapped && str8_match(string, str8_lit("false"), 0))
               {
-                for(U64 module_idx = 0; module_idx < e_base_ctx->modules_count; module_idx += 1)
-                {
-                  E_Module *module = &e_base_ctx->modules[module_idx];
-                  RDI_Parsed *rdi = module->rdi;
-                  RDI_NameMap *name_map = rdi_element_from_name_idx(rdi, NameMaps, RDI_NameMapKind_GlobalVariables);
-                  RDI_ParsedNameMap parsed_name_map = {0};
-                  rdi_parsed_from_name_map(rdi, name_map, &parsed_name_map);
-                  RDI_NameMapNode *node = rdi_name_map_lookup(rdi, &parsed_name_map, string.str, string.size);
-                  U32 matches_count = 0;
-                  U32 *matches = rdi_matches_from_map_node(rdi, node, &matches_count);
-                  for(String8Node *n = namespaceified_strings.first;
-                      n != 0 && matches_count == 0;
-                      n = n->next)
-                  {
-                    node = rdi_name_map_lookup(rdi, &parsed_name_map, n->string.str, n->string.size);
-                    matches_count = 0;
-                    matches = rdi_matches_from_map_node(rdi, node, &matches_count);
-                  }
-                  if(matches_count != 0)
-                  {
-                    U32 match_idx = matches[matches_count-1];
-                    RDI_GlobalVariable *global_var = rdi_element_from_name_idx(rdi, GlobalVariables, match_idx);
-                    U32 type_idx = global_var->type_idx;
-                    RDI_TypeNode *type_node = rdi_element_from_name_idx(rdi, TypeNodes, type_idx);
-                    E_OpList oplist = {0};
-                    e_oplist_push_op(arena, &oplist, RDI_EvalOp_ConstU64, e_value_u64(module->vaddr_range.min + global_var->voff));
-                    string_mapped = 1;
-                    mapped_type_key = e_type_key_ext(e_type_kind_from_rdi(type_node->kind), type_idx, (U32)module_idx);
-                    mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
-                    mapped_bytecode_mode = E_Mode_Offset;
-                    mapped_bytecode_space = module->space;
-                    break;
-                  }
-                }
+                string_mapped = 1;
+                E_OpList oplist = {0};
+                e_oplist_push_uconst(arena, &oplist, 0);
+                mapped_type_key = e_type_key_basic(E_TypeKind_Bool);
+                mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
+                mapped_bytecode_mode = E_Mode_Value;
               }
-              
-              //- rjf: try thread-locals
-              if(path == E_IdentifierResolutionPath_ThreadLocals && !string_mapped && (qualifier.size == 0 || str8_match(qualifier, str8_lit("thread_local"), 0)))
+            }break;
+            
+            //- rjf: built-in types
+            case E_IdentifierResolutionPath_BuiltInTypes:
+            {
+              mapped_type_key = e_leaf_builtin_type_key_from_name(string);
+              string_mapped = !e_type_key_match(mapped_type_key, e_type_key_zero());
+            }break;
+            
+            //- rjf: debug info matches
+            case E_IdentifierResolutionPath_DebugInfoMatch:
+            {
+              if(!string_mapped && e_base_ctx->dbgi_match_store != 0 && (qualifier.size == 0 || str8_match(qualifier, str8_lit("symbol"), 0)))
               {
-                for(U64 module_idx = 0; module_idx < e_base_ctx->modules_count; module_idx += 1)
+                DI_Match match = di_match_from_name(e_base_ctx->dbgi_match_store, string, 0);
+                if(match.idx == 0)
                 {
-                  E_Module *module = &e_base_ctx->modules[module_idx];
-                  RDI_Parsed *rdi = module->rdi;
-                  RDI_NameMap *name_map = rdi_element_from_name_idx(rdi, NameMaps, RDI_NameMapKind_ThreadVariables);
-                  RDI_ParsedNameMap parsed_name_map = {0};
-                  rdi_parsed_from_name_map(rdi, name_map, &parsed_name_map);
-                  RDI_NameMapNode *node = rdi_name_map_lookup(rdi, &parsed_name_map, string.str, string.size);
-                  U32 matches_count = 0;
-                  U32 *matches = rdi_matches_from_map_node(rdi, node, &matches_count);
-                  for(String8Node *n = namespaceified_strings.first;
-                      n != 0 && matches_count == 0;
-                      n = n->next)
+                  String8List namespaceified_strings = {0};
                   {
-                    node = rdi_name_map_lookup(rdi, &parsed_name_map, n->string.str, n->string.size);
-                    matches_count = 0;
-                    matches = rdi_matches_from_map_node(rdi, node, &matches_count);
-                  }
-                  if(matches_count != 0)
-                  {
-                    U32 match_idx = matches[matches_count-1];
-                    RDI_ThreadVariable *thread_var = rdi_element_from_name_idx(rdi, ThreadVariables, match_idx);
-                    U32 type_idx = thread_var->type_idx;
-                    RDI_TypeNode *type_node = rdi_element_from_name_idx(rdi, TypeNodes, type_idx);
-                    E_OpList oplist = {0};
-                    e_oplist_push_op(arena, &oplist, RDI_EvalOp_TLSOff, e_value_u64(thread_var->tls_off));
-                    string_mapped = 1;
-                    mapped_type_key = e_type_key_ext(e_type_kind_from_rdi(type_node->kind), type_idx, (U32)module_idx);
-                    mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
-                    mapped_bytecode_mode = E_Mode_Offset;
-                    mapped_bytecode_space = module->space;
-                    break;
-                  }
-                }
-              }
-              
-              //- rjf: try constants
-              if(path == E_IdentifierResolutionPath_Constants && !string_mapped && (qualifier.size == 0 || str8_match(qualifier, str8_lit("constant"), 0)))
-              {
-                if(str8_match(string, str8_lit("true"), 0))
-                {
-                  string_mapped = 1;
-                  E_OpList oplist = {0};
-                  e_oplist_push_uconst(arena, &oplist, 1);
-                  mapped_type_key = e_type_key_basic(E_TypeKind_Bool);
-                  mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
-                  mapped_bytecode_mode = E_Mode_Value;
-                }
-                else if(str8_match(string, str8_lit("false"), 0))
-                {
-                  string_mapped = 1;
-                  E_OpList oplist = {0};
-                  e_oplist_push_uconst(arena, &oplist, 0);
-                  mapped_type_key = e_type_key_basic(E_TypeKind_Bool);
-                  mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
-                  mapped_bytecode_mode = E_Mode_Value;
-                }
-                else for(U64 module_idx = 0; module_idx < e_base_ctx->modules_count; module_idx += 1)
-                {
-                  E_Module *module = &e_base_ctx->modules[module_idx];
-                  RDI_Parsed *rdi = module->rdi;
-                  RDI_NameMap *name_map = rdi_element_from_name_idx(rdi, NameMaps, RDI_NameMapKind_Constants);
-                  RDI_ParsedNameMap parsed_name_map = {0};
-                  rdi_parsed_from_name_map(rdi, name_map, &parsed_name_map);
-                  RDI_NameMapNode *node = rdi_name_map_lookup(rdi, &parsed_name_map, string.str, string.size);
-                  U32 matches_count = 0;
-                  U32 *matches = rdi_matches_from_map_node(rdi, node, &matches_count);
-                  for(String8Node *n = namespaceified_strings.first;
-                      n != 0 && matches_count == 0;
-                      n = n->next)
-                  {
-                    node = rdi_name_map_lookup(rdi, &parsed_name_map, n->string.str, n->string.size);
-                    matches_count = 0;
-                    matches = rdi_matches_from_map_node(rdi, node, &matches_count);
-                  }
-                  if(matches_count != 0)
-                  {
-                    U32 match_idx = matches[matches_count-1];
-                    RDI_Constant *constant = rdi_element_from_name_idx(rdi, Constants, match_idx);
-                    U32 type_idx = constant->type_idx;
-                    RDI_TypeNode *type_node = rdi_element_from_name_idx(rdi, TypeNodes, type_idx);
-                    RDI_U32 constant_value_off = *rdi_element_from_name_idx(rdi, ConstantValueTable, constant->constant_value_idx);
-                    RDI_U32 constant_value_size = *rdi_element_from_name_idx(rdi, ConstantValueTable, constant->constant_value_idx+1) - constant_value_off;
-                    if(constant_value_size <= 8)
+                    E_Module *module = e_base_ctx->primary_module;
+                    RDI_Parsed *rdi = module->rdi;
+                    RDI_Procedure *procedure = e_cache->thread_ip_procedure;
+                    U64 name_size = 0;
+                    U8 *name_ptr = rdi_string_from_idx(rdi, procedure->name_string_idx, &name_size);
+                    String8 containing_procedure_name = str8(name_ptr, name_size);
+                    U64 last_past_scope_resolution_pos = 0;
+                    for(;;)
                     {
-                      RDI_U64 constant_value_data_size = 0;
-                      RDI_U8 *constant_value_data = rdi_table_from_name(rdi, ConstantValueData, &constant_value_data_size);
-                      if(0 <= constant_value_off && constant_value_off + constant_value_size <= constant_value_data_size)
+                      U64 past_next_dbl_colon_pos = str8_find_needle(containing_procedure_name, last_past_scope_resolution_pos, str8_lit("::"), 0)+2;
+                      U64 past_next_dot_pos = str8_find_needle(containing_procedure_name, last_past_scope_resolution_pos, str8_lit("."), 0)+1;
+                      U64 past_next_scope_resolution_pos = Min(past_next_dbl_colon_pos, past_next_dot_pos);
+                      if(past_next_scope_resolution_pos >= containing_procedure_name.size)
                       {
-                        RDI_U64 value = 0;
-                        MemoryCopy(&value, constant_value_data+constant_value_off, constant_value_size);
-                        E_OpList oplist = {0};
-                        e_oplist_push_op(arena, &oplist, RDI_EvalOp_ConstU64, e_value_u64(value));
-                        string_mapped = 1;
-                        mapped_type_key = e_type_key_ext(e_type_kind_from_rdi(type_node->kind), type_idx, (U32)module_idx);
-                        mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
-                        mapped_bytecode_mode = E_Mode_Value;
-                        mapped_bytecode_space = module->space;
                         break;
                       }
+                      String8 new_namespace_prefix_possibility = str8_prefix(containing_procedure_name, past_next_scope_resolution_pos);
+                      String8 namespaceified_string = push_str8f(scratch.arena, "%S%S", new_namespace_prefix_possibility, string);
+                      str8_list_push_front(scratch.arena, &namespaceified_strings, namespaceified_string);
+                      last_past_scope_resolution_pos = past_next_scope_resolution_pos;
+                    }
+                  }
+                  for(String8Node *n = namespaceified_strings.first; n != 0; n = n->next)
+                  {
+                    match = di_match_from_name(e_base_ctx->dbgi_match_store, n->string, 0);
+                    if(match.idx != 0)
+                    {
+                      break;
                     }
                   }
                 }
-              }
-              
-              //- rjf: try procedures
-              if(path == E_IdentifierResolutionPath_Procedures && !string_mapped && (qualifier.size == 0 || str8_match(qualifier, str8_lit("procedure"), 0)))
-              {
-                for(U64 module_idx = 0; module_idx < e_base_ctx->modules_count; module_idx += 1)
+                if(match.idx != 0 && match.dbgi_idx < e_base_ctx->modules_count)
                 {
-                  E_Module *module = &e_base_ctx->modules[module_idx];
+                  E_Module *module = &e_base_ctx->modules[match.dbgi_idx];
                   RDI_Parsed *rdi = module->rdi;
-                  RDI_NameMap *name_map = rdi_element_from_name_idx(rdi, NameMaps, RDI_NameMapKind_Procedures);
-                  RDI_ParsedNameMap parsed_name_map = {0};
-                  rdi_parsed_from_name_map(rdi, name_map, &parsed_name_map);
-                  RDI_NameMapNode *node = rdi_name_map_lookup(rdi, &parsed_name_map, string.str, string.size);
-                  U32 matches_count = 0;
-                  U32 *matches = rdi_matches_from_map_node(rdi, node, &matches_count);
-                  for(String8Node *n = namespaceified_strings.first;
-                      n != 0 && matches_count == 0;
-                      n = n->next)
+                  switch(match.section)
                   {
-                    node = rdi_name_map_lookup(rdi, &parsed_name_map, n->string.str, n->string.size);
-                    matches_count = 0;
-                    matches = rdi_matches_from_map_node(rdi, node, &matches_count);
-                  }
-                  if(matches_count != 0)
-                  {
-                    U32 match_idx = matches[matches_count-1];
-                    RDI_Procedure *procedure = rdi_element_from_name_idx(rdi, Procedures, match_idx);
-                    RDI_Scope *scope = rdi_element_from_name_idx(rdi, Scopes, procedure->root_scope_idx);
-                    U64 voff = *rdi_element_from_name_idx(rdi, ScopeVOffData, scope->voff_range_first);
-                    U32 type_idx = procedure->type_idx;
-                    RDI_TypeNode *type_node = rdi_element_from_name_idx(rdi, TypeNodes, type_idx);
-                    E_OpList oplist = {0};
-                    e_oplist_push_op(arena, &oplist, RDI_EvalOp_ConstU64, e_value_u64(module->vaddr_range.min + voff));
-                    string_mapped = 1;
-                    mapped_type_key = e_type_key_ext(e_type_kind_from_rdi(type_node->kind), type_idx, (U32)module_idx);
-                    mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
-                    mapped_bytecode_mode = E_Mode_Value;
-                    mapped_bytecode_space = module->space;
-                    break;
+                    default:{}break;
+                    case RDI_SectionKind_GlobalVariables:
+                    {
+                      RDI_GlobalVariable *global_var = rdi_element_from_name_idx(rdi, GlobalVariables, match.idx);
+                      U32 type_idx = global_var->type_idx;
+                      RDI_TypeNode *type_node = rdi_element_from_name_idx(rdi, TypeNodes, type_idx);
+                      E_OpList oplist = {0};
+                      e_oplist_push_op(arena, &oplist, RDI_EvalOp_ConstU64, e_value_u64(module->vaddr_range.min + global_var->voff));
+                      string_mapped = 1;
+                      mapped_type_key = e_type_key_ext(e_type_kind_from_rdi(type_node->kind), type_idx, (U32)match.dbgi_idx);
+                      mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
+                      mapped_bytecode_mode = E_Mode_Offset;
+                      mapped_bytecode_space = module->space;
+                    }break;
+                    case RDI_SectionKind_ThreadVariables:
+                    {
+                      RDI_ThreadVariable *thread_var = rdi_element_from_name_idx(rdi, ThreadVariables, match.idx);
+                      U32 type_idx = thread_var->type_idx;
+                      RDI_TypeNode *type_node = rdi_element_from_name_idx(rdi, TypeNodes, type_idx);
+                      E_OpList oplist = {0};
+                      e_oplist_push_op(arena, &oplist, RDI_EvalOp_TLSOff, e_value_u64(thread_var->tls_off));
+                      string_mapped = 1;
+                      mapped_type_key = e_type_key_ext(e_type_kind_from_rdi(type_node->kind), type_idx, (U32)match.dbgi_idx);
+                      mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
+                      mapped_bytecode_mode = E_Mode_Offset;
+                      mapped_bytecode_space = module->space;
+                    }break;
+                    case RDI_SectionKind_Constants:
+                    {
+                      RDI_Constant *constant = rdi_element_from_name_idx(rdi, Constants, match.idx);
+                      U32 type_idx = constant->type_idx;
+                      RDI_TypeNode *type_node = rdi_element_from_name_idx(rdi, TypeNodes, type_idx);
+                      RDI_U32 constant_value_off = *rdi_element_from_name_idx(rdi, ConstantValueTable, constant->constant_value_idx);
+                      RDI_U32 constant_value_size = *rdi_element_from_name_idx(rdi, ConstantValueTable, constant->constant_value_idx+1) - constant_value_off;
+                      if(constant_value_size <= 8)
+                      {
+                        RDI_U64 constant_value_data_size = 0;
+                        RDI_U8 *constant_value_data = rdi_table_from_name(rdi, ConstantValueData, &constant_value_data_size);
+                        if(0 <= constant_value_off && constant_value_off + constant_value_size <= constant_value_data_size)
+                        {
+                          RDI_U64 value = 0;
+                          MemoryCopy(&value, constant_value_data+constant_value_off, constant_value_size);
+                          E_OpList oplist = {0};
+                          e_oplist_push_op(arena, &oplist, RDI_EvalOp_ConstU64, e_value_u64(value));
+                          string_mapped = 1;
+                          mapped_type_key = e_type_key_ext(e_type_kind_from_rdi(type_node->kind), type_idx, (U32)match.dbgi_idx);
+                          mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
+                          mapped_bytecode_mode = E_Mode_Value;
+                          mapped_bytecode_space = module->space;
+                          break;
+                        }
+                      }
+                    }break;
+                    case RDI_SectionKind_Procedures:
+                    {
+                      RDI_Procedure *procedure = rdi_element_from_name_idx(rdi, Procedures, match.idx);
+                      RDI_Scope *scope = rdi_element_from_name_idx(rdi, Scopes, procedure->root_scope_idx);
+                      U64 voff = *rdi_element_from_name_idx(rdi, ScopeVOffData, scope->voff_range_first);
+                      U32 type_idx = procedure->type_idx;
+                      RDI_TypeNode *type_node = rdi_element_from_name_idx(rdi, TypeNodes, type_idx);
+                      E_OpList oplist = {0};
+                      e_oplist_push_op(arena, &oplist, RDI_EvalOp_ConstU64, e_value_u64(module->vaddr_range.min + voff));
+                      string_mapped = 1;
+                      mapped_type_key = e_type_key_ext(e_type_kind_from_rdi(type_node->kind), type_idx, (U32)match.dbgi_idx);
+                      mapped_bytecode = e_bytecode_from_oplist(arena, &oplist);
+                      mapped_bytecode_mode = E_Mode_Value;
+                      mapped_bytecode_space = module->space;
+                    }break;
+                    case RDI_SectionKind_TypeNodes:
+                    {
+                      U32 type_idx = match.idx;
+                      RDI_TypeNode *type_node = rdi_element_from_name_idx(rdi, TypeNodes, type_idx);
+                      mapped_type_key = e_type_key_ext(e_type_kind_from_rdi(type_node->kind), type_idx, (U32)match.dbgi_idx);
+                      string_mapped = 1;
+                    }break;
                   }
                 }
               }
             }break;
-            
-            //- rjf: try types
-            case E_IdentifierResolutionPath_Types:
-            if(!string_mapped && (qualifier.size == 0 || str8_match(qualifier, str8_lit("type"), 0)))
-            {
-              mapped_type_key = e_leaf_type_from_name(string);
-              if(!e_type_key_match(e_type_key_zero(), mapped_type_key))
-              {
-                string_mapped = 1;
-              }
-            }break;
-            
             
             //- rjf: try registers
             case E_IdentifierResolutionPath_Registers:

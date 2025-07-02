@@ -760,6 +760,7 @@ struct E_BaseCtx
   E_Module *modules;
   U64 modules_count;
   E_Module *primary_module;
+  DI_MatchStore *dbgi_match_store;
   
   // rjf: space hooks
   void *space_rw_user_data;
@@ -1151,6 +1152,7 @@ internal E_MsgList e_msg_list_copy(Arena *arena, E_MsgList *src);
 //~ rjf: Space Functions
 
 internal E_Space e_space_make(E_SpaceKind kind);
+internal B32 e_space_match(E_Space a, E_Space b);
 
 ////////////////////////////////
 //~ rjf: Map Functions

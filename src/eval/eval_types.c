@@ -927,7 +927,7 @@ e_push_type_from_key(Arena *arena, E_TypeKey key)
                   type->byte_size       = bit_size_from_arch(e_base_ctx->modules[rdi_idx].arch)/8;
                   type->direct_type_key = direct_type_key;
                   type->count           = count;
-                  type->param_type_keys = push_array_no_zero(arena, E_TypeKey, type->count);
+                  type->param_type_keys = push_array(arena, E_TypeKey, type->count);
                   type->arch            = e_base_ctx->modules[rdi_idx].arch;
                   for(U32 idx = 0; idx < type->count; idx += 1)
                   {
@@ -2541,7 +2541,7 @@ E_TYPE_EXPAND_INFO_FUNCTION_DEF(array)
 {
   E_Type *type = e_type_from_key(eval.irtree.type_key);
   U64 count = 1;
-  if(type->args != 0 && type->count > 0) E_ParentKey(e_key_match(e_key_zero(), eval.parent_key) ? eval.key : eval.parent_key)
+  if(type->args != 0 && type->count > 0) E_ParentKey(eval.key)
   {
     E_Key count_key = e_key_from_expr(type->args[0]);
     E_Value count_value = e_value_from_key(count_key);

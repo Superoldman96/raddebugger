@@ -462,25 +462,24 @@ di_open(DI_Key *key)
   Temp scratch = scratch_begin(0, 0);
   if(key->path.size != 0)
   {
-    DI_Key key_normalized = di_normalized_key_from_key(scratch.arena, key);
-    U64 hash = di_hash_from_key(&key_normalized);
+    U64 hash = di_hash_from_key(key);
     U64 slot_idx = hash%di_shared->slots_count;
     U64 stripe_idx = slot_idx%di_shared->stripes_count;
     DI_Slot *slot = &di_shared->slots[slot_idx];
     DI_Stripe *stripe = &di_shared->stripes[stripe_idx];
-    log_infof("open_debug_info: {\"%S\", 0x%I64x}\n", key_normalized.path, key_normalized.min_timestamp);
+    log_infof("open_debug_info: {\"%S\", 0x%I64x}\n", key->path, key->min_timestamp);
     OS_MutexScopeW(stripe->rw_mutex)
     {
       //- rjf: find existing node
-      DI_Node *node = di_node_from_key_slot__stripe_mutex_r_guarded(slot, &key_normalized);
+      DI_Node *node = di_node_from_key_slot__stripe_mutex_r_guarded(slot, key);
       
       //- rjf: allocate node if none exists; insert into slot
       if(node == 0)
       {
-        U64 current_timestamp = os_properties_from_file_path(key_normalized.path).modified;
+        U64 current_timestamp = os_properties_from_file_path(key->path).modified;
         if(current_timestamp == 0)
         {
-          current_timestamp = key_normalized.min_timestamp;
+          current_timestamp = key->min_timestamp;
         }
         node = stripe->free_node;
         if(node != 0)
@@ -493,7 +492,7 @@ di_open(DI_Key *key)
         }
         MemoryZeroStruct(node);
         DLLPushBack(slot->first, slot->last, node);
-        String8 path_stored = di_string_alloc__stripe_mutex_w_guarded(stripe, key_normalized.path);
+        String8 path_stored = di_string_alloc__stripe_mutex_w_guarded(stripe, key->path);
         node->key.path = path_stored;
         node->key.min_timestamp = current_timestamp;
       }
@@ -504,7 +503,7 @@ di_open(DI_Key *key)
         node->ref_count += 1;
         if(node->ref_count == 1)
         {
-          di_u2p_enqueue_key(&key_normalized, max_U64);
+          di_u2p_enqueue_key(key, max_U64);
           ins_atomic_u64_eval_assign(&node->is_working, 1);
           DeferLoop(os_rw_mutex_drop_w(stripe->rw_mutex), os_rw_mutex_take_w(stripe->rw_mutex))
           {
@@ -524,18 +523,16 @@ di_close(DI_Key *key)
   Temp scratch = scratch_begin(0, 0);
   if(key->path.size != 0)
   {
-    DI_Key key_normalized = di_normalized_key_from_key(scratch.arena, key);
-    U64 hash = di_hash_from_key(&key_normalized);
+    U64 hash = di_hash_from_key(key);
     U64 slot_idx = hash%di_shared->slots_count;
     U64 stripe_idx = slot_idx%di_shared->stripes_count;
     DI_Slot *slot = &di_shared->slots[slot_idx];
     DI_Stripe *stripe = &di_shared->stripes[stripe_idx];
-    log_infof("close_debug_info: {\"%S\", 0x%I64x}\n", key_normalized.path, key_normalized.min_timestamp);
-    B32 closed = 0;
+    log_infof("close_debug_info: {\"%S\", 0x%I64x}\n", key->path, key->min_timestamp);
     OS_MutexScopeW(stripe->rw_mutex)
     {
       //- rjf: find existing node
-      DI_Node *node = di_node_from_key_slot__stripe_mutex_r_guarded(slot, &key_normalized);
+      DI_Node *node = di_node_from_key_slot__stripe_mutex_r_guarded(slot, key);
       
       //- rjf: node exists -> decrement reference count; release
       if(node != 0)
@@ -568,7 +565,7 @@ di_close(DI_Key *key)
             break;
           }
           
-          //- rjf: wait for touch count to go to 0
+          //- rjf: wait for touch count / working marker to go to 0
           os_condition_variable_wait_rw_w(stripe->cv, stripe->rw_mutex, max_U64);
         }
       }
@@ -582,15 +579,14 @@ di_close(DI_Key *key)
 //~ rjf: Debug Info Cache Lookups
 
 internal RDI_Parsed *
-di_rdi_from_key(DI_Scope *scope, DI_Key *key, U64 endt_us)
+di_rdi_from_key(DI_Scope *scope, DI_Key *key, B32 high_priority, U64 endt_us)
 {
   ProfBeginFunction();
   RDI_Parsed *result = &rdi_parsed_nil;
   if(key->path.size != 0)
   {
     Temp scratch = scratch_begin(0, 0);
-    DI_Key key_normalized = di_normalized_key_from_key(scratch.arena, key);
-    U64 hash = di_hash_from_key(&key_normalized);
+    U64 hash = di_hash_from_key(key);
     U64 slot_idx = hash%di_shared->slots_count;
     U64 stripe_idx = slot_idx%di_shared->stripes_count;
     DI_Slot *slot = &di_shared->slots[slot_idx];
@@ -598,7 +594,7 @@ di_rdi_from_key(DI_Scope *scope, DI_Key *key, U64 endt_us)
     ProfScope("grab node") OS_MutexScopeR(stripe->rw_mutex) for(;;)
     {
       //- rjf: find existing node
-      DI_Node *node = di_node_from_key_slot__stripe_mutex_r_guarded(slot, &key_normalized);
+      DI_Node *node = di_node_from_key_slot__stripe_mutex_r_guarded(slot, key);
       
       //- rjf: no node? this path is not opened
       if(node == 0)
@@ -624,14 +620,14 @@ di_rdi_from_key(DI_Scope *scope, DI_Key *key, U64 endt_us)
       if(node != 0 &&
          !node->parse_done &&
          !ins_atomic_u64_eval(&node->is_working) &&
-         di_u2p_enqueue_key(&key_normalized, endt_us))
+         di_u2p_enqueue_key(key, endt_us))
       {
         ProfScope("ask for parse")
         {
           ins_atomic_u64_eval_assign(&node->is_working, 1);
           DeferLoop(os_rw_mutex_drop_r(stripe->rw_mutex), os_rw_mutex_take_r(stripe->rw_mutex))
           {
-            async_push_work(di_parse_work);
+            async_push_work(di_parse_work, .priority = high_priority ? ASYNC_Priority_High : ASYNC_Priority_Low);
           }
         }
       }
@@ -1026,15 +1022,16 @@ ASYNC_WORK_DEF(di_parse_work)
         params.inherit_env = 1;
         params.consoleless = 1;
         str8_list_pushf(scratch.arena, &params.cmd_line, "raddbg");
-        str8_list_pushf(scratch.arena, &params.cmd_line, "--convert");
+        str8_list_pushf(scratch.arena, &params.cmd_line, "--bin");
         str8_list_pushf(scratch.arena, &params.cmd_line, "--quiet");
         if(should_compress)
         {
           str8_list_pushf(scratch.arena, &params.cmd_line, "--compress");
         }
         // str8_list_pushf(scratch.arena, &params.cmd_line, "--capture");
-        str8_list_pushf(scratch.arena, &params.cmd_line, "--pdb:%S", og_path);
+        str8_list_pushf(scratch.arena, &params.cmd_line, "--rdi");
         str8_list_pushf(scratch.arena, &params.cmd_line, "--out:%S", rdi_path);
+        str8_list_pushf(scratch.arena, &params.cmd_line, "%S", og_path);
         process = os_process_launch(&params);
       }
       
@@ -1127,6 +1124,16 @@ ASYNC_WORK_DEF(di_parse_work)
       node->arena = rdi_parsed_arena;
       node->rdi = rdi_parsed;
       node->parse_done = 1;
+    }
+    else
+    {
+      if(rdi_parsed_arena != 0)
+      {
+        arena_release(rdi_parsed_arena);
+      }
+      os_file_map_view_close(file_map, file_base, r1u64(0, file_props.size));
+      os_file_map_close(file_map);
+      os_file_close(file);
     }
   }
   os_condition_variable_broadcast(stripe->cv);
@@ -1391,7 +1398,7 @@ di_search_thread__entry_point(void *p)
     RDI_Parsed **rdis = push_array(scratch.arena, RDI_Parsed *, rdis_count);
     for EachIndex(idx, rdis_count)
     {
-      rdis[idx] = di_rdi_from_key(di_scope, &params.dbgi_keys.v[idx], max_U64);
+      rdis[idx] = di_rdi_from_key(di_scope, &params.dbgi_keys.v[idx], 1, max_U64);
     }
     
     //- rjf: kick off search tasks
@@ -1583,6 +1590,10 @@ di_match_store_alloc(void)
   store->u2m_ring_mutex         = os_mutex_alloc();
   store->u2m_ring_size          = KB(2);
   store->u2m_ring_base          = push_array_no_zero(arena, U8, store->u2m_ring_size);
+  store->m2u_ring_cv            = os_condition_variable_alloc();
+  store->m2u_ring_mutex         = os_mutex_alloc();
+  store->m2u_ring_size          = KB(2);
+  store->m2u_ring_base          = push_array_no_zero(arena, U8, store->m2u_ring_size);
   return store;
 }
 
@@ -1631,13 +1642,22 @@ di_match_store_begin(DI_MatchStore *store, DI_KeyArray keys)
     }
   }
   
+  // rjf: pop new matches
+#if 0
+  for(;;)
+  {
+    U64 unconsumed_size = store->m2u_ring_write_pos - store->m2u_ring_read_pos;
+  }
+#endif
+  
   ProfEnd();
 }
 
-internal RDI_SectionKind
-di_match_store_section_kind_from_name(DI_MatchStore *store, String8 name, U64 endt_us)
+internal DI_Match
+di_match_from_name(DI_MatchStore *store, String8 name, U64 endt_us)
 {
-  RDI_SectionKind result = 0;
+  DI_Match result = {0};
+  if(name.size != 0)
   {
     // rjf: unpack name
     U64 hash = di_hash_from_string(name, 0);
@@ -1736,7 +1756,12 @@ di_match_store_section_kind_from_name(DI_MatchStore *store, String8 name, U64 en
     }
     
     // rjf: return node present info
-    result = node->section_kind;
+    result = node->primary_match;
+    if(node->cmp_params_hash != store->params_hash)
+    {
+      result.dbgi_idx = 0;
+      result.idx = 0;
+    }
   }
   return result;
 }
@@ -1776,11 +1801,18 @@ ASYNC_WORK_DEF(di_match_work)
       params_hash = store->params_hash;
     }
     
-    //- rjf: do match
+    //- rjf: zero match info
+    ins_atomic_u64_eval_assign(&node->primary_match.dbgi_idx, 0);
+    ins_atomic_u32_eval_assign(&node->primary_match.idx, 0);
+    
+    //- rjf: gather matches
+    DI_MatchNode *first_match = 0;
+    DI_MatchNode *last_match = 0;
     RDI_NameMapKind name_map_kinds[] =
     {
       RDI_NameMapKind_GlobalVariables,
       RDI_NameMapKind_ThreadVariables,
+      RDI_NameMapKind_Constants,
       RDI_NameMapKind_Procedures,
       RDI_NameMapKind_Types,
     };
@@ -1788,6 +1820,7 @@ ASYNC_WORK_DEF(di_match_work)
     {
       RDI_SectionKind_GlobalVariables,
       RDI_SectionKind_ThreadVariables,
+      RDI_SectionKind_Constants,
       RDI_SectionKind_Procedures,
       RDI_SectionKind_TypeNodes,
     };
@@ -1797,7 +1830,7 @@ ASYNC_WORK_DEF(di_match_work)
       {
         DI_Scope *di_scope = di_scope_open();
         DI_Key key = params_keys.v[dbgi_idx];
-        RDI_Parsed *rdi = di_rdi_from_key(di_scope, &key, os_now_microseconds()+1000);
+        RDI_Parsed *rdi = di_rdi_from_key(di_scope, &key, 1, os_now_microseconds()+1000);
         for EachElement(name_map_kind_idx, name_map_kinds)
         {
           RDI_NameMap *name_map = rdi_element_from_name_idx(rdi, NameMaps, name_map_kinds[name_map_kind_idx]);
@@ -1808,7 +1841,20 @@ ASYNC_WORK_DEF(di_match_work)
           U32 *run = rdi_matches_from_map_node(rdi, map_node, &num);
           if(num != 0)
           {
-            ins_atomic_u32_eval_assign(&node->section_kind, name_map_section_kinds[name_map_kind_idx]);
+            // rjf: atomically update the node's primary match
+            ins_atomic_u64_eval_assign(&node->primary_match.dbgi_idx, dbgi_idx);
+            ins_atomic_u32_eval_assign(&node->primary_match.section, name_map_section_kinds[name_map_kind_idx]);
+            ins_atomic_u32_eval_assign(&node->primary_match.idx, run[0]);
+            
+            // rjf: gather all alternate matches
+            for(U32 match_idx = 1; match_idx < num; match_idx += 1)
+            {
+              DI_MatchNode *m = push_array(scratch.arena, DI_MatchNode, 1);
+              SLLQueuePush(first_match, last_match, m);
+              m->v.dbgi_idx = dbgi_idx;
+              m->v.section  = name_map_section_kinds[name_map_kind_idx];
+              m->v.idx      = run[match_idx];
+            }
           }
         }
         di_scope_close(di_scope);

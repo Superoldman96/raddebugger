@@ -783,7 +783,7 @@ E_TYPE_EXPAND_INFO_FUNCTION_DEF(cfgs_slice)
       for EachIndex(idx, ext->cfgs.count)
       {
         RD_Cfg *cfg = ext->cfgs.v[idx];
-        DR_FStrList fstrs = rd_title_fstrs_from_cfg(scratch.arena, cfg);
+        DR_FStrList fstrs = rd_title_fstrs_from_cfg(scratch.arena, cfg, 1);
         String8 string = dr_string_from_fstrs(scratch.arena, &fstrs);
         FuzzyMatchRangeList fuzzy_matches = fuzzy_match_find(scratch.arena, filter, string);
         if(fuzzy_matches.count == fuzzy_matches.needle_part_count)
@@ -795,6 +795,7 @@ E_TYPE_EXPAND_INFO_FUNCTION_DEF(cfgs_slice)
     }
     
     //- rjf: fill
+    // TODO(rjf): @cleanup don't smuggle this through like this...
     if(rd_cfg_child_from_string(rd_cfg_from_id(rd_regs()->view), str8_lit("lister")) == &rd_nil_cfg)
     {
       accel->cmds = ext->cmds;
@@ -838,7 +839,7 @@ E_TYPE_EXPAND_INFO_FUNCTION_DEF(cfgs_query)
       MemoryZeroStruct(&children__filtered);
       for(RD_CfgNode *n = children.first; n != 0; n = n->next)
       {
-        DR_FStrList cfg_fstrs = rd_title_fstrs_from_cfg(scratch.arena, n->v);
+        DR_FStrList cfg_fstrs = rd_title_fstrs_from_cfg(scratch.arena, n->v, 1);
         String8 cfg_string = dr_string_from_fstrs(scratch.arena, &cfg_fstrs);
         FuzzyMatchRangeList ranges = fuzzy_match_find(scratch.arena, filter, cfg_string);
         if(ranges.count == ranges.needle_part_count)
@@ -1570,7 +1571,7 @@ E_TYPE_EXPAND_INFO_FUNCTION_DEF(debug_info_table)
     RDI_Parsed **rdis = push_array(arena, RDI_Parsed *, rdis_count);
     for(U64 idx = 0; idx < rdis_count; idx += 1)
     {
-      rdis[idx] = di_rdi_from_key(rd_state->frame_di_scope, &dbgi_keys.v[idx], endt_us);
+      rdis[idx] = di_rdi_from_key(rd_state->frame_di_scope, &dbgi_keys.v[idx], 1, endt_us);
     }
     
     //- rjf: query all filtered items from dbgi searching system
