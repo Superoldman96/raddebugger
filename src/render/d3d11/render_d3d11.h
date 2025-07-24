@@ -93,9 +93,12 @@ struct R_D3D11_Window
   U64 generation;
   
   // rjf: swapchain/framebuffer
-  IDXGISwapChain1        *swapchain;
-  ID3D11Texture2D        *framebuffer;
-  ID3D11RenderTargetView *framebuffer_rtv;
+  IDXGISwapChain1        *fixed_swapchain;
+  ID3D11Texture2D        *fixed_framebuffer;
+  ID3D11RenderTargetView *fixed_framebuffer_rtv;
+  IDXGISwapChain1        *resize_swapchain;
+  ID3D11Texture2D        *resize_framebuffer;
+  ID3D11RenderTargetView *resize_framebuffer_rtv;
   
   // rjf: staging buffer
   ID3D11Texture2D *stage_color;
@@ -112,6 +115,11 @@ struct R_D3D11_Window
   ID3D11Texture2D *geo3d_depth;
   ID3D11DepthStencilView *geo3d_depth_dsv;
   ID3D11ShaderResourceView *geo3d_depth_srv;
+  
+  // rjf: per-frame state
+  IDXGISwapChain1 **frame_swapchain;
+  ID3D11Texture2D **frame_framebuffer;
+  ID3D11RenderTargetView **frame_framebuffer_rtv;
   
   // rjf: last state
   Vec2S32 last_resolution;

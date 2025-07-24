@@ -544,6 +544,24 @@ type_coverage_eval_tests(void)
   discriminated_union.fourth.sub_kind = Kind_First;
   discriminated_union.fourth.flags = (Flag)7;
   
+  struct Bundle
+  {
+    int x;
+    int y;
+    int z;
+    TemplatedDynamicArray<int> packets;
+  };
+  int p_buffer[] = {1, 2, 3, 4, 5, 7, 8, 9, 10};
+  TemplatedDynamicArray<int> p = {p_buffer, sizeof(p_buffer)/sizeof(p_buffer[0])};
+  Bundle b_buffer[] =
+  {
+    {0, 0, 0, p},
+    {1, 2, 3, p},
+    {4, 5, 6, p},
+    {7, 8, 9, p},
+  };
+  TemplatedDynamicArray<Bundle> bundles = { b_buffer, sizeof(b_buffer)/sizeof(b_buffer[0]) };
+  
   Linked_List list = {&list, &list, 0};
   
   Alias1 a1 = has_enums.kind;

@@ -512,39 +512,62 @@ r_window_equip(OS_Handle handle)
       hwnd = os_w32_hwnd_from_window(w32_layer_window);
     }
     
-    //- rjf: create swapchain
-    DXGI_SWAP_CHAIN_DESC1 swapchain_desc = {0};
+    //- rjf: create non-resizing swapchain
     {
-      swapchain_desc.Width              = 0; // NOTE(rjf): use window width
-      swapchain_desc.Height             = 0; // NOTE(rjf): use window height
-      swapchain_desc.Format             = DXGI_FORMAT_B8G8R8A8_UNORM;
-      swapchain_desc.Stereo             = FALSE;
-      swapchain_desc.SampleDesc.Count   = 1;
-      swapchain_desc.SampleDesc.Quality = 0;
-      swapchain_desc.BufferUsage        = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-      swapchain_desc.BufferCount        = 2;
-      swapchain_desc.Scaling            = DXGI_SCALING_NONE;
-      swapchain_desc.SwapEffect         = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-      swapchain_desc.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
-      swapchain_desc.Flags              = 0;
-    }
-    HRESULT error = r_d3d11_state->dxgi_factory->lpVtbl->CreateSwapChainForHwnd(r_d3d11_state->dxgi_factory, (IUnknown *)r_d3d11_state->device, hwnd, &swapchain_desc, 0, 0, &window->swapchain);
-    if(FAILED(error))
-    {
-      char buffer[256] = {0};
-      raddbg_snprintf(buffer, sizeof(buffer), "DXGI swap chain creation failure (%lx). The process is terminating.", error);
-      os_graphical_message(1, str8_lit("Fatal Error"), str8_cstring(buffer));
-      os_abort(1);
+      DXGI_SWAP_CHAIN_DESC1 swapchain_desc = {0};
+      {
+        swapchain_desc.Width              = 0; // NOTE(rjf): use window width
+        swapchain_desc.Height             = 0; // NOTE(rjf): use window height
+        swapchain_desc.Format             = DXGI_FORMAT_B8G8R8A8_UNORM;
+        swapchain_desc.Stereo             = FALSE;
+        swapchain_desc.SampleDesc.Count   = 1;
+        swapchain_desc.SampleDesc.Quality = 0;
+        swapchain_desc.BufferUsage        = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        swapchain_desc.BufferCount        = 2;
+        swapchain_desc.Scaling            = DXGI_SCALING_NONE;
+        swapchain_desc.SwapEffect         = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        swapchain_desc.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
+        swapchain_desc.Flags              = 0;
+      }
+      HRESULT error = r_d3d11_state->dxgi_factory->lpVtbl->CreateSwapChainForHwnd(r_d3d11_state->dxgi_factory, (IUnknown *)r_d3d11_state->device, hwnd, &swapchain_desc, 0, 0, &window->fixed_swapchain);
+      if(FAILED(error))
+      {
+        char buffer[256] = {0};
+        raddbg_snprintf(buffer, sizeof(buffer), "DXGI swap chain creation failure (%lx). The process is terminating.", error);
+        os_graphical_message(1, str8_lit("Fatal Error"), str8_cstring(buffer));
+        os_abort(1);
+      }
     }
     
+    //- rjf: create resizing swapchain
+    {
+      DXGI_SWAP_CHAIN_DESC1 swapchain_desc = {0};
+      {
+        swapchain_desc.Width              = 0; // NOTE(rjf): use window width
+        swapchain_desc.Height             = 0; // NOTE(rjf): use window height
+        swapchain_desc.Format             = DXGI_FORMAT_B8G8R8A8_UNORM;
+        swapchain_desc.Stereo             = FALSE;
+        swapchain_desc.SampleDesc.Count   = 1;
+        swapchain_desc.SampleDesc.Quality = 0;
+        swapchain_desc.BufferUsage        = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        swapchain_desc.BufferCount        = 2;
+        swapchain_desc.Scaling            = DXGI_SCALING_STRETCH;
+        swapchain_desc.SwapEffect         = DXGI_SWAP_EFFECT_DISCARD;
+        swapchain_desc.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
+        swapchain_desc.Flags              = 0;
+      }
+      HRESULT error = r_d3d11_state->dxgi_factory->lpVtbl->CreateSwapChainForHwnd(r_d3d11_state->dxgi_factory, (IUnknown *)r_d3d11_state->device, hwnd, &swapchain_desc, 0, 0, &window->resize_swapchain);
+      if(FAILED(error))
+      {
+        char buffer[256] = {0};
+        raddbg_snprintf(buffer, sizeof(buffer), "DXGI swap chain creation failure (%lx). The process is terminating.", error);
+        os_graphical_message(1, str8_lit("Fatal Error"), str8_cstring(buffer));
+        os_abort(1);
+      }
+    }
+    
+    //- rjf: turn off alt+enter
     r_d3d11_state->dxgi_factory->lpVtbl->MakeWindowAssociation(r_d3d11_state->dxgi_factory, hwnd, DXGI_MWA_NO_ALT_ENTER);
-    
-    //- rjf: create framebuffer & view
-    D3D11_RENDER_TARGET_VIEW_DESC framebuffer_rtv_desc = {0};
-    framebuffer_rtv_desc.Format        = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
-    framebuffer_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-    window->swapchain->lpVtbl->GetBuffer(window->swapchain, 0, &IID_ID3D11Texture2D, (void **)(&window->framebuffer));
-    r_d3d11_state->device->lpVtbl->CreateRenderTargetView(r_d3d11_state->device, (ID3D11Resource *)window->framebuffer, &framebuffer_rtv_desc, &window->framebuffer_rtv);
     
     result = r_d3d11_handle_from_window(window);
   }
@@ -565,9 +588,25 @@ r_window_unequip(OS_Handle handle, R_Handle equip_handle)
     window->stage_scratch_color_srv->lpVtbl->Release(window->stage_scratch_color_srv);
     window->stage_scratch_color_rtv->lpVtbl->Release(window->stage_scratch_color_rtv);
     window->stage_scratch_color->lpVtbl->Release(window->stage_scratch_color);
-    window->framebuffer_rtv->lpVtbl->Release(window->framebuffer_rtv);
-    window->framebuffer->lpVtbl->Release(window->framebuffer);
-    window->swapchain->lpVtbl->Release(window->swapchain);
+    window->fixed_swapchain->lpVtbl->Release(window->resize_swapchain);
+    window->resize_swapchain->lpVtbl->Release(window->resize_swapchain);
+    if(window->resize_framebuffer_rtv)
+    {
+      window->resize_framebuffer_rtv->lpVtbl->Release(window->resize_framebuffer_rtv);
+    }
+    if(window->resize_framebuffer)
+    {
+      window->resize_framebuffer->lpVtbl->Release(window->resize_framebuffer);
+    }
+    window->fixed_swapchain->lpVtbl->Release(window->fixed_swapchain);
+    if(window->fixed_framebuffer_rtv)
+    {
+      window->fixed_framebuffer_rtv->lpVtbl->Release(window->fixed_framebuffer_rtv);
+    }
+    if(window->fixed_framebuffer)
+    {
+      window->fixed_framebuffer->lpVtbl->Release(window->fixed_framebuffer);
+    }
     window->generation += 1;
     SLLStackPush(r_d3d11_state->first_free_window, window);
   }
@@ -861,11 +900,20 @@ r_window_begin_frame(OS_Handle window, R_Handle window_equip)
     //- rjf: get resolution
     Rng2F32 client_rect = os_client_rect_from_window(window);
     Vec2S32 resolution = {(S32)(client_rect.x1 - client_rect.x0), (S32)(client_rect.y1 - client_rect.y0)};
+    B32 resolution_matches = (wnd->last_resolution.x == resolution.x &&
+                              wnd->last_resolution.y == resolution.y);
     
-    //- rjf: resolution change
+    //- rjf: select frame's swapchain, depending on resizing
+    if(!resolution_matches)
+    {
+      wnd->frame_swapchain       = &wnd->resize_swapchain;
+      wnd->frame_framebuffer     = &wnd->resize_framebuffer;
+      wnd->frame_framebuffer_rtv = &wnd->resize_framebuffer_rtv;
+    }
+    
+    //- rjf: update swapchain for resolution
     B32 resize_done = 0;
-    if(wnd->last_resolution.x != resolution.x ||
-       wnd->last_resolution.y != resolution.y)
+    if(!resolution_matches)
     {
       resize_done = 1;
       wnd->last_resolution = resolution;
@@ -885,20 +933,28 @@ r_window_begin_frame(OS_Handle window, R_Handle window_equip)
       if(wnd->geo3d_depth)            {wnd->geo3d_depth->lpVtbl->Release(wnd->geo3d_depth);}
       
       // rjf: resize swapchain & main framebuffer
-      wnd->framebuffer_rtv->lpVtbl->Release(wnd->framebuffer_rtv);
-      wnd->framebuffer->lpVtbl->Release(wnd->framebuffer);
-      wnd->swapchain->lpVtbl->ResizeBuffers(wnd->swapchain, 0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
-      wnd->swapchain->lpVtbl->GetBuffer(wnd->swapchain, 0, &IID_ID3D11Texture2D, (void **)(&wnd->framebuffer));
-      D3D11_RENDER_TARGET_VIEW_DESC framebuffer_rtv_desc = {0};
-      framebuffer_rtv_desc.Format        = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
-      framebuffer_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-      r_d3d11_state->device->lpVtbl->CreateRenderTargetView(r_d3d11_state->device, (ID3D11Resource *)wnd->framebuffer, &framebuffer_rtv_desc, &wnd->framebuffer_rtv);
+      {
+        if(*wnd->frame_framebuffer_rtv)
+        {
+          wnd->frame_framebuffer_rtv[0]->lpVtbl->Release(*wnd->frame_framebuffer_rtv);
+        }
+        if(*wnd->frame_framebuffer)
+        {
+          wnd->frame_framebuffer[0]->lpVtbl->Release(*wnd->frame_framebuffer);
+        }
+        wnd->frame_swapchain[0]->lpVtbl->ResizeBuffers(wnd->frame_swapchain[0], 0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
+        wnd->frame_swapchain[0]->lpVtbl->GetBuffer(wnd->frame_swapchain[0], 0, &IID_ID3D11Texture2D, (void **)(wnd->frame_framebuffer));
+        D3D11_RENDER_TARGET_VIEW_DESC framebuffer_rtv_desc = {0};
+        framebuffer_rtv_desc.Format        = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+        framebuffer_rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+        r_d3d11_state->device->lpVtbl->CreateRenderTargetView(r_d3d11_state->device, (ID3D11Resource *)*wnd->frame_framebuffer, &framebuffer_rtv_desc, wnd->frame_framebuffer_rtv);
+      }
       
       // rjf: create stage color targets
       {
         D3D11_TEXTURE2D_DESC color_desc = zero_struct;
         {
-          wnd->framebuffer->lpVtbl->GetDesc(wnd->framebuffer, &color_desc);
+          wnd->frame_framebuffer[0]->lpVtbl->GetDesc(wnd->frame_framebuffer[0], &color_desc);
           color_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
           color_desc.BindFlags = D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
         }
@@ -925,7 +981,7 @@ r_window_begin_frame(OS_Handle window, R_Handle window_equip)
       {
         D3D11_TEXTURE2D_DESC color_desc = zero_struct;
         {
-          wnd->framebuffer->lpVtbl->GetDesc(wnd->framebuffer, &color_desc);
+          wnd->frame_framebuffer[0]->lpVtbl->GetDesc(wnd->frame_framebuffer[0], &color_desc);
           color_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
           color_desc.BindFlags = D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
         }
@@ -942,7 +998,7 @@ r_window_begin_frame(OS_Handle window, R_Handle window_equip)
         }
         D3D11_TEXTURE2D_DESC depth_desc = zero_struct;
         {
-          wnd->framebuffer->lpVtbl->GetDesc(wnd->framebuffer, &depth_desc);
+          wnd->frame_framebuffer[0]->lpVtbl->GetDesc(wnd->frame_framebuffer[0], &depth_desc);
           depth_desc.Format = DXGI_FORMAT_R24G8_TYPELESS;
           depth_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL|D3D11_BIND_SHADER_RESOURCE;
         }
@@ -971,7 +1027,7 @@ r_window_begin_frame(OS_Handle window, R_Handle window_equip)
     
     //- rjf: clear framebuffers
     Vec4F32 clear_color = {0, 0, 0, 0};
-    d_ctx->lpVtbl->ClearRenderTargetView(d_ctx, wnd->framebuffer_rtv, clear_color.v);
+    d_ctx->lpVtbl->ClearRenderTargetView(d_ctx, wnd->frame_framebuffer_rtv[0], clear_color.v);
     d_ctx->lpVtbl->ClearRenderTargetView(d_ctx, wnd->stage_color_rtv, clear_color.v);
     if(resize_done)
     {
@@ -989,6 +1045,9 @@ r_window_end_frame(OS_Handle window, R_Handle window_equip)
   {
     R_D3D11_Window *wnd = r_d3d11_window_from_handle(window_equip);
     ID3D11DeviceContext1 *d_ctx = r_d3d11_state->device_ctx;
+    IDXGISwapChain1 *swapchain = wnd->frame_swapchain[0];
+    ID3D11Texture2D *framebuffer = wnd->frame_framebuffer[0];
+    ID3D11RenderTargetView *framebuffer_rtv = wnd->frame_framebuffer_rtv[0];
     
     ////////////////////////////
     //- rjf: finalize, by writing staging buffer out to window framebuffer
@@ -999,7 +1058,7 @@ r_window_end_frame(OS_Handle window, R_Handle window_equip)
       ID3D11PixelShader *pshad      = r_d3d11_state->pshads[R_D3D11_PShadKind_Finalize];
       
       // rjf: setup output merger
-      d_ctx->lpVtbl->OMSetRenderTargets(d_ctx, 1, &wnd->framebuffer_rtv, 0);
+      d_ctx->lpVtbl->OMSetRenderTargets(d_ctx, 1, &framebuffer_rtv, 0);
       d_ctx->lpVtbl->OMSetDepthStencilState(d_ctx, r_d3d11_state->noop_depth_stencil, 0);
       d_ctx->lpVtbl->OMSetBlendState(d_ctx, r_d3d11_state->main_blend_state, 0, 0xffffffff);
       
@@ -1036,7 +1095,7 @@ r_window_end_frame(OS_Handle window, R_Handle window_equip)
     ////////////////////////////
     //- rjf: present
     //
-    HRESULT error = wnd->swapchain->lpVtbl->Present(wnd->swapchain, 1, 0);
+    HRESULT error = swapchain->lpVtbl->Present(swapchain, 1, 0);
     if(FAILED(error))
     {
       char buffer[256] = {0};
