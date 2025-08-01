@@ -171,6 +171,7 @@ dmn_lnx_arch_from_pid(pid_t pid)
     // rjf: determine arch from elf machine kind
     result = arch_from_elf_machine(hdr.e_machine);
     
+    close(exe_fd);
     scratch_end(scratch);
   }
   return result;
@@ -227,6 +228,7 @@ dmn_lnx_aux_from_pid(pid_t pid, Arch arch)
         case ELF_AuxType_Phent:        result.phent  = val; break;
         case ELF_AuxType_Phdr:         result.phdr   = val; break;
         case ELF_AuxType_ExecFn:       result.execfn = val; break;
+        case ELF_AuxType_Pagesz:       result.pagesz = val; break;
       }
     }
     brkloop:;
@@ -243,6 +245,7 @@ internal DMN_LNX_PhdrInfo
 dmn_lnx_phdr_info_from_memory(int memory_fd, B32 is_32bit, U64 phvaddr, U64 phsize, U64 phcount)
 {
   DMN_LNX_PhdrInfo result = {0};
+  result.range.min = max_U64;
   
   // rjf: determine how much phdr we'll read
   U64 phdr_size_expected = (is_32bit ? sizeof(ELF_Phdr32) : sizeof(ELF_Phdr64));
@@ -277,6 +280,7 @@ dmn_lnx_phdr_info_from_memory(int memory_fd, B32 is_32bit, U64 phvaddr, U64 phsi
     // rjf: save
     switch(p_type)
     {
+      default:{}break;
       case ELF_PType_Dynamic:
       {
         result.dynamic = p_vaddr;
@@ -307,8 +311,7 @@ dmn_lnx_module_info_list_from_process(Arena *arena, DMN_LNX_Entity *process)
   DMN_LNX_ProcessAux aux = dmn_lnx_aux_from_pid((pid_t)process->id, arch);
   
   //- rjf: memory => phdr info
-  DMN_LNX_PhdrInfo phdr_info = dmn_lnx_phdr_info_from_memory(memory_fd, is_32bit,
-                                                             aux.phdr, aux.phent, aux.phnum);
+  DMN_LNX_PhdrInfo phdr_info = dmn_lnx_phdr_info_from_memory(memory_fd, is_32bit, aux.phdr, aux.phent, aux.phnum);
   
   //- rjf: memory space & vaddr => linkmap first
   U64 first_linkmap_vaddr = 0;
@@ -360,10 +363,11 @@ dmn_lnx_module_info_list_from_process(Arena *arena, DMN_LNX_Entity *process)
   //- rjf: push main module
   DMN_LNX_ModuleInfoList list = {0};
   {
+    U64 base_vaddr = (aux.phdr & ~(aux.pagesz-1));
     DMN_LNX_ModuleInfoNode *n = push_array(arena, DMN_LNX_ModuleInfoNode, 1);
     SLLQueuePush(list.first, list.last, n);
     list.count += 1;
-    n->v.vaddr_range = phdr_info.range;
+    n->v.vaddr_range = shift_1u64(phdr_info.range, base_vaddr);
     n->v.name = aux.execfn;
   }
   
@@ -545,7 +549,9 @@ dmn_lnx_thread_read_reg_block(DMN_LNX_Entity *thread, void *reg_block)
     case Arch_arm32:
     {NotImplemented;}break;
     
+    ////////////////////////////
     //- rjf: [x64]
+    //
     case Arch_x64:
     {
       REGS_RegBlockX64 *dst = (REGS_RegBlockX64 *)reg_block;
@@ -725,10 +731,138 @@ dmn_lnx_thread_write_reg_block(DMN_LNX_Entity *thread, void *reg_block)
     case Arch_arm32:
     {NotImplemented;}break;
     
+    ////////////////////////////
     //- rjf: [x64]
+    //
     case Arch_x64:
     {
+      REGS_RegBlockX64 *src = (REGS_RegBlockX64 *)reg_block;
+      pid_t tid = (pid_t)thread->id;
       
+      //- rjf: write GPR
+      B32 did_gpr = 0;
+      {
+        DMN_LNX_UserX64 dst = {0};
+        dst.regs.rax       = src->rax.u64;
+        dst.regs.rcx       = src->rcx.u64;
+        dst.regs.rdx       = src->rdx.u64;
+        dst.regs.rbx       = src->rbx.u64;
+        dst.regs.rsp       = src->rsp.u64;
+        dst.regs.rbp       = src->rbp.u64;
+        dst.regs.rsi       = src->rsi.u64;
+        dst.regs.rdi       = src->rdi.u64;
+        dst.regs.r8        = src->r8.u64;
+        dst.regs.r9        = src->r9.u64;
+        dst.regs.r10       = src->r10.u64;
+        dst.regs.r11       = src->r11.u64;
+        dst.regs.r12       = src->r12.u64;
+        dst.regs.r13       = src->r13.u64;
+        dst.regs.r14       = src->r14.u64;
+        dst.regs.r15       = src->r15.u64;
+        dst.regs.cs        = src->cs.u16;
+        dst.regs.ds        = src->ds.u16;
+        dst.regs.es        = src->es.u16;
+        dst.regs.fs        = src->fs.u16;
+        dst.regs.gs        = src->gs.u16;
+        dst.regs.ss        = src->ss.u16;
+        dst.regs.fsbase    = src->fsbase.u64;
+        dst.regs.gsbase    = src->gsbase.u64;
+        dst.regs.rip       = src->rip.u64;
+        dst.regs.rflags    = src->rflags.u64;
+        struct iovec iov_gpr = {0};
+        iov_gpr.iov_base = &dst;
+        iov_gpr.iov_len = sizeof(dst);
+        int gpr_result = ptrace(PTRACE_SETREGSET, tid, (void*)NT_PRSTATUS, &iov_gpr);
+        did_gpr = (gpr_result != -1);
+      }
+      
+      //- rjf: write FPR
+      B32 did_fpr = 0;
+      if(did_gpr)
+      {
+        // rjf: fill xsave structure
+        DMN_LNX_XSave xsave = {0};
+        {
+          xsave.legacy.fcw          = src->fcw.u16;
+          xsave.legacy.fsw          = src->fsw.u16;
+          xsave.legacy.ftw          = src->ftw.u16;
+          xsave.legacy.fop          = src->fop.u16;
+          xsave.legacy.b64.fip      = src->fip.u64;
+          xsave.legacy.b64.fdp      = src->fdp.u64;
+          xsave.legacy.mxcsr        = src->mxcsr.u32;
+          xsave.legacy.mxcsr_mask   = src->mxcsr_mask.u32;
+          {
+            U8 *float_d = xsave.legacy.st_space.u8;
+            REGS_Reg80 *float_s = &src->st0;
+            for(U32 n = 0; n < 8; n += 1, float_s += 1, float_d += 16)
+            {
+              MemoryCopy(float_d, float_s, sizeof(*float_s));
+            }
+          }
+          {
+            U8 *xmm_d = xsave.legacy.xmm_space.u8;
+            REGS_Reg512 *xmm_s = &src->zmm0;
+            for(U32 n = 0; n < 16; n += 1, xmm_s += 1, xmm_d += 16)
+            {
+              MemoryCopy(xmm_d, xmm_s, 16);
+            }
+          }
+          xsave.header.xstate_bv = 7;
+          {
+            // TODO(rjf): this is a lie; ymm can technically move around. study & fix.
+            U8 *ymm_d = xsave.ymmh;
+            REGS_Reg512 *ymm_s = &src->zmm0;
+            for(U32 n = 0; n < 16; n += 1, ymm_s += 1, ymm_d += 16)
+            {
+              MemoryCopy(ymm_d, ((U8 *)ymm_s) + 16, 16);
+            }
+          }
+        }
+        
+        // rjf: try xsave
+        int xsave_result = -1;
+        {
+          struct iovec iov_xsave = {0};
+          iov_xsave.iov_base = &xsave;
+          iov_xsave.iov_len = sizeof(xsave);
+          xsave_result = ptrace(PTRACE_SETREGSET, tid, (void*)NT_X86_XSTATE, &iov_xsave);
+        }
+        
+        // rjf: try fxsave
+        int fxsave_result = -1;
+        if(xsave_result == -1)
+        {
+          struct iovec iov_fxsave = {0};
+          iov_fxsave.iov_base = &xsave.legacy;
+          iov_fxsave.iov_len = sizeof(xsave.legacy);
+          fxsave_result = ptrace(PTRACE_SETREGSET, tid, (void*)NT_FPREGSET, &iov_fxsave);
+        }
+        
+        // rjf: good finish requires xsave or fxsave
+        did_fpr = (xsave_result != -1 || fxsave_result != -1);
+      }
+      
+      //- rjf: write debug registers
+      B32 did_dbg = 0;
+      if(did_fpr)
+      {
+        did_dbg = 1;
+        REGS_Reg64 *dr_s = &src->dr0;
+        for(U32 i = 0; i < 8; i += 1, dr_s += 1)
+        {
+          if(i != 4 && i != 5)
+          {
+            U64 offset = OffsetOf(DMN_LNX_UserX64, u_debugreg[i]);
+            int poke_result = ptrace(PTRACE_POKEUSER, tid, PtrFromInt(offset), dr_s->u64);
+            if(poke_result == -1)
+            {
+              did_dbg = 0;
+            }
+          }
+        }
+      }
+      
+      result = (did_dbg);
     }break;
   }
   return result;
@@ -954,6 +1088,7 @@ dmn_ctrl_launch(DMN_CtrlCtx *ctx, OS_ProcessLaunchParams *params)
                 e->process = dmn_lnx_handle_from_entity(process);
                 e->thread  = dmn_lnx_handle_from_entity(main_thread);
                 e->module  = dmn_lnx_handle_from_entity(module);
+                e->arch    = process->arch;
                 e->address = n->v.vaddr_range.min;
                 e->size    = dim_1u64(n->v.vaddr_range);
                 e->string  = dmn_lnx_read_string(dmn_lnx_state->deferred_events_arena, process->fd, n->v.name);
@@ -1066,6 +1201,29 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
     B32 need_wait_on_events = (evts.count == 0);
     
     ////////////////////////////
+    //- rjf: write all traps into memory
+    //
+    U8 *trap_swap_bytes = push_array_no_zero(scratch.arena, U8, ctrls->traps.trap_count);
+    ProfScope("write all traps into memory")
+    {
+      U64 trap_idx = 0;
+      for(DMN_TrapChunkNode *n = ctrls->traps.first; n != 0; n = n->next)
+      {
+        for(U64 n_idx = 0; n_idx < n->count; n_idx += 1, trap_idx += 1)
+        {
+          DMN_Trap *trap = n->v+n_idx;
+          if(trap->flags == 0)
+          {
+            trap_swap_bytes[trap_idx] = 0xCC;
+            dmn_process_read(trap->process, r1u64(trap->vaddr, trap->vaddr+1), trap_swap_bytes+trap_idx);
+            U8 int3 = 0xCC;
+            dmn_process_write(trap->process, r1u64(trap->vaddr, trap->vaddr+1), &int3);
+          }
+        }
+      }
+    }
+    
+    ////////////////////////////
     //- rjf: gather all threads which we should run
     //
     DMN_LNX_EntityNode *first_run_thread = 0;
@@ -1176,12 +1334,38 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
       final_wait_pid = wait_id;
       done = 1;
       
+      // NOTE(rjf): siginfo hint from old code:
+#if 0
+      {
+        switch(siginfo.si_code)
+        {
+          // SI_KERNEL (hit int3; 0xCC)
+          case 0x80:
+          {
+            // TODO(rjf): breakpoint event
+          }break;
+          //                            +----------------------"breakpoint"
+          //                            | 
+          //                 v----------v----------------------"hardware breakpoint"
+          // TRAP_UNK, TRAP_HWBKPT, TRAP_BRKPT, TRAP_TRACE
+          case 0x5: case 0x4: case 0x1: case 0x2:
+          {
+            // TODO(rjf): breakpoint event (?)
+          }break;
+          case 0x3: case 0x0:
+          {
+            // TODO(rjf): do nothing(?)
+          }break;
+        }
+      }
+#endif
+      
       //- rjf: unpack event
       int wifexited         = WIFEXITED(status);
       int wifsignaled       = WIFSIGNALED(status);
       int wifstopped        = WIFSTOPPED(status);
       int wstopsig          = WSTOPSIG(status);
-      int ptrace_event_code = (status>>8);
+      int ptrace_event_code = (status>>16);
       DMN_LNX_Entity *thread = dmn_lnx_thread_from_pid(wait_id);
       DMN_LNX_Entity *process = thread->parent;
       B32 thread_is_process_root = (thread->id == process->id);
@@ -1206,36 +1390,34 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
       }
       
       //- rjf: WIFEXITED(status) -> thread exit w/ exit code
-      if(wifsignaled)
+      else if(wifsignaled)
       {
         exit_code = WTERMSIG(status);
         thread_exit = 1;
       }
       
       //- rjf: SIGTRAP:PTRACE_EVENT_EXIT
-      if(wifstopped && wstopsig == SIGTRAP && ptrace_event_code == PTRACE_EVENT_EXIT)
+      else if(wifstopped && wstopsig == SIGTRAP && ptrace_event_code == PTRACE_EVENT_EXIT)
       {
         // TODO(rjf): verify
         thread_exit = 1;
       }
       
       //- rjf: SIGTRAP:PTRACE_EVENT_CLONE
-      if(wifstopped && wstopsig == SIGTRAP && ptrace_event_code == PTRACE_EVENT_CLONE)
+      else if(wifstopped && wstopsig == SIGTRAP && ptrace_event_code == PTRACE_EVENT_CLONE)
       {
         // TODO(rjf)
       }
       
       //- rjf: SIGTRAP:PTRACE_EVENT_FORK, or SIGTRAP:PTRACE_EVENT_VFORK
-      B32 sigtrap_handled = 0;
-      if(!sigtrap_handled && wifstopped && wstopsig == SIGTRAP &&
-         (ptrace_event_code == PTRACE_EVENT_FORK ||
-          ptrace_event_code == PTRACE_EVENT_VFORK))
+      else if(wifstopped && wstopsig == SIGTRAP &&
+              (ptrace_event_code == PTRACE_EVENT_FORK ||
+               ptrace_event_code == PTRACE_EVENT_VFORK))
       {
-        sigtrap_handled = 1;
       }
       
       //- rjf: SIGTRAP
-      if(!sigtrap_handled && wifstopped && wstopsig == SIGTRAP)
+      else if(wifstopped && wstopsig == SIGTRAP)
       {
         // rjf: this is the single step thread => this is a single step completion
         DMN_EventKind e_kind = DMN_EventKind_Trap;
@@ -1264,7 +1446,7 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
       }
       
       //- rjf: WSTOPSIG(status) is SIGSTOP
-      if(wifstopped && wstopsig == SIGSTOP)
+      else if(wifstopped && wstopsig == SIGSTOP)
       {
         //
         // TODO(rjf): how do we tell the following apart?:
@@ -1298,12 +1480,19 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
       }
       
       //- rjf: WSTOPSIG(status) is an unrecoverable exception (unless user does something to fix state first)
-      if(wifstopped &&
-         (wstopsig == SIGABRT ||
-          wstopsig == SIGFPE ||
-          wstopsig == SIGSEGV))
+      else if(wifstopped)
       {
-        // TODO(rjf)
+        // TODO(rjf): possible cases:
+        // SIGABRT
+        // SIGFPE
+        // SIGSEGV
+        // SIGILL
+        DMN_Event *e = dmn_event_list_push(arena, &evts);
+        e->kind                = DMN_EventKind_Exception;
+        e->process             = dmn_lnx_handle_from_entity(process);
+        e->thread              = dmn_lnx_handle_from_entity(thread);
+        e->instruction_pointer = rip;
+        e->signo               = wstopsig;
       }
       
       //- rjf: thread exit, thread is process' "root thread" -> eliminate this entire entity subtree
@@ -1368,6 +1557,29 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
         union sigval sv = {0};
         sigqueue(thread_id, SIGSTOP, sv);
         thread->expecting_dummy_sigstop = 1;
+      }
+    }
+    
+    //////////////////////////
+    //- rjf: restore original memory at trap locations
+    //
+    ProfScope("restore original memory at trap locations")
+    {
+      U64 trap_idx = 0;
+      for(DMN_TrapChunkNode *n = ctrls->traps.first; n != 0; n = n->next)
+      {
+        for(U64 n_idx = 0; n_idx < n->count; n_idx += 1, trap_idx += 1)
+        {
+          DMN_Trap *trap = n->v+n_idx;
+          if(trap->flags == 0)
+          {
+            U8 og_byte = trap_swap_bytes[trap_idx];
+            if(og_byte != 0xCC)
+            {
+              dmn_process_write(trap->process, r1u64(trap->vaddr, trap->vaddr+1), &og_byte);
+            }
+          }
+        }
       }
     }
     
