@@ -4,14 +4,59 @@
 #pragma once
 
 ////////////////////////////////
-// CodeView
+// RRT
+
+global read_only String8 g_rrt_magic   = str8_lit_comp("RAD-TYPE-SERVER\0");
+global read_only U64     g_rrt_version = 2;
+
+typedef struct LNK_RRT
+{
+  String8 path;
+
+  String8 type_data_raw;
+  union {
+    String8    type_hashes;
+    U64      **type_hashes_unpacked[CV_TypeIndexSource_COUNT];
+  };
+  Rng1U64  type_data_ranges[CV_TypeIndexSource_COUNT];
+  String8  type_data       [CV_TypeIndexSource_COUNT];
+  Rng1U64  ti_ranges       [CV_TypeIndexSource_COUNT];
+
+  U64              obj_count;
+  U64             *obj_leaf_counts;
+  U64             *obj_time_stamps;
+  Rng1U64         *obj_ti_ranges;
+  CV_TypeIndex   **obj_ti_maps;
+  String8Array     obj_paths;
+  Rng1U64         *obj_pch_ti_ranges;
+  U32             *obj_pch_indices;
+} LNK_RRT;
 
 typedef struct
 {
-  CV_TypeServerInfo ts_info;
-  U64               ts_idx;
-  String8           ts_path;
-  U64List           obj_indices;
+  U64      count;
+  LNK_RRT *v;
+} LNK_RRT_Array;
+
+////////////////////////////////
+// CodeView
+
+typedef enum
+{
+  LNK_TypeServerKind_Null,
+  LNK_TypeServerKind_PDB,
+  LNK_TypeServerKind_RRT,
+} LNK_TypeServerKind;
+
+typedef struct
+{
+  CV_TypeServerInfo  ts_info;
+  U64                ts_idx;
+  LNK_TypeServerKind ts_kind;
+  String8            ts_path;
+  U64List            obj_indices;
+  LNK_RRT           *rrt;
+  CV_DebugH         *debug_h;
 } LNK_TypeServer;
 typedef struct LNK_TypeServerNode  { LNK_TypeServer v; struct LNK_TypeServerNode *next; } LNK_TypeServerNode;
 typedef struct LNK_TypeServerList  { U64 count; LNK_TypeServerNode *first, *last;       } LNK_TypeServerList;
@@ -29,6 +74,8 @@ typedef struct
   U64          obj_count;
   B32          is_stripped;
 
+  LNK_RRT_Array rrt_input;
+
   U64           count;
   LNK_Obj     **obj_arr;
   CV_DebugS    *debug_s_arr;
@@ -37,9 +84,6 @@ typedef struct
   U64          *obj_to_ts;
 
   String8List *debug_s_list_arr;
-  String8List *debug_p_list_arr;
-  String8List *debug_t_list_arr;
-  String8List *debug_h_list_arr;
 
   U32Array int_obj_indices;
   U32Array ext_obj_indices;
@@ -83,11 +127,22 @@ typedef struct LNK_LeafRange
 } LNK_LeafRange;
 typedef struct { U64 count; LNK_LeafRange *first, *last; } LNK_LeafRangeList;
 
+typedef enum
+{
+  LNK_MergeTypeFlag_BuildObjTiMap       = (1 << 0),
+  LNK_MergeTypeFlag_SkipSymbolTypeFixup = (1 << 1),
+  LNK_MergeTypeFlag_ExportHashes        = (1 << 2),
+} LNK_MergeTypeFlags;
+
 typedef struct
 {
-  CV_TypeIndex min_type_indices[CV_TypeIndexSource_COUNT];
-  U64   count[CV_TypeIndexSource_COUNT];
-  U8  **v    [CV_TypeIndexSource_COUNT];
+  CV_TypeIndex  min_type_indices[CV_TypeIndexSource_COUNT];
+  U64           count           [CV_TypeIndexSource_COUNT];
+  U8          **v               [CV_TypeIndexSource_COUNT];
+
+  // @type_server
+  CV_TypeIndex **obj_ti_maps;
+  U64           *hashes[CV_TypeIndexSource_COUNT];
 } LNK_MergedTypes;
 
 typedef struct
@@ -123,6 +178,13 @@ typedef struct
   CV_TypeIndex       *assigned_type_hts   [CV_TypeIndexSource_COUNT];
   CV_TypeIndex        min_type_indices    [CV_TypeIndexSource_COUNT];
   LNK_LeafRefArray    unique_leaf_refs_arr[CV_TypeIndexSource_COUNT];
+
+  U64          *obj_ti_map_counts;
+  U64          *obj_ti_map_offsets;
+  CV_TypeIndex *obj_ti_batch;
+
+  U64        pop_obj_idx;
+  Rng1U64   *pop_range;
 
   LNK_MergedTypes result;
 } LNK_MergeTypes;
@@ -173,9 +235,15 @@ typedef struct
 } LNK_TypeNameReplacer;
 
 ////////////////////////////////
+// RRT
+
+internal String8List lnk_string_list_from_rrt(Arena *arena, LNK_RRT *rrt);
+internal B32         lnk_rrt_from_string     (Arena *arena, String8 rrt_data, String8 path, LNK_RRT *rrt_out);
+
+////////////////////////////////
 // CodeView
 
-internal LNK_CodeViewInput lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config, U64 objs_count, LNK_Obj **objs);
+internal LNK_CodeViewInput lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config, U64 objs_count, LNK_Obj **objs, LNK_RRT_Array rrt_input);
 
 internal int             lnk_leaf_ref_compare                (LNK_LeafRef a, LNK_LeafRef b);
 internal int             lnk_leaf_ref_is_before              (void *raw_a, void *raw_b);
@@ -184,11 +252,10 @@ internal U64             lnk_hash_cv_leaf                    (LNK_CodeViewInput 
 internal void            lnk_hash_cv_leaf_deep               (Arena *arena, LNK_CodeViewInput *input, LNK_LeafRef leaf_ref, CV_TypeIndexInfoList ti_info_list);
 internal LNK_LeafRef *   lnk_leaf_hash_table_insert_or_update(LNK_LeafHashTable *leaf_ht, LNK_CodeViewInput *input, CV_DebugH *hashes, U64 hash, LNK_LeafRef *new_bucket);
 internal LNK_LeafRef *   lnk_leaf_hash_table_search          (LNK_LeafHashTable *ht, LNK_CodeViewInput *input, LNK_LeafRef leaf_ref);
-internal LNK_MergedTypes lnk_merge_types                     (TP_Context *tp, TP_Arena *tp_temp, LNK_CodeViewInput *input);
+internal LNK_MergedTypes lnk_merge_types                     (TP_Context *tp, TP_Arena *tp_temp, LNK_CodeViewInput *input, LNK_MergeTypeFlags merge_flags);
 internal void            lnk_replace_type_names_with_hashes  (TP_Context *tp, TP_Arena *arena, U64 leaf_count, U8 **leaf_arr, LNK_TypeNameHashMode mode, U64 hash_length, String8 map_name);
 
 ////////////////////////////////
 // PDB
 
 internal String8List lnk_build_pdb(TP_Context *tp, TP_Arena *tp_arena, String8 image_data, LNK_Config *config, LNK_SymbolTable *symtab, LNK_CodeViewInput *cv, LNK_MergedTypes cv_types, LNK_PDB_BuilderFlags builder_flags);
-

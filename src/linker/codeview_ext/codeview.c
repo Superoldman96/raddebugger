@@ -1196,14 +1196,23 @@ cv_debug_t_get_leaf(CV_DebugT *debug_t, U64 leaf_idx)
 internal U64
 cv_leaf_idx_from_ti(CV_DebugT *debug_t, CV_TypeIndexSource source, CV_TypeIndex ti)
 {
-  Assert(contains_1u64(debug_t->ti_ranges[source], ti)); // validate TI
-  Assert(!contains_1u64(debug_t->pch_ti_range[source], ti)); // no PCH indirection
+  // validate TI
+  Assert(contains_1u64(debug_t->ti_ranges[source], ti));
+
+  // no PCH indirection
+  Assert(!contains_1u64(debug_t->pch_ti_range[source], ti));
+
   U64 leaf_idx = ti;
   Assert(leaf_idx >= debug_t->ti_ranges[source].min);
-  leaf_idx -= debug_t->ti_ranges[source].min; // strip type index range
+
+  // strip type index range
+  leaf_idx -= debug_t->ti_ranges[source].min;
   Assert(leaf_idx >= dim_1u64(debug_t->pch_ti_range[source]));
-  leaf_idx -= dim_1u64(debug_t->pch_ti_range[source]); // strip PCH indirection
+
+  // strip PCH indirection
+  leaf_idx -= dim_1u64(debug_t->pch_ti_range[source]);
   leaf_idx += debug_t->source_offsets[source];
+
   Assert(leaf_idx < debug_t->count);
   return leaf_idx;
 }

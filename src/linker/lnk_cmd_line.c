@@ -12,7 +12,7 @@ lnk_arg_list_parse_windows_rules(Arena *arena, String8 string)
   U8 *opl = string.str + string.size;
   while (ptr < opl) {
     // skip white space and new lines
-    for (;;) {
+    while(ptr < opl) {
       U64 size = (U64)(opl - ptr);
       UnicodeDecode uni = utf8_decode(ptr, size);
       if (uni.codepoint != ' ' && uni.codepoint != '\n' && uni.codepoint != '\r') {
@@ -21,7 +21,7 @@ lnk_arg_list_parse_windows_rules(Arena *arena, String8 string)
       ptr += uni.inc;
     }
     
-    if (*ptr == '\0') {
+    if (ptr >= opl || *ptr == '\0') {
       break;
     }
     

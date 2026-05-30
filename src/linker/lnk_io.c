@@ -45,6 +45,7 @@ lnk_write_file(void *raw_handle, uint64_t offset, void *buffer, uint64_t buffer_
 {
   File handle = *(File*)raw_handle;
   U64 write_size = file_write(handle, r1u64(offset, offset + buffer_size), buffer);
+  Assert(write_size == buffer_size);
   return write_size;
 }
 

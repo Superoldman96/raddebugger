@@ -63,17 +63,12 @@ THREAD_POOL_TASK_FUNC(lnk_parse_debug_h_task)
   U64                obj_idx = task_id;
   LNK_CodeViewInput *task    = raw_task;
 
-  String8List  sect_list =  task->debug_h_list_arr[obj_idx];
-  CV_DebugH   *debug_h   = &task->debug_h_arr     [obj_idx];
+  LNK_Obj *obj = task->obj_arr[obj_idx];
+  if (obj->debug_h_sect_idx < obj->header.section_count_no_null) {
+    COFF_SectionHeader *sect_header = lnk_coff_section_header_from_section_number(obj, obj->debug_h_sect_idx + 1);
 
-  if (sect_list.node_count > 0) {
-    if (sect_list.node_count > 1) {
-      lnk_error_obj(LNK_Warning_GHash, task->obj_arr[obj_idx],
-                    "obj contains multiple .debug$H sections; using first one");
-    }
-
-    // select first .debug$H
-    String8    raw_debug_h     = sect_list.first->string;
+    String8    raw_debug_h     = str8_substr(obj->data, r1u64(sect_header->foff, sect_header->foff + sect_header->fsize));
+    CV_DebugH *debug_h         = &task->debug_h_arr[obj_idx];
     LLVM_GHash ghash           = {0};
     U64        ghash_read_size = str8_deserial_read_struct(raw_debug_h, 0, &ghash);
 
@@ -122,9 +117,9 @@ THREAD_POOL_TASK_FUNC(lnk_parse_debug_h_task)
     String8 hashes = str8_substr(raw_debug_h, r1u64(sizeof(ghash), raw_debug_h.size));
     debug_h->count = hash_count;
     debug_h->v     = (U64 *)hashes.str;
-
-    exit:;
   }
+
+  exit:;
 }
 
 internal
@@ -175,79 +170,92 @@ THREAD_POOL_TASK_FUNC(lnk_read_type_servers_task)
   U64             ts_idx             = task_id;
   LNK_TypeServer *ts                 = &task->ts_arr.v[ts_idx];
 
-  // read PDB from disk
-  String8 msf_data = lnk_read_data_from_file_path(scratch.arena, task->config->io_flags, ts->ts_path);
-
-  // check magic
-  if (!msf_check_magic_70(msf_data) && msf_check_magic_20(msf_data)) { goto exit; }
-
-  // read the stream table
-  MSF_RawStreamTable *st = msf_raw_stream_table_from_data(scratch.arena, msf_data);
-  if (st == 0) { goto exit; }
-
-  // PDB must have these streams
-  if (PDB_FixedStream_Tpi >= st->stream_count || PDB_FixedStream_Ipi >= st->stream_count || PDB_FixedStream_Info >= st->stream_count) { goto exit; }
-
-  // read info stream
-  String8       info_data  = msf_data_from_stream_number(scratch.arena, msf_data, st, PDB_FixedStream_Info);
-  PDB_InfoParse info_parse = {0};
-  pdb_info_parse_from_data(info_data, &info_parse);
-
-  // match GUID from obj against one in the type server
-  if (!MemoryMatchStruct(&info_parse.guid, &ts->ts_info.sig)) {
-    lnk_error(LNK_Warning_MismatchedTypeServerSignature,
-              "%S: signature mismatch in type server read from disk, expected %S, got %S",
-              ts->ts_info.name,
-              string_from_guid(scratch.arena, ts->ts_info.sig),
-              string_from_guid(scratch.arena, info_parse.guid));
-    goto exit;
-  }
-
-  MSF_StreamNumber type_streams[CV_TypeIndexSource_COUNT] = {0};
-  type_streams[CV_TypeIndexSource_TPI] = PDB_FixedStream_Tpi;
-  type_streams[CV_TypeIndexSource_IPI] = PDB_FixedStream_Ipi;
-
-  Rng1U64 ti_ranges  [CV_TypeIndexSource_COUNT] = {0};
-  Rng1U64 leaf_ranges[CV_TypeIndexSource_COUNT] = {0};
-  for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
-    MSF_StreamNumber sn = type_streams[ti_source];
-    if (sn == 0) { continue; }
-    if (!pdb_extract_type_server_info(msf_data, st, sn, &ti_ranges[ti_source], &leaf_ranges[ti_source])) { goto exit; }
-  }
-
-  // alloc buffer where TPI and IPI are adjecent
-  U64 buffer_size = 0;
-  for EachIndex(ti_source, CV_TypeIndexSource_COUNT) { buffer_size += dim_1u64(leaf_ranges[ti_source]); }
-  buffer_size = AlignPow2(buffer_size, 4) + ARENA_HEADER_SIZE;
-  U8    *buffer = push_array(arena, U8, buffer_size);
-  Arena *fixed  = arena_alloc( .reserve_size = buffer_size, .commit_size = buffer_size, .optional_backing_buffer = buffer );
-
-  // read both streams into a contiguous buffer
+  String8 type_data_raw                             = {0};
   String8 source_data_arr[CV_TypeIndexSource_COUNT] = {0};
-  for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
-    MSF_StreamNumber sn = type_streams[ti_source];
-    if (sn == 0) { continue; }
-    source_data_arr[ti_source] = msf_data_from_stream_number_ex(fixed, msf_data, st, sn, leaf_ranges[ti_source], PDB_LEAF_ALIGN);
-    Assert(source_data_arr[ti_source].size == dim_1u64(leaf_ranges[ti_source]));
+  Rng1U64 ti_ranges      [CV_TypeIndexSource_COUNT] = {0};
+
+  switch (ts->ts_kind) {
+  case LNK_TypeServerKind_Null: break;
+  case LNK_TypeServerKind_RRT: {
+    type_data_raw = ts->rrt->type_data_raw;
+    MemoryCopyArray(source_data_arr, ts->rrt->type_data);
+    MemoryCopyArray(ti_ranges, ts->rrt->ti_ranges);
+  } break;
+  case LNK_TypeServerKind_PDB: {
+    // read PDB from disk
+    String8 msf_data = lnk_read_data_from_file_path(scratch.arena, task->config->io_flags, ts->ts_path);
+
+    // check magic
+    if (!msf_check_magic_70(msf_data) && msf_check_magic_20(msf_data)) { goto exit; }
+
+    // read the stream table
+    MSF_RawStreamTable *st = msf_raw_stream_table_from_data(scratch.arena, msf_data);
+    if (st == 0) { goto exit; }
+
+    // PDB must have these streams
+    if (PDB_FixedStream_Tpi >= st->stream_count || PDB_FixedStream_Ipi >= st->stream_count || PDB_FixedStream_Info >= st->stream_count) { goto exit; }
+
+    // read info stream
+    String8       info_data  = msf_data_from_stream_number(scratch.arena, msf_data, st, PDB_FixedStream_Info);
+    PDB_InfoParse info_parse = {0};
+    pdb_info_parse_from_data(info_data, &info_parse);
+
+    // match GUID from obj against one in the type server
+    if (!MemoryMatchStruct(&info_parse.guid, &ts->ts_info.sig)) {
+      lnk_error(LNK_Warning_MismatchedTypeServerSignature,
+                "%S: signature mismatch in type server read from disk, expected %S, got %S",
+                ts->ts_info.name,
+                string_from_guid(scratch.arena, ts->ts_info.sig),
+                string_from_guid(scratch.arena, info_parse.guid));
+      goto exit;
+    }
+
+    MSF_StreamNumber type_streams[CV_TypeIndexSource_COUNT] = {0};
+    type_streams[CV_TypeIndexSource_TPI] = PDB_FixedStream_Tpi;
+    type_streams[CV_TypeIndexSource_IPI] = PDB_FixedStream_Ipi;
+
+    Rng1U64 leaf_ranges[CV_TypeIndexSource_COUNT] = {0};
+    for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
+      MSF_StreamNumber sn = type_streams[ti_source];
+      if (sn == 0) { continue; }
+      if (!pdb_extract_type_server_info(msf_data, st, sn, &ti_ranges[ti_source], &leaf_ranges[ti_source])) { goto exit; }
+    }
+
+    // alloc buffer where TPI and IPI are adjacent
+    U64 buffer_size = 0;
+    for EachIndex(ti_source, CV_TypeIndexSource_COUNT) { buffer_size += dim_1u64(leaf_ranges[ti_source]); }
+    buffer_size = AlignPow2(buffer_size, 4) + ARENA_HEADER_SIZE;
+    U8    *buffer = push_array(arena, U8, buffer_size);
+    Arena *fixed  = arena_alloc( .reserve_size = buffer_size, .commit_size = buffer_size, .optional_backing_buffer = buffer );
+
+    // read both streams into a contiguous buffer
+    for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
+      MSF_StreamNumber sn = type_streams[ti_source];
+      if (sn == 0) { continue; }
+      source_data_arr[ti_source] = msf_data_from_stream_number_ex(fixed, msf_data, st, sn, leaf_ranges[ti_source], PDB_LEAF_ALIGN);
+      Assert(source_data_arr[ti_source].size == dim_1u64(leaf_ranges[ti_source]));
+    }
+    // assert streams are adjacent in the buffer
+    for (U64 i = 1; i+1 < CV_TypeIndexSource_COUNT; i += 1) { AssertAlways(source_data_arr[i].str + source_data_arr[i].size == source_data_arr[i+1].str); }
+    type_data_raw = str8(buffer + ARENA_HEADER_SIZE, buffer_size - ARENA_HEADER_SIZE);
+  } break;
+  default: InvalidPath; break;
   }
-  // assert streams are adjecent in the buffer
-  for (U64 i = 1; i+1 < CV_TypeIndexSource_COUNT; i += 1) { AssertAlways(source_data_arr[i].str + source_data_arr[i].size == source_data_arr[i+1].str); }
-  String8 type_data = str8(buffer + ARENA_HEADER_SIZE, buffer_size - ARENA_HEADER_SIZE);
 
   // map type server to -> .debug$T
   U64        obj_idx = task->type_server_indices.v[task_id];
   CV_DebugT *debug_t = &task->debug_t_arr[obj_idx];
 
   // read types
-  CV_DebugT d = cv_debug_t_from_data(arena, type_data, PDB_LEAF_ALIGN);
+  CV_DebugT d = cv_debug_t_from_data(arena, type_data_raw, PDB_LEAF_ALIGN);
 
-  // @type_server .debug$T
+  // @type_server .debugtype_data
   debug_t->count   = d.count;
   debug_t->data    = d.data;
   debug_t->offsets = d.offsets;
-  for EachIndex(i, CV_TypeIndexSource_COUNT) { debug_t->ti_ranges[i] = ti_ranges[i]; }
-  for EachIndex(i, CV_TypeIndexSource_COUNT) { debug_t->ti_base[i] = IntFromPtr(source_data_arr[i].str - type_data.str); }
-  MemoryCopyTyped(debug_t->source_counts, d.source_counts, CV_TypeIndexSource_COUNT);
+  for EachIndex(i, CV_TypeIndexSource_COUNT) { debug_t->ti_ranges[i] = ti_ranges[i];                                       }
+  for EachIndex(i, CV_TypeIndexSource_COUNT) { debug_t->ti_base[i]   = IntFromPtr(source_data_arr[i].str - type_data_raw.str); }
+  MemoryCopyTyped(debug_t->source_counts,  d.source_counts, CV_TypeIndexSource_COUNT);
   MemoryCopyTyped(debug_t->source_offsets, d.source_counts, CV_TypeIndexSource_COUNT);
   u64_array_counts_to_offsets(CV_TypeIndexSource_COUNT, debug_t->source_offsets);
 
@@ -267,44 +275,473 @@ THREAD_POOL_TASK_FUNC(lnk_read_type_servers_task)
   scratch_end(scratch);
 }
 
+internal String8List
+lnk_string_list_from_rrt(Arena *arena, LNK_RRT *rrt)
+{
+  ProfBeginFunction();
+
+  // pack obj file paths
+  String8 obj_paths = {0};
+  {
+    U64 total_obj_file_path_size = 0;
+    for EachIndex(i, rrt->obj_count) {
+      total_obj_file_path_size += rrt->obj_paths.v[i].size + 1;
+    }
+
+    U8 *file_paths_buffer = push_array_no_zero(arena, U8, total_obj_file_path_size);
+    U64 file_paths_cursor = 0;
+    for EachIndex(i, rrt->obj_count) {
+      MemoryCopyStr8(file_paths_buffer + file_paths_cursor, rrt->obj_paths.v[i]);
+      file_paths_cursor += rrt->obj_paths.v[i].size;
+
+      file_paths_buffer[file_paths_cursor] = 0;
+      file_paths_cursor += 1;
+    }
+    Assert(file_paths_cursor == total_obj_file_path_size);
+
+    obj_paths = str8(file_paths_buffer, file_paths_cursor);
+  }
+
+  String8List rrt_data = {0};
+
+  // (1) magic
+  str8_list_push(arena, &rrt_data, g_rrt_magic);
+
+  // (2) version
+  str8_list_push(arena, &rrt_data, str8_struct(&g_rrt_version));
+
+  // (3) type data ranges
+  str8_list_push(arena, &rrt_data, str8_array_fixed(rrt->type_data_ranges));
+
+  // (4) type data
+  str8_list_push(arena, &rrt_data, rrt->type_data_raw);
+
+  // (5) type index ranges
+  str8_list_push(arena, &rrt_data, str8_array_fixed(rrt->ti_ranges));
+
+  // (6) type hashes size
+  U64 total_hash_count = 0;
+  for EachIndex(i, CV_TypeIndexSource_COUNT) { total_hash_count += dim_1u64(rrt->ti_ranges[i]); }
+  U64 type_hashes_size = sizeof(**rrt->type_hashes_unpacked) * total_hash_count;
+  str8_list_push(arena, &rrt_data, str8_struct(push_u64(arena, type_hashes_size)));
+
+  // (7) type hashes
+  for EachIndex(i, CV_TypeIndexSource_COUNT) {
+    U64 type_count = dim_1u64(rrt->ti_ranges[i]);
+    str8_list_push(arena, &rrt_data, str8_array(rrt->type_hashes_unpacked[i], type_count));
+  }
+
+  // (8) object count
+  str8_list_push(arena, &rrt_data, str8_struct(&rrt->obj_count));
+
+  // (9) per object type index ranges
+  str8_list_push(arena, &rrt_data, str8_array(rrt->obj_ti_ranges, rrt->obj_count));
+
+  // (10) per object time stamps
+  str8_list_push(arena, &rrt_data, str8_array(rrt->obj_time_stamps, rrt->obj_count));
+
+  // (11) per object leaf counts
+  str8_list_push(arena, &rrt_data, str8_array(rrt->obj_leaf_counts, rrt->obj_count));
+
+  // (12) per object file reverse lookup table for type indices
+  for EachIndex(obj_idx, rrt->obj_count) {
+    CV_TypeIndex *obj_ti_map   = rrt->obj_ti_maps[obj_idx];
+    U64           obj_ti_count = rrt->obj_leaf_counts[obj_idx];
+    Assert(dim_1u64(rrt->obj_pch_ti_ranges[obj_idx]) + obj_ti_count <= dim_1u64(rrt->obj_ti_ranges[obj_idx]));
+    str8_list_push(arena, &rrt_data, str8_array(obj_ti_map, obj_ti_count));
+  }
+
+  // (13) object file paths size
+  str8_list_push(arena, &rrt_data, str8_struct(push_u64(arena, obj_paths.size)));
+
+  // (14) object file paths block
+  str8_list_push(arena, &rrt_data, obj_paths);
+
+  // (15) PCH type index ranges
+  str8_list_push(arena, &rrt_data, str8_array(rrt->obj_pch_ti_ranges, rrt->obj_count));
+
+  // (16) PCH object indices
+  str8_list_push(arena, &rrt_data, str8_array(rrt->obj_pch_indices, rrt->obj_count));
+
+  ProfEnd();
+  return rrt_data;
+}
+
+internal B32
+lnk_rrt_from_string(Arena *arena, String8 rrt_data, String8 path, LNK_RRT *rrt_out)
+{
+  B32 is_ok = 0;
+  U64 cursor = 0;
+
+  // (1) magic
+  if (rrt_data.size < g_rrt_magic.size ||
+      ! str8_match(str8_prefix(rrt_data, g_rrt_magic.size), g_rrt_magic, 0)) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file has invalid magic value", path);
+    goto exit;
+  }
+  cursor += g_rrt_magic.size;
+
+  // (2) version
+  U64 version = 0;
+  U64 version_size = str8_deserial_read_struct(rrt_data, cursor, &version);
+  if (version_size != sizeof(version)) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file does not contain enough bytes to read the version", path);
+    goto exit;
+  }
+  cursor += version_size;
+
+  // match version
+  if (version != g_rrt_version) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT version mismatch, got %llu, expected %llu", path, version, g_rrt_version);
+    goto exit;
+  }
+
+  // (3) type data ranges
+  Rng1U64 type_data_ranges[CV_TypeIndexSource_COUNT] = {0};
+  U64 type_data_ranges_size = str8_deserial_read_array(rrt_data, cursor, type_data_ranges, ArrayCount(type_data_ranges));
+  if (type_data_ranges_size != sizeof(type_data_ranges)) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT is missing type data ranges", path);
+    goto exit;
+  }
+  cursor += type_data_ranges_size;
+
+  // comppute size types from all the sources
+  U64 total_type_data_size = 0;
+  for EachElement(i, type_data_ranges) total_type_data_size += dim_1u64(type_data_ranges[i]);
+
+  // (4) type data
+  String8 type_data_raw      = {0};
+  U64     type_data_raw_size = str8_deserial_read_block(rrt_data, cursor, total_type_data_size, &type_data_raw);
+  if (type_data_raw_size != total_type_data_size) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file is too small to read type data file (%M)", path, total_type_data_size);
+    goto exit;
+  }
+  cursor += type_data_raw_size;
+
+  // (5) type index ranges
+  Rng1U64 ti_ranges[CV_TypeIndexSource_COUNT] = {0};
+  U64 ti_ranges_size = str8_deserial_read_array(rrt_data, cursor, ti_ranges, ArrayCount(ti_ranges));
+  if (ti_ranges_size != sizeof(ti_ranges)) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file does not contain type indices", path);
+    goto exit;
+  }
+  cursor += ti_ranges_size;
+
+  // (6) type hashes size
+  U64 type_hashes_size      = 0;
+  U64 type_hashes_size_size = str8_deserial_read_struct(rrt_data, cursor, &type_hashes_size);
+  if (type_hashes_size_size != sizeof(type_hashes_size)) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file is too small to read type hashes", path);
+    goto exit;
+  }
+  cursor += type_hashes_size_size;
+
+  // validate type hashes size
+  if (type_hashes_size) {
+    U64 type_count = 0;
+    for EachIndex(i, CV_TypeIndexSource_COUNT) { type_count += dim_1u64(ti_ranges[i]); }
+    U64 expected_size = type_count * sizeof(U64);
+    if (expected_size != type_hashes_size) {
+      lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file type hash size (%llu) does not match expected size (%llu)", path, type_hashes_size, expected_size);
+      goto exit;
+    }
+  }
+
+  // (7) type hashes
+  String8 type_hashes = {0};
+  U64 type_hashes_read_size = str8_deserial_read_block(rrt_data, cursor, type_hashes_size, &type_hashes);
+  if (type_hashes_read_size != type_hashes_size) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file is too small to read type hashes (%M)", path, type_hashes_size);
+    goto exit;
+  }
+  cursor += type_hashes_read_size;
+
+  // hash count must match type count
+  if (type_hashes_size) {
+    U64 type_count = 0;
+    for EachIndex(i, CV_TypeIndexSource_COUNT) { type_count += dim_1u64(ti_ranges[i]); }
+    U64 hash_count = type_hashes.size / sizeof(U64);
+    if (type_count != hash_count) {
+      lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file hash count (%llu) does not match type count (%llu)", path, hash_count, type_count);
+      goto exit;
+    }
+  }
+
+  // (8) object count
+  U64 obj_count = 0;
+  U64 obj_count_size = str8_deserial_read_struct(rrt_data, cursor, &obj_count);
+  if (obj_count_size == 0) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file is too small to read the object count", path);
+    goto exit;
+  }
+  cursor += obj_count_size;
+
+  // (9) per object type index ranges
+  Rng1U64 *obj_ti_ranges = str8_deserial_get_raw_ptr(rrt_data, cursor, sizeof(*obj_ti_ranges) * obj_count); 
+  if (obj_ti_ranges == 0) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file is missing the object type index ranges", path);
+    goto exit;
+  }
+  cursor += sizeof(*obj_ti_ranges) * obj_count;
+
+  // (10) last observed time stamp of the object files
+  U64 *obj_time_stamps = str8_deserial_get_raw_ptr(rrt_data, cursor, sizeof(*obj_time_stamps) * obj_count);
+  if (obj_time_stamps == 0) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file is missing the object timestamps", path);
+    goto exit;
+  }
+  cursor += sizeof(*obj_time_stamps) * obj_count;
+
+  // (11) per object leaf counts
+  U64 *obj_leaf_counts = str8_deserial_get_raw_ptr(rrt_data, cursor, sizeof(*obj_leaf_counts) * obj_count);
+  if (obj_leaf_counts == 0) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file is missing the object leaf counts", path);
+    goto exit;
+  }
+  cursor += sizeof(*obj_leaf_counts) * obj_count;
+
+  // (12) per object file reverse lookup table for type indices
+  CV_TypeIndex **obj_ti_maps = push_array(arena, CV_TypeIndex *, obj_count);
+  for EachIndex(obj_idx, obj_count) {
+    U64 obj_ti_count = obj_leaf_counts[obj_idx];
+    obj_ti_maps[obj_idx] = str8_deserial_get_raw_ptr(rrt_data, cursor, obj_ti_count * sizeof(*obj_ti_maps[obj_idx]));
+    if (obj_ti_maps[obj_idx] == 0) {
+      lnk_error(LNK_Error_IllData, "ERROR: %S: failed to read objects type index map from RRT file", path);
+      goto exit;
+    }
+    cursor += obj_ti_count * sizeof(*obj_ti_maps[obj_idx]);
+  }
+
+  // (13) object file paths size
+  U64 obj_file_paths_size = 0;
+  U64 obj_file_paths_size_size = str8_deserial_read_struct(rrt_data, cursor, &obj_file_paths_size);
+  if (obj_file_paths_size_size == 0) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file is too small to read the object file path block size", path);
+    goto exit;
+  }
+  cursor += obj_file_paths_size_size;
+
+  // (14) object file paths block
+  String8 obj_file_paths_block = {0};
+  U64 obj_file_paths_block_size = str8_deserial_read_block(rrt_data, cursor, obj_file_paths_size, &obj_file_paths_block);
+  if (obj_file_paths_block_size != obj_file_paths_size) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file is too small to read the object file path block (%M)", path, obj_file_paths_size);
+    goto exit;
+  }
+  cursor += obj_file_paths_block_size;
+
+  // (15) PCH type index ranges
+  Rng1U64 *obj_pch_ti_ranges = str8_deserial_get_raw_ptr(rrt_data, cursor, obj_count * sizeof(*obj_pch_ti_ranges));
+  if (obj_pch_ti_ranges == 0) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file is too small to read object PCH type index ranges");
+    goto exit;
+  }
+  cursor += obj_count * sizeof(*obj_pch_ti_ranges);
+
+  U32 *obj_pch_indices = str8_deserial_get_raw_ptr(rrt_data, cursor, obj_count * sizeof(*obj_pch_indices));
+  if (obj_pch_indices == 0) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: RRT file is too small to read object PCH indices");
+    goto exit;
+  }
+  cursor += obj_count * sizeof(*obj_pch_indices);
+
+  for EachIndex(obj_idx, obj_count) {
+    if (dim_1u64(obj_pch_ti_ranges[obj_idx]) + obj_leaf_counts[obj_idx] > dim_1u64(obj_ti_ranges[obj_idx])) {
+      lnk_error(LNK_Error_IllData, "ERROR: %S: RRT object leaf count exceeds object type index range", path);
+      goto exit;
+    }
+  }
+
+  if (cursor != rrt_data.size) {
+    lnk_error(LNK_Error_IllData, "ERROR: %S: failed to parse RRT file", path);
+    goto exit;
+  }
+
+  // unpack type data
+  String8 type_data[CV_TypeIndexSource_COUNT] = {0};
+  for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
+    type_data[ti_source] = str8_substr(type_data_raw, type_data_ranges[ti_source]);
+  }
+
+  // unpack obj file paths
+  Temp scratch = scratch_begin(&arena, 1);
+  String8List obj_file_paths_list = str8_split_by_string_chars(scratch.arena, obj_file_paths_block, str8_lit("\0"), 0);
+  String8Array obj_paths = str8_array_from_list(arena, &obj_file_paths_list);
+  scratch_end(scratch);
+
+  // fill out result
+  if (rrt_out) {
+    rrt_out->path              = path;
+    rrt_out->type_data_raw     = type_data_raw;
+    rrt_out->type_hashes       = type_hashes;
+    MemoryCopyArray(rrt_out->type_data_ranges, type_data_ranges);
+    MemoryCopyArray(rrt_out->type_data,        type_data);
+    MemoryCopyArray(rrt_out->ti_ranges,        ti_ranges);
+    rrt_out->obj_count         = obj_count;
+    rrt_out->obj_leaf_counts   = obj_leaf_counts;
+    rrt_out->obj_time_stamps   = obj_time_stamps;
+    rrt_out->obj_ti_ranges     = obj_ti_ranges;
+    rrt_out->obj_ti_maps       = obj_ti_maps;
+    rrt_out->obj_ti_ranges     = obj_ti_ranges;
+    rrt_out->obj_ti_maps       = obj_ti_maps;
+    rrt_out->obj_paths         = obj_paths;
+    rrt_out->obj_pch_ti_ranges = obj_pch_ti_ranges;
+    rrt_out->obj_pch_indices   = obj_pch_indices;
+  }
+
+  is_ok = 1;
+  exit:;
+  return is_ok;
+}
+
+internal LNK_RRT_Array
+lnk_rrt_array_from_config(Arena *arena, LNK_Config *config)
+{
+  ProfBegin("Parse RRT");
+  LNK_RRT_Array rrt_arr = { .v = push_array(arena, LNK_RRT, config->input_list[LNK_Input_RRT].node_count) };
+  for EachNode(n, String8Node, config->input_list[LNK_Input_RRT].first) {
+    String8 rrt_path = n->string;
+    String8 raw_rrt  = lnk_read_data_from_file_path(arena, config->io_flags, rrt_path);
+    if (raw_rrt.size == 0) {
+      lnk_error(LNK_Error_IllData, "ERROR: failed to open \"%S\"", rrt_path);
+      continue;
+    }
+    LNK_RRT rrt = {0};
+    lnk_rrt_from_string(arena, raw_rrt, n->string, &rrt);
+    rrt_arr.v[rrt_arr.count++] = rrt;
+  }
+  ProfEnd();
+  return rrt_arr;
+}
+
 internal LNK_CodeViewInput
-lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config, U64 obj_count, LNK_Obj **obj_arr)
+lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config, U64 obj_count, LNK_Obj **obj_arr, LNK_RRT_Array rrt_input)
 {
   ProfBegin("Extract CodeView");
   Temp scratch = scratch_begin(0,0);
 
-  LNK_CodeViewInput input = { .config = config, .obj_count = obj_count, .count = obj_count, .obj_arr = obj_arr, .ts_obj_range = r1u64(0,0) };
+  LNK_CodeViewInput input = { .config = config, .obj_count = obj_count, .count = obj_count, .obj_arr = obj_arr, .rrt_input = rrt_input, .ts_obj_range = r1u64(0,0) };
+
+  HashMap rrt_hm = {0};
+  ProfScope("Make obj path -> RRT hash map")
+  {
+    for EachIndex(rrt_idx, rrt_input.count) {
+      for EachIndex(obj_idx, rrt_input.v[rrt_idx].obj_paths.count) {
+        hash_map_push_path_u64(scratch.arena, &rrt_hm, rrt_input.v[rrt_idx].obj_paths.v[obj_idx], Compose64Bit(rrt_idx, obj_idx));
+      }
+    }
+  }
+
+  // pre-build PCH obj hash map (obj_path, obj_idx)
+  String8 work_dir = get_current_path(scratch.arena);
+  HashMap debug_p_hm = {0};
+  for EachIndex(obj_idx, obj_count) {
+    LNK_Obj *obj = obj_arr[obj_idx];
+    if (obj->debug_p_sect_idx < obj->header.section_count_no_null) {
+      String8 obj_path = path_absolute_dst_from_relative_dst_src(scratch.arena, obj_arr[obj_idx]->path, work_dir);
+      if (hash_map_search_path_u64(&debug_p_hm, obj_path)) {
+        lnk_error_obj(LNK_Warning_DuplicateObjPath, obj_arr[obj_idx], "duplicate obj path %S", obj_path);
+      } else {
+        hash_map_push_path_u64(scratch.arena, &debug_p_hm, obj_path, obj_idx);
+      }
+    }
+  }
+
+  ProfBegin("Apply RRT to Objs");
+
+  // hash map (obj path, obj idx)
+  HashMap obj_path_hm = {0};
+  for EachIndex(obj_idx, obj_count) {
+    hash_map_push_path_u64(scratch.arena, &obj_path_hm, obj_arr[obj_idx]->path, obj_idx);
+  }
+
+  for EachIndex(obj_idx, obj_count) {
+    LNK_Obj *obj            = obj_arr[obj_idx];
+    U64     *packed_rrt_idx = hash_map_search_path_u64(&rrt_hm, obj->path);
+
+    // obj is not part of any input RRT
+    if (packed_rrt_idx == 0) { continue; }
+
+    // unpack index
+    U32      rrt_idx     = *packed_rrt_idx >> 32;
+    U32      rrt_obj_idx = *packed_rrt_idx & max_U32;
+    LNK_RRT *rrt         = &rrt_input.v[rrt_idx];
+
+    // obj was recompiled, do not apply RRT indirection
+    FileProperties obj_file_props = properties_from_file_path(obj->path);
+    if (rrt->obj_time_stamps[rrt_obj_idx] != obj_file_props.modified) { continue; }
+
+    // invalidate debug section pointers
+    obj->debug_t_sect_idx = ~0;
+    obj->debug_p_sect_idx = ~0;
+    obj->debug_h_sect_idx = ~0;
+
+    // apply type index map 
+    obj->ti_range = rrt->obj_ti_ranges[rrt_obj_idx];
+    obj->ti_map   = rrt->obj_ti_maps  [rrt_obj_idx];
+
+    // apply PCH info
+    U32 rrt_pch_obj_idx = rrt->obj_pch_indices[rrt_obj_idx];
+    if (rrt_pch_obj_idx < rrt->obj_count) {
+      String8  rrt_pch_obj_path = rrt->obj_paths.v[rrt_pch_obj_idx];
+      U64      pch_obj_idx      = *hash_map_search_path_u64(&obj_path_hm, rrt_pch_obj_path);
+      obj->pch_ti_range = rrt->obj_pch_ti_ranges[rrt_obj_idx];
+      obj->pch_obj_idx  = pch_obj_idx;
+    } else {
+      obj->pch_ti_range = r1u64(0,0);
+      obj->pch_obj_idx  = ~0;
+    }
+  }
+  ProfEnd();
   
   ProfBegin("Collect CodeView");
   input.debug_s_list_arr = lnk_collect_obj_sections(tp, tp_arena, obj_count, obj_arr, str8_lit(".debug$S"), 0);
-  input.debug_p_list_arr = lnk_collect_obj_sections(tp, tp_arena, obj_count, obj_arr, str8_lit(".debug$P"), 0);
-  input.debug_t_list_arr = lnk_collect_obj_sections(tp, tp_arena, obj_count, obj_arr, str8_lit(".debug$T"), 0);
-  if (config->ghash) {
-    input.debug_h_list_arr = lnk_collect_obj_sections(tp, tp_arena, obj_count, obj_arr, str8_lit(".debug$H"), 0);
-  }
   ProfEnd();
 
   if (lnk_get_log_status(LNK_Log_Debug) || PROFILE_TELEMETRY) {
     U64 total_debug_s_size = 0, total_debug_t_size = 0, total_debug_p_size = 0, total_debug_h_size = 0;
     for EachIndex(obj_idx, obj_count) {
+      LNK_Obj *obj = obj_arr[obj_idx];
+
       for EachNode(n, String8Node, input.debug_s_list_arr[obj_idx].first) { total_debug_s_size += n->string.size; }
-      for EachNode(n, String8Node, input.debug_t_list_arr[obj_idx].first) { total_debug_t_size += n->string.size; }
-      for EachNode(n, String8Node, input.debug_p_list_arr[obj_idx].first) { total_debug_p_size += n->string.size; }
-      if (config->ghash) {
-        for EachNode(n, String8Node, input.debug_h_list_arr[obj_idx].first) { total_debug_h_size += n->string.size; }
+
+      if (obj->debug_t_sect_idx < obj->header.section_count_no_null) {
+        COFF_SectionHeader *section_table = lnk_coff_section_table_from_obj(obj);
+        total_debug_t_size += section_table[obj->debug_t_sect_idx].fsize;
       }
+      if (obj->debug_p_sect_idx < obj->header.section_count_no_null) {
+        COFF_SectionHeader *section_table = lnk_coff_section_table_from_obj(obj);
+        total_debug_p_size += section_table[obj->debug_p_sect_idx].fsize;
+      }
+      if (config->ghash) {
+        if (obj->debug_h_sect_idx < obj->header.section_count_no_null) {
+          COFF_SectionHeader *section_table = lnk_coff_section_table_from_obj(obj);
+          total_debug_h_size += section_table[obj->debug_h_sect_idx].fsize;
+        }
+      }
+    }
+
+    U64 total_rrt_type_size = 0;
+    U64 total_rrt_hash_size = 0;
+    for EachIndex(rrt_idx, rrt_input.count) {
+      total_rrt_type_size += rrt_input.v[rrt_idx].type_data_raw.size;
+      total_rrt_hash_size += rrt_input.v[rrt_idx].type_hashes.size;
     }
 	
     ProfNoteV("Total .debug$S Input Size: %M", total_debug_s_size);
     ProfNoteV("Total .debug$T Input Size: %M", total_debug_t_size);
     ProfNoteV("Total .debug$P Input Size: %M", total_debug_p_size);
     ProfNoteV("Total .debug$H Input Size: %M", total_debug_h_size);
+    ProfNoteV("Total RRT-Type Input Size: %M", total_rrt_type_size);
+    ProfNoteV("Total RRT-Hash Input Size: %M", total_rrt_hash_size);
 	
     if (lnk_get_log_status(LNK_Log_Debug)) {
       lnk_log(LNK_Log_Debug, "[Total .debug$S Input Size %M]", total_debug_s_size);
       lnk_log(LNK_Log_Debug, "[Total .debug$T Input Size %M]", total_debug_t_size);
       lnk_log(LNK_Log_Debug, "[Total .debug$P Input Size %M]", total_debug_p_size);
       lnk_log(LNK_Log_Debug, "[Total .debug$H Input Size %M]", total_debug_h_size);
+      lnk_log(LNK_Log_Debug, "[Total RRT-Type Input Size %M]", total_rrt_type_size);
+      lnk_log(LNK_Log_Debug, "[Total RRT-Hash Input Size %M]", total_rrt_hash_size);
     }
   }
 
@@ -314,15 +751,34 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
     input.debug_s_arr = push_array(tp_arena->v[0], CV_DebugS, input.obj_count);
     tp_for_parallel_prof(tp, tp_arena, obj_count, lnk_parse_debug_s_task, &input, "Parse .debug$S");
 
+    String8Array *raw_debug_p_arr = push_array(scratch.arena, String8Array, obj_count);
+    String8Array *raw_debug_t_arr = push_array(scratch.arena, String8Array, obj_count);
+    for EachIndex(obj_idx, obj_count) {
+      LNK_Obj *obj = obj_arr[obj_idx];
+
+      if (obj->debug_t_sect_idx < obj->header.section_count_no_null) {
+        COFF_SectionHeader *debug_t_hdr = &lnk_coff_section_table_from_obj(obj)[obj->debug_t_sect_idx];
+        raw_debug_t_arr[obj_idx].count = 1;
+        raw_debug_t_arr[obj_idx].v     = push_array(scratch.arena, String8, 1);
+        raw_debug_t_arr[obj_idx].v[0]  = str8_substr(obj->data, r1u64(debug_t_hdr->foff, debug_t_hdr->foff + debug_t_hdr->fsize));
+      }
+      if (obj->debug_p_sect_idx < obj->header.section_count_no_null) {
+        COFF_SectionHeader *debug_p_hdr = &lnk_coff_section_table_from_obj(obj)[obj->debug_p_sect_idx];
+        raw_debug_p_arr[obj_idx].count = 1;
+        raw_debug_p_arr[obj_idx].v     = push_array(scratch.arena, String8, 1);
+        raw_debug_p_arr[obj_idx].v[0] = str8_substr(obj->data, r1u64(debug_p_hdr->foff, debug_p_hdr->foff + debug_p_hdr->fsize));
+      }
+    }
+
     LNK_ParseCvTypes parse_types = { .input = &input };
     debug_p_arr = push_array(tp_arena->v[0], CV_DebugT, obj_count);
-    parse_types.raw_types = str8_array_from_list_arr(scratch.arena, input.debug_p_list_arr, obj_count);
+    parse_types.raw_types = raw_debug_p_arr;
     parse_types.out_types = debug_p_arr;
     tp_for_parallel_prof(tp, 0,        obj_count, lnk_strip_debug_t_sig_task, &parse_types, "Strip .debug$P");
     tp_for_parallel_prof(tp, tp_arena, obj_count, lnk_parse_debug_t_task,     &parse_types, "Parse .debug$P");
 
     input.debug_t_arr     = push_array(tp_arena->v[0], CV_DebugT, obj_count);
-    parse_types.raw_types = str8_array_from_list_arr(scratch.arena, input.debug_t_list_arr, obj_count);
+    parse_types.raw_types = raw_debug_t_arr;
     parse_types.out_types = input.debug_t_arr;
     tp_for_parallel_prof(tp, 0,        obj_count, lnk_strip_debug_t_sig_task, &parse_types, "Strip .debug$T");
     tp_for_parallel_prof(tp, tp_arena, obj_count, lnk_parse_debug_t_task,     &parse_types, "Parse .debug$T");
@@ -342,9 +798,10 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
     CV_DebugT *debug_t = &input.debug_t_arr[obj_idx];
     CV_DebugT *debug_p = &debug_p_arr[obj_idx];
     U32Array  *arr_ptr;
-    if      (debug_p->count > 0 && debug_t->count == 0) { arr_ptr = &input.debug_p_indices; }
-    else if (cv_debug_t_is_type_server_ref(debug_t))    { arr_ptr = &input.ext_obj_indices; }
-    else                                                { arr_ptr = &input.int_obj_indices; }
+    if      (hash_map_search_path_u64(&rrt_hm, obj_arr[obj_idx]->path)) { arr_ptr = &input.ext_obj_indices; }
+    else if (debug_p->count > 0 && debug_t->count == 0)                 { arr_ptr = &input.debug_p_indices; }
+    else if (cv_debug_t_is_type_server_ref(debug_t))                    { arr_ptr = &input.ext_obj_indices; }
+    else                                                                { arr_ptr = &input.int_obj_indices; }
     arr_ptr->v[arr_ptr->count++] = obj_idx;
 
     if (debug_t->count == 0 && debug_p->count > 0) {
@@ -356,7 +813,7 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
     }
   }
 
-  ProfScope("Set up /Zi")
+  ProfScope("Set up PDB and RRT")
   {
     input.obj_to_ts = push_array(tp_arena->v[0], U64, input.count);
     MemorySet(input.obj_to_ts, 0xff, input.count * sizeof(input.obj_to_ts[0]));
@@ -373,11 +830,26 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
 
     for EachIndex(i, input.ext_obj_indices.count) {
       // first leaf is always type server
-      U64                obj_idx = input.ext_obj_indices.v[i];
-      CV_DebugT         *debug_t = &input.debug_t_arr[obj_idx];
-      CV_Leaf            leaf    = cv_debug_t_get_leaf(debug_t, 0);
-      CV_TypeServerInfo  ts_info = cv_type_server_info_from_leaf(leaf);
-      String8            ts_path = lnk_find_first_file(scratch.arena, config->lib_dir_list, ts_info.name);
+      U64 obj_idx = input.ext_obj_indices.v[i];
+
+      U64 *packed_rrt_info = hash_map_search_path_u64(&rrt_hm, obj_arr[obj_idx]->path);
+
+      LNK_TypeServerKind ts_kind = LNK_TypeServerKind_Null;
+      CV_TypeServerInfo  ts_info = {0};
+      String8            ts_path = {0};
+      LNK_RRT           *rrt     = 0;
+      if (packed_rrt_info) {
+        U32 rrt_idx = *packed_rrt_info >> 32;
+        rrt     = &rrt_input.v[rrt_idx];
+        ts_kind = LNK_TypeServerKind_RRT;
+        ts_path = rrt->path;
+      } else {
+        CV_DebugT *debug_t = &input.debug_t_arr[obj_idx];
+        CV_Leaf   leaf     = cv_debug_t_get_leaf(debug_t, 0);
+        ts_kind = LNK_TypeServerKind_PDB;
+        ts_info = cv_type_server_info_from_leaf(leaf);
+        ts_path = lnk_find_first_file(scratch.arena, config->lib_dir_list, ts_info.name);
+      }
 
       if (ts_path.size == 0) {
         lnk_discard_cv_debug_info(&input, obj_idx);
@@ -393,7 +865,9 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
         ts = &n->v;
         ts->ts_info = ts_info;
         ts->ts_idx  = ts_ht->count;
+        ts->ts_kind = ts_kind;
         ts->ts_path = push_str8_copy(tp_arena->v[0], ts_path);
+        ts->rrt     = rrt;
         hash_table_push_path_raw(scratch.arena, ts_ht, ts->ts_path, ts);
       }
       
@@ -458,6 +932,18 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
     // undiscard null type server
     input.is_type_server_discarded[0] = 0;
 
+    // wire RRT hashes to type servers .debug$H
+    for EachIndex(ts_idx, ts_arr.count) {
+      LNK_TypeServer *ts = &ts_arr.v[ts_idx];
+      if (ts->rrt) {
+        U64        ts_obj_idx = input.ts_obj_range.min + ts_idx;
+        CV_DebugT *debug_t    = &input.debug_t_arr[ts_obj_idx];
+        CV_DebugH *debug_h    = &input.debug_h_arr[ts_obj_idx];
+        debug_h->count = ts->rrt->type_hashes.size / sizeof(U64);
+        debug_h->v     = (U64 *)ts->rrt->type_hashes.str;
+      }
+    }
+
     // report bad type servers
     String8List unopen_type_server_list = {0};
     for EachIndex(ts_idx, ts_arr.count) {
@@ -478,19 +964,6 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
  
   ProfBegin("Set up PCH");
   {
-    // hash_table<obj_path, obj_idx>
-    String8    work_dir   = get_current_path(scratch.arena);
-    HashTable *debug_p_ht = hash_table_init(scratch.arena, obj_count);
-    for EachIndex(i, input.debug_p_indices.count) {
-      U64     obj_idx  = input.debug_p_indices.v[i];
-      String8 obj_path = path_absolute_dst_from_relative_dst_src(scratch.arena, obj_arr[obj_idx]->path, work_dir);
-      if (hash_table_search_path(debug_p_ht, obj_path)) {
-        lnk_error_obj(LNK_Warning_DuplicateObjPath, obj_arr[obj_idx], "duplicate obj path %S", obj_path);
-      } else {
-        hash_table_push_path_u64(scratch.arena, debug_p_ht, obj_path, obj_idx);
-      }
-    }
-
     for EachIndex(i, input.int_obj_indices.count) {
       U64        obj_idx = input.int_obj_indices.v[i];
       CV_DebugT *debug_t = &input.debug_t_arr[obj_idx];
@@ -499,21 +972,27 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
       if ( ! cv_debug_t_is_pch(debug_t)) { continue; }
 
       // find PCH obj
-      CV_PrecompInfo precomp         = cv_precomp_info_from_leaf(cv_debug_t_get_leaf(debug_t, 0));
-      String8        obj_path        = path_absolute_dst_from_relative_dst_src(scratch.arena, precomp.obj_name, work_dir);
-      U64            debug_p_obj_idx = max_U64;
-      if ( ! hash_table_search_path_u64(debug_p_ht, obj_path, &debug_p_obj_idx)) {
-        // try alternative directory for the PCH
+      CV_PrecompInfo  precomp             = cv_precomp_info_from_leaf(cv_debug_t_get_leaf(debug_t, 0));
+      String8         obj_path            = path_absolute_dst_from_relative_dst_src(scratch.arena, precomp.obj_name, work_dir);
+      U64            *debug_p_obj_idx_ptr = hash_map_search_path_u64(&debug_p_hm, obj_path);
+
+      // try alternative directory for the PCH
+      if (debug_p_obj_idx_ptr == 0) {
         String8 obj_name = str8_skip_last_slash(obj_path);
         for EachNode(alt_dir_n, String8Node, config->alt_pch_dirs.first) {
           String8 alt_obj_path = str8f(scratch.arena, "%S/%S", alt_dir_n->string, obj_name);
-          if (hash_table_search_path_u64(debug_p_ht, alt_obj_path, &debug_p_obj_idx)) { break; }
-        }
-        if (debug_p_obj_idx == max_U64) {
-          lnk_error_obj(LNK_Error_PrecompObjNotFound, obj_arr[obj_idx], "LF_PRECOMP references non-existent obj %S; discarding debug info", obj_path);
-          lnk_discard_cv_debug_info(&input, obj_idx);
+          debug_p_obj_idx_ptr = hash_map_search_path_u64(&debug_p_hm, alt_obj_path);
+          if (debug_p_obj_idx_ptr) { break; }
         }
       }
+
+      if (debug_p_obj_idx_ptr == 0) {
+        lnk_error_obj(LNK_Error_PrecompObjNotFound, obj_arr[obj_idx], "LF_PRECOMP references non-existent obj %S; discarding debug info", obj_path);
+        lnk_discard_cv_debug_info(&input, obj_idx);
+        continue;
+      }
+
+      U64 debug_p_obj_idx = *debug_p_obj_idx_ptr;
 
       // get PCH leaf data
       CV_DebugT *debug_p = &input.debug_t_arr[debug_p_obj_idx];
@@ -622,6 +1101,37 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
 internal LNK_LeafRef
 lnk_leaf_ref_from_ti(LNK_CodeViewInput *input, U32 obj_idx, CV_TypeIndexSource source, CV_TypeIndex ti)
 {
+  // ti range: external type server
+  U64 ts_idx = input->obj_to_ts[obj_idx];
+  if (ts_idx != max_U64) {
+    U64             ts_debug_t_idx = input->ts_obj_range.min + ts_idx;
+    CV_DebugT      *ts_debug_t     = input->debug_t_arr + ts_debug_t_idx;
+    LNK_TypeServer *ts             = &input->ts_arr.v[ts_idx];
+
+    // RRT indirection
+    if (ts->rrt) {
+      LNK_Obj *obj = input->obj_arr[obj_idx];
+
+      // RRT-PCH indirection
+      if (contains_1u64(obj->pch_ti_range, ti)) {
+        obj_idx = obj->pch_obj_idx;
+        obj     = input->obj_arr[obj_idx];
+      }
+
+      Assert(contains_1u64(obj->ti_range, ti));
+
+      // translate type index to original leaf index
+      U64 leaf_idx_og  = (ti - obj->ti_range.min);
+      leaf_idx_og     -= dim_1u64(obj->pch_ti_range);
+
+      // map original leaf index to RRT type index
+      CV_TypeIndex final_ti = obj->ti_map[leaf_idx_og];
+      return (LNK_LeafRef){ ts_debug_t_idx, cv_leaf_idx_from_ti(ts_debug_t, source, final_ti) };
+    } 
+    
+    return (LNK_LeafRef){ ts_debug_t_idx, cv_leaf_idx_from_ti(ts_debug_t, source, ti) };
+  }
+
   CV_DebugT *debug_t = input->debug_t_arr + obj_idx;
 
   // ti_range: PCH
@@ -630,16 +1140,14 @@ lnk_leaf_ref_from_ti(LNK_CodeViewInput *input, U32 obj_idx, CV_TypeIndexSource s
                           cv_leaf_idx_from_ti(&input->debug_t_arr[debug_t->pch_obj_idx], source, ti) };
   }
 
-  // ti range: external type server
-  U64 ts_idx = input->obj_to_ts[obj_idx];
-  if (ts_idx != max_U64) {
-    U64        ts_debug_t_idx = input->ts_obj_range.min + ts_idx;
-    CV_DebugT *ts_debug_t     = input->debug_t_arr + ts_debug_t_idx;
-    return (LNK_LeafRef){ ts_debug_t_idx, cv_leaf_idx_from_ti(ts_debug_t, source, ti) };
-  }
-
   // ti range: internal type server
   return (LNK_LeafRef){ obj_idx, cv_leaf_idx_from_ti(debug_t, source, ti) };
+}
+
+internal U64
+lnk_hash_from_leaf_ref(LNK_CodeViewInput *input, LNK_LeafRef leaf_ref)
+{
+  return input->debug_h_arr[leaf_ref.obj_idx].v[leaf_ref.leaf_idx];
 }
 
 internal int
@@ -662,14 +1170,9 @@ lnk_leaf_ref_is_before(void *raw_a, void *raw_b)
 internal B32
 lnk_match_leaf_ref(LNK_CodeViewInput *input, LNK_LeafRef a, LNK_LeafRef b)
 {
-  B32 is_match = 0;
-  U64 a_hash   = input->debug_h_arr[a.obj_idx].v[a.leaf_idx];
-  U64 b_hash   = input->debug_h_arr[b.obj_idx].v[b.leaf_idx];
-  if (a_hash == b_hash) {
-    Assert(cv_debug_t_get_leaf(&input->debug_t_arr[a.obj_idx], a.leaf_idx).kind == cv_debug_t_get_leaf(&input->debug_t_arr[b.obj_idx], b.leaf_idx).kind);
-    is_match = 1;
-  }
-  return is_match;
+  U64 a_hash = lnk_hash_from_leaf_ref(input, a);
+  U64 b_hash = lnk_hash_from_leaf_ref(input, b);
+  return a_hash == b_hash;
 }
 
 internal U64
@@ -905,13 +1408,69 @@ THREAD_POOL_TASK_FUNC(lnk_hash_debug_t_deep_task)
 }
 
 internal
+THREAD_POOL_TASK_FUNC(lnk_populate_leaf_ht)
+{
+  LNK_MergeTypes *task = raw_task;
+
+  U64        obj_idx = task->pop_obj_idx;
+  CV_DebugT *debug_t = &task->input->debug_t_arr[task->pop_obj_idx];
+  CV_DebugH *debug_h = &task->input->debug_h_arr[task->pop_obj_idx];
+
+  for EachInRange(leaf_idx, task->pop_range[task_id]) {
+    LNK_LeafRef *bucket = 0;
+
+    // alloc new bucket and assign type ref
+    if (bucket == 0) { bucket = push_array_no_zero(arena, LNK_LeafRef, 1); }
+
+    // fill bucket
+    *bucket = (LNK_LeafRef){ .obj_idx = obj_idx, .leaf_idx = leaf_idx };
+
+    B32 is_inserted_or_updated = 1;
+
+    CV_LeafHeader      *header      = cv_debug_t_get_leaf_header(debug_t, leaf_idx);             // leaf index -> leaf header
+    CV_LeafKind         kind        = memory_read16(MemberFromPtr(CV_LeafHeader, header, kind)); // leaf header -> leaf kind
+    CV_TypeIndexSource  leaf_source = cv_type_index_source_from_leaf_kind(kind);                 // leaf kind -> type stream
+    LNK_LeafHashTable  *leaf_ht     = &task->leaf_ht_arr[leaf_source];                           // type stream -> hash table
+    U64                 best_idx    = debug_h->v[leaf_idx] % leaf_ht->cap;                       // leaf ref -> hash -> bucket index
+    U64                 idx         = best_idx;
+    do {
+      // load leaf ref
+      LNK_LeafRef *curr = ins_atomic_ptr_eval(&leaf_ht->bucket_arr[idx]);
+
+      while (curr == 0) {
+        // exit if leaf ref is not recent
+        if (curr != 0 && lnk_leaf_ref_compare(*bucket, *curr) >= 0) {
+          goto exit;
+        }
+
+        // try to update the bucket
+        LNK_LeafRef *cmp = ins_atomic_ptr_eval_cond_assign(&leaf_ht->bucket_arr[idx], bucket, curr);
+        if (cmp == curr) {
+          bucket = 0;
+          goto exit;
+        }
+
+        // another thread updated the bucket -- retry
+        curr = cmp;
+      }
+
+      // advance to next bucket
+      idx = ((idx + 1) == leaf_ht->cap ? 0 : (idx + 1));
+    } while (idx != best_idx);
+    is_inserted_or_updated = 0;
+    exit:;
+    Assert(is_inserted_or_updated);
+  }
+}
+
+internal
 THREAD_POOL_TASK_FUNC(lnk_leaf_dedup_task)
 {
   LNK_MergeTypes *task    = raw_task;
   U64             obj_idx = task->indices.v[task_id];
   CV_DebugT      *debug_t = &task->input->debug_t_arr[obj_idx];
   CV_DebugH      *debug_h = &task->input->debug_h_arr[obj_idx];
-  ProfBeginDynamic("dedup in obj 0x%x (%S) leaf count %u", obj_idx, task->input->obj_arr[obj_idx]->path, debug_t->count);
+  ProfBeginDynamic("dedup in obj 0x%llx (%.*s) leaf count %llu", obj_idx, str8_varg(task->input->obj_arr[obj_idx]->path), debug_t->count);
 
   LNK_LeafRef *bucket = 0;
   for EachIndex(leaf_idx, debug_t->count) {
@@ -1223,37 +1782,24 @@ lnk_fixup_cv_type_indices(LNK_MergeTypes *ctx, U32 obj_idx, String8 data, CV_Typ
     // skip basic types
     if (ti < ctx->input->min_type_indices[n->source]) { continue; }
 
-    CV_DebugT *debug_t;
-    if (ctx->input->obj_to_ts[obj_idx] != max_U64) {
-      U64 ts_idx      = ctx->input->obj_to_ts[obj_idx];
-      U64 debug_t_idx = ctx->input->ts_obj_range.min + ts_idx;
-      debug_t = ctx->input->debug_t_arr + debug_t_idx;
-    } else {
-      debug_t = ctx->input->debug_t_arr + obj_idx;
-    }
-
     CV_TypeIndex final_ti = 0;
-    if (contains_1u64(debug_t->ti_ranges[n->source], ti)) {
-      LNK_LeafRef        leaf_ref   = lnk_leaf_ref_from_ti(ctx->input, obj_idx, n->source, ti);
-      LNK_LeafHashTable *leaf_ht    = &ctx->leaf_ht_arr[n->source];
-      LNK_LeafRef       *final_leaf = lnk_leaf_hash_table_search(leaf_ht, ctx->input, leaf_ref);
-      if (final_leaf) {
-        U64 final_hash = u64_hash_from_str8(str8_struct(final_leaf));
-        final_ti = lnk_assigned_type_ht_search(ctx->assigned_type_caps  [n->source],
-                                               ctx->assigned_type_hts   [n->source],
-                                               ctx->min_type_indices    [n->source],
-                                               ctx->unique_leaf_refs_arr[n->source],
-                                               final_leaf,
-                                               final_hash);
-      }
-#if BUILD_DEBUG
-      else {
-        lnk_error_obj(LNK_Error_InvalidTypeIndex, ctx->input->obj_arr[obj_idx], "no itype 0x%x", ti);
-      }
-#endif
-    } else {
-      Assert(0 && "invalid type index");
+    LNK_LeafRef        leaf_ref   = lnk_leaf_ref_from_ti(ctx->input, obj_idx, n->source, ti);
+    LNK_LeafHashTable *leaf_ht    = &ctx->leaf_ht_arr[n->source];
+    LNK_LeafRef       *final_leaf = lnk_leaf_hash_table_search(leaf_ht, ctx->input, leaf_ref);
+    if (final_leaf) {
+      U64 final_hash = u64_hash_from_str8(str8_struct(final_leaf));
+      final_ti = lnk_assigned_type_ht_search(ctx->assigned_type_caps  [n->source],
+                                             ctx->assigned_type_hts   [n->source],
+                                             ctx->min_type_indices    [n->source],
+                                             ctx->unique_leaf_refs_arr[n->source],
+                                             final_leaf,
+                                             final_hash);
     }
+#if BUILD_DEBUG
+    else {
+      lnk_error_obj(LNK_Error_InvalidTypeIndex, ctx->input->obj_arr[obj_idx], "no itype 0x%x", ti);
+    }
+#endif
 
     memory_write32(ti_ptr, final_ti);
   }
@@ -1332,6 +1878,19 @@ THREAD_POOL_TASK_FUNC(lnk_unbucket_raw_leaves_task)
 }
 
 internal
+THREAD_POOL_TASK_FUNC(lnk_unbucket_hashes_task)
+{
+  LNK_MergeTypes *task = raw_task;
+  Rng1U64 range = task->ranges[task_id];
+  for EachInRange(i, range) {
+    LNK_LeafRef  leaf_ref = *task->unique_leaf_refs_arr[task->ti_source].v[i];
+    CV_DebugT   *debug_t  = &task->input->debug_t_arr[leaf_ref.obj_idx];
+    String8      raw_leaf = cv_debug_t_get_raw_leaf(debug_t, leaf_ref.leaf_idx);
+    task->result.hashes[task->ti_source][i] = task->input->debug_h_arr[leaf_ref.obj_idx].v[leaf_ref.leaf_idx];
+  }
+}
+
+internal
 THREAD_POOL_TASK_FUNC(lnk_fixup_symbols_task)
 {
   LNK_MergeTypes *task = raw_task;
@@ -1393,8 +1952,43 @@ THREAD_POOL_TASK_FUNC(lnk_fixup_symbols_task)
   }
 }
 
+internal
+THREAD_POOL_TASK_FUNC(lnk_build_obj_ti_map)
+{
+  LNK_MergeTypes      *task  = raw_task;
+  LNK_CodeViewInput   *input = task->input;
+
+  U64           obj_idx    = task_id;
+  CV_DebugT    *debug_t    = &input->debug_t_arr[obj_idx];
+  CV_TypeIndex *obj_ti_map = task->obj_ti_batch + task->obj_ti_map_offsets[obj_idx];
+
+  for EachIndex(leaf_idx, debug_t->count) {
+    CV_Leaf            leaf       = cv_debug_t_get_leaf(debug_t, leaf_idx);
+    CV_TypeIndexSource source     = cv_type_index_source_from_leaf_kind(leaf.kind);
+    LNK_LeafRef        leaf_ref   = { obj_idx, leaf_idx };
+    LNK_LeafHashTable *leaf_ht    = &task->leaf_ht_arr[source];
+    LNK_LeafRef       *final_leaf = lnk_leaf_hash_table_search(leaf_ht, input, leaf_ref);
+
+    if (final_leaf) {
+      U64          final_hash = u64_hash_from_str8(str8_struct(final_leaf));
+      CV_TypeIndex final_ti   = lnk_assigned_type_ht_search(task->assigned_type_caps  [source],
+                                                            task->assigned_type_hts   [source],
+                                                            task->min_type_indices    [source],
+                                                            task->unique_leaf_refs_arr[source],
+                                                            final_leaf,
+                                                            final_hash);
+
+      obj_ti_map[leaf_idx] = final_ti;
+    } else {
+      obj_ti_map[leaf_idx] = 0;
+    }
+  }
+
+  task->result.obj_ti_maps[obj_idx] = obj_ti_map;
+}
+
 internal LNK_MergedTypes
-lnk_merge_types(TP_Context *tp, TP_Arena *tp_temp, LNK_CodeViewInput *input)
+lnk_merge_types(TP_Context *tp, TP_Arena *tp_temp, LNK_CodeViewInput *input, LNK_MergeTypeFlags merge_flags)
 {
   ProfBeginFunction();
   Temp scratch = temp_begin(lnk_get_huge_arena());
@@ -1482,6 +2076,34 @@ lnk_merge_types(TP_Context *tp, TP_Arena *tp_temp, LNK_CodeViewInput *input)
   }
   ProfEnd();
 
+  U32Array dedup_type_server_indices = input->type_server_indices;
+
+  ProfBegin("Prepopulate hash table with largest type-set");
+  {
+    LNK_TypeServer *largest_ts = 0;
+    for EachIndex(i, input->ts_arr.count) {
+      LNK_TypeServer *ts = &input->ts_arr.v[i];
+      if (ts->rrt == 0) { continue; }
+      if (largest_ts == 0 || (largest_ts->rrt->type_data_raw.size < ts->rrt->type_data_raw.size)) {
+        largest_ts = ts;
+      }
+    }
+
+    if (largest_ts) {
+      task.pop_obj_idx = input->ts_obj_range.min + largest_ts->ts_idx;
+      task.pop_range   = tp_divide_work(scratch.arena, task.input->debug_t_arr[task.pop_obj_idx].count, tp->worker_count);
+      tp_for_parallel(tp, tp_temp, tp->worker_count, lnk_populate_leaf_ht, &task);
+
+      U32Array new_dedup_type_server_indices = { .v = push_array(scratch.arena, U32, input->type_server_indices.count) };
+      for EachIndex(i, input->type_server_indices.count) {
+        if (input->type_server_indices.v[i] == task.pop_obj_idx) { continue; }
+        new_dedup_type_server_indices.v[new_dedup_type_server_indices.count++] = input->type_server_indices.v[i];
+      }
+      dedup_type_server_indices = new_dedup_type_server_indices;
+    }
+  }
+  ProfEnd();
+
   ProfBegin("Leaf Dedup");
   task.indices = input->debug_p_indices;
   tp_for_parallel_prof(tp, tp_temp, task.indices.count, lnk_leaf_dedup_task, &task, ".debug$P");
@@ -1489,7 +2111,7 @@ lnk_merge_types(TP_Context *tp, TP_Arena *tp_temp, LNK_CodeViewInput *input)
   task.indices = input->int_obj_indices;
   tp_for_parallel_prof(tp, tp_temp, task.indices.count, lnk_leaf_dedup_task, &task, ".debug$T");
 
-  task.indices = input->type_server_indices;
+  task.indices = dedup_type_server_indices;
   tp_for_parallel_prof(tp, tp_temp, task.indices.count, lnk_leaf_dedup_task, &task, "Type Servers");
   ProfEnd();
 
@@ -1609,12 +2231,14 @@ lnk_merge_types(TP_Context *tp, TP_Arena *tp_temp, LNK_CodeViewInput *input)
     }
     ProfEnd();
 
-    task.ranges = tp_divide_work(scratch.arena, input->symbol_input_count, tp->worker_count);
-    tp_for_parallel_prof(tp, 0, tp->worker_count, lnk_cv_patcher_symbols_task, &task, "Fixup Symbol Type Indices");
+    if (~merge_flags & LNK_MergeTypeFlag_SkipSymbolTypeFixup) {
+      task.ranges = tp_divide_work(scratch.arena, input->symbol_input_count, tp->worker_count);
+      tp_for_parallel_prof(tp, 0, tp->worker_count, lnk_cv_patcher_symbols_task, &task, "Fixup Symbol Type Indices");
 
-    task.ranges      = 0;
-    task.debug_s_arr = input->debug_s_arr;
-    tp_for_parallel_prof(tp, 0, input->count, lnk_cv_patcher_inlines_task, &task, "Fixup Inlines Type Indices");
+      task.ranges      = 0;
+      task.debug_s_arr = input->debug_s_arr;
+      tp_for_parallel_prof(tp, 0, input->count, lnk_cv_patcher_inlines_task, &task, "Fixup Inlines Type Indices");
+    }
 
     for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
       task.ti_source = ti_source;
@@ -1624,16 +2248,40 @@ lnk_merge_types(TP_Context *tp, TP_Arena *tp_temp, LNK_CodeViewInput *input)
   }
   ProfEnd();
 
+  // @type_server
+  if (merge_flags & LNK_MergeTypeFlag_BuildObjTiMap) {
+    task.result.obj_ti_maps = push_array(tp_temp->v[0], CV_TypeIndex *, input->obj_count);
+    task.obj_ti_map_counts = push_array(scratch.arena, U64, input->obj_count);
+    for EachIndex(obj_idx, input->obj_count) {
+      task.obj_ti_map_counts[obj_idx] = input->debug_t_arr[obj_idx].count;
+    }
+
+    U64 total_ti_count = sum_array_u64(input->obj_count, task.obj_ti_map_counts);
+    task.obj_ti_map_offsets = offsets_from_counts_array_u64(scratch.arena, task.obj_ti_map_counts, input->obj_count);
+    task.obj_ti_batch       = push_array_no_zero(tp_temp->v[0], CV_TypeIndex, total_ti_count);
+    task.result.obj_ti_maps = push_array_no_zero(tp_temp->v[0], CV_TypeIndex *, input->obj_count);
+      
+    tp_for_parallel_prof(tp, 0, input->obj_count, lnk_build_obj_ti_map, &task, "Build TI Map");
+  }
+
   for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
     LNK_LeafRefArray unique_leaf_refs = task.unique_leaf_refs_arr[ti_source];
+
     task.ti_source               = ti_source;
     task.result.count[ti_source] = unique_leaf_refs.count;
     task.result.v    [ti_source] = push_array(tp_temp->v[0], U8 *, unique_leaf_refs.count);
     task.ranges                  = tp_divide_work(scratch.arena, unique_leaf_refs.count, tp->worker_count);
-    tp_for_parallel(tp, 0, tp->worker_count, lnk_unbucket_raw_leaves_task, &task);
+    tp_for_parallel_prof(tp, 0, tp->worker_count, lnk_unbucket_raw_leaves_task, &task, "Unbucket Leaves");
+
+    if (merge_flags & LNK_MergeTypeFlag_ExportHashes) {
+      task.result.hashes[ti_source] = push_array_no_zero(tp_temp->v[0], U64, unique_leaf_refs.count);
+      tp_for_parallel_prof(tp, 0, tp->worker_count, lnk_unbucket_hashes_task, &task, "Export Hashes");
+    }
   }
 
-  tp_for_parallel_prof(tp, 0, input->symbol_input_count, lnk_fixup_symbols_task, &task, "Fixup ID Symbols");
+  if (~merge_flags & LNK_MergeTypeFlag_SkipSymbolTypeFixup) {
+    tp_for_parallel_prof(tp, 0, input->symbol_input_count, lnk_fixup_symbols_task, &task, "Fixup ID Symbols");
+  }
 
   MemoryCopyTyped(task.result.min_type_indices, input->min_type_indices, CV_TypeIndexSource_COUNT);
 
@@ -2609,4 +3257,3 @@ lnk_build_pdb(TP_Context *tp, TP_Arena *tp_arena, String8 image_data, LNK_Config
   ProfEnd();
   return page_data_list;
 }
-

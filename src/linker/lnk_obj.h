@@ -7,20 +7,36 @@
 
 typedef struct LNK_Obj
 {
-  String8                  path;
-  String8                  data;
-  U32                      debug_t_sect_idx;
-  U32                      debug_p_sect_idx;                     
-  U32                      debug_h_sect_idx;
-  U32                      input_idx;
-  COFF_FileHeaderInfo      header;
-  U32                     *comdats;
-  B8                       hotpatch;
-  B8                       exclude_from_debug_info;
-  U32Node                **associated_sections;
-  LNK_SymbolHashTrie     **symlinks;
+  String8 path;
+  String8 data;
+
+  COFF_FileHeaderInfo header;
+
+  // flags
+  B8 hotpatch;
+  B8 exclude_from_debug_info;
+
+  U32 input_idx;
+
+  // COMDAT
+  U32                 *comdats;
+  U32Node            **associated_sections;
+  LNK_SymbolHashTrie **symlinks;
+
+  // link
   struct LNK_LibMemberRef *link_member;
   struct LNK_ObjNode      *self;
+
+  // type info
+  U32 debug_t_sect_idx;
+  U32 debug_p_sect_idx;
+  U32 debug_h_sect_idx;
+
+  // @type_server
+  Rng1U64         ti_range;
+  CV_TypeIndex   *ti_map;
+  Rng1U64         pch_ti_range;
+  U64             pch_obj_idx;
 } LNK_Obj;
 
 typedef struct LNK_ObjNode
