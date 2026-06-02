@@ -5,10 +5,10 @@
 #define DWARF_INC_H
 
 #include "dwarf/dwarf.h"
-#include "dwarf/dwarf_expr_2.h"
-#include "dwarf/dwarf_parse_2.h"
-#include "dwarf/dwarf_unwind_2.h"
-#include "dwarf/dwarf_dump_2.h"
+#include "dwarf/dwarf_parse.h"
+#include "dwarf/dwarf_expr.h"
+#include "dwarf/dwarf_unwind.h"
+#include "dwarf/dwarf_dump.h"
 #if defined(COFF_H)
 # include "dwarf/dwarf_parse_coff.h"
 #endif
