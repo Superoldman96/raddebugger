@@ -13128,6 +13128,18 @@ rd_frame(void)
                 rd_cmd(RD_CmdKind_SetCurrentPath, .file_path = new_current_dir);
               }
             }
+            
+            //- rjf: if just opened user -> load last project, if enabled
+            if(kind == RD_CmdKind_OpenUser && rd_setting_b32_from_name(s("auto_load_last_project")))
+            {
+              CFG_Node *user = cfg_node_child_from_string(cfg_node_root(), s("user"));
+              CFG_NodePtrList recent_projects = cfg_node_child_list_from_string(scratch.arena, user, s("recent_project"));
+              CFG_Node *recent_project = cfg_node_ptr_list_first(&recent_projects);
+              if(recent_project != &cfg_nil_node)
+              {
+                rd_cmd(RD_CmdKind_OpenRecentProject, .cfg = recent_project->id);
+              }
+            }
           }break;
           case RD_CmdKind_NewUser:
           {

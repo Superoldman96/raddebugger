@@ -312,6 +312,10 @@ RD_VocabTable:
       //- rjf: transient tabs
       @default(1) @display_name('Transient Tabs') @description("When snapping to source code locations, opens new files in a 'transient' tab if they are not already open. Transient tabs are replaced on subsequent snaps automatically.")
         'transient_tabs': bool,
+      
+      //- rjf: auto-load last project
+      @default(0) @display_name('Auto Load Last Project') @description("Enables loading the most recently opened project when a user file is loaded (and thus when the debugger starts).")
+        'auto_load_last_project': bool,
     }
     ```
   }
