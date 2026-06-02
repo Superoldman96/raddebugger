@@ -106,14 +106,9 @@ typedef struct EH_DecodePtrCtx
 } EH_DecodePtrCtx;
 
 ////////////////////////////////
+//~ rjf: .eh_frame Parsing Functions
 
-#if 0
-internal U64         eh_parse_ptr(String8 frame_base, U64 off, U64 pc, EH_PtrCtx *ptr_ctx, EH_PtrEnc encoding, U64 *ptr_out);
-#endif
 internal EH_FrameHdr eh_parse_frame_hdr(String8 data, U64 address_size, EH_PtrCtx *ptr_ctx);
-#if 0
-internal U64         eh_parse_aug_data(String8 aug_string, String8 aug_data, U64 pc, EH_PtrCtx *ptr_ctx, EH_Augmentation *aug_out);
-#endif
 
 internal U64         eh_read_ptr(String8 data, U64 off, U64 pc, EH_PtrCtx *ptr_ctx, EH_PtrEnc encoding, U64 *ptr_out);
 internal U64         eh_read_aug_data(String8 data, U64 off, String8 string, U64 pc, EH_PtrCtx *ptr_ctx, EH_Augmentation *aug_out);
@@ -121,12 +116,11 @@ internal U64         eh_read_cfi_header(String8 data, U64 off, DW_CFIHeader *cfi
 internal U64         eh_read_cie(String8 data, U64 off, DW_Format fmt, Arch arch, U64 pc, EH_PtrCtx *ptr_ctx, DW_CIE *cie_out);
 internal U64         eh_read_fde(String8 data, U64 off, DW_Format fmt, Arch arch, U64 pc, EH_PtrCtx *ptr_ctx, DW_CIE *cie, DW_FDE *fde_out);
 
-internal B32         eh_parse_fde(String8 data, DW_Format format, U64 pc, DW_CIE *cie, EH_PtrCtx *ptr_ctx, DW_FDE *fde_out);
-internal U64         eh_find_nearest_fde(EH_FrameHdr header, EH_PtrCtx *ptr_ctx, U64 pc);
+internal int         eh_frame_hdr_entry_sort(void *raw_a, void *raw_b);
 internal String8     eh_frame_hdr_from_call_frame_info(Arena *arena, U64 fde_count, U64 *fde_offsets, struct DW_FDE *fde);
 
 ////////////////////////////////
-//~ Enum -> String
+//~ rjf: Enum -> String
 
 internal String8 eh_string_from_ptr_enc_type(EH_PtrEnc type);
 internal String8 eh_string_from_ptr_enc_modifier(EH_PtrEnc modifier);

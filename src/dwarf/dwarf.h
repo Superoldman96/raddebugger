@@ -65,46 +65,4 @@ internal String8 dw_dwo_name_from_section_kind(DW_SectionKind k);
 //- rjf: architecture info
 internal U64 dw_reg_count_from_arch(Arch arch);
 
-////////////////////////////////
-//~ TODO(rjf): OLD vvvvvvvvvvvvvvvvvvv
-
-#if 0
-////////////////////////////////
-// xlist helpers
-
-// regs
-internal U64 dw_reg_size_from_code(Arch arch, DW_Reg reg_code);
-internal U64 dw_reg_pos_from_code(Arch arch, DW_Reg reg_code);
-internal U64 dw_reg_count_from_arch(Arch arch);
-internal U64 dw_reg_max_size_from_arch(Arch arch);
-internal U64 dw_size_from_format(DW_Format format);
-
-// CFA
-internal U64                  dw_operand_count_from_cfa_opcode(DW_CFA_Opcode opcode);
-internal B32                  dw_is_cfa_expr_opcode_invalid(DW_ExprOp opcode);
-internal B32                  dw_is_new_row_cfa_opcode(DW_CFA_Opcode opcode);
-internal DW_CFA_OperandType * dw_operand_types_from_cfa_op(DW_CFA_Opcode opcode);
-
-////////////////////////////////
-//~ rjf: String <=> Enum
-
-internal String8 dw_string_from_language(Arena *arena, DW_Language kind);
-internal String8 dw_string_from_comp_unit_kind(Arena *arena, DW_CompUnitKind kind);
-internal String8 dw_string_from_inl(Arena *arena, DW_InlKind kind);
-internal String8 dw_string_from_access_kind(Arena *arena, DW_AccessKind kind);
-internal String8 dw_string_from_calling_convetion(Arena *arena, DW_CallingConventionKind kind);
-internal String8 dw_string_from_attrib_type_encoding(Arena *arena, DW_ATE kind);
-internal String8 dw_string_from_attrib_visibility(Arena *arena, DW_Vis vis);
-internal String8 dw_string_from_std_opcode(Arena *arena, DW_StdOpcode kind);
-internal String8 dw_string_from_ext_opcode(Arena *arena, DW_ExtOpcode kind);
-internal String8 dw_string_from_loc_list_entry_kind(Arena *arena, DW_LLE kind);
-internal String8 dw_string_from_section_kind(Arena *arena, DW_SectionKind kind);
-internal String8 dw_string_from_rng_list_entry_kind(Arena *arena, DW_RLE kind);
-internal String8 dw_string_from_register(Arena *arena, Arch arch, U64 reg_id);
-internal String8 dw_string_from_cfa_opcode(DW_CFA_Opcode opcode);
-internal String8 dw_name_string_from_section_kind(DW_SectionKind k);
-internal String8 dw_mach_name_string_from_section_kind(DW_SectionKind k);
-internal String8 dw_dwo_name_string_from_section_kind (DW_SectionKind k);
-#endif
-
 #endif // DWARF_H

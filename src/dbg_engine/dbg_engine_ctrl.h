@@ -49,17 +49,6 @@ struct D_Unwind
   D_UnwindFlags flags;
 };
 
-#if 0 // TODO(rjf): @unwind
-typedef struct D_FrameUnwindContext D_FrameUnwindContext;
-struct D_FrameUnwindContext
-{
-  // DWARF
-  U64 cfa;
-  DW_CFI_Row *cfi_row;
-  U64 ret_addr_reg;
-};
-#endif
-
 ////////////////////////////////
 //~ rjf: Call Stack Types
 
@@ -558,9 +547,6 @@ internal U64 d_cached_sp_from_thread(D_Handle handle);
 //~ rjf: Module Image Info Functions
 
 //- rjf: cache lookups
-#if 0 // TODO(rjf): @unwind
-internal PE_IntelPdata *d_intel_pdata_from_module_voff(Arena *arena, D_Handle module_handle, U64 voff);
-#endif
 internal D_ModuleInfo *d_info_from_module(Access *access, D_Handle module);
 internal U64 d_entry_point_voff_from_module(D_Handle module_handle);
 internal String8 d_initial_debug_info_path_from_module(Arena *arena, D_Handle module_handle);
@@ -568,18 +554,6 @@ internal String8 d_initial_debug_info_path_from_module(Arena *arena, D_Handle mo
 ////////////////////////////////
 //~ rjf: Unwinding Functions
 
-#if 0 // TODO(rjf): @unwind
-//- rjf: [dwarf]
-internal D_UnwindStepResult d_unwind_step_result_from_machine_op_result(MachineOpResult s);
-internal D_UnwindStepResult d_establish_frame_unwind_context__dwarf(Arena *arena, D_Handle process_handle, D_Handle module_handle, Arch arch, void *regs, U64 endt_us, D_FrameUnwindContext *ctx_out);
-internal D_UnwindStepResult d_unwind_step__dwarf(D_Handle process_handle, Arch arch, void *regs, D_FrameUnwindContext *frame_ctx, U64 endt_us);
-
-//- rjf: [x64]
-internal U64 *d_unwind_reg_from_pe_gpr_reg__pe_x64(X64_RegBlock *regs, PE_UnwindGprRegX64 gpr_reg);
-internal D_UnwindStepResult d_unwind_step__pe_x64(D_Handle process_handle, D_Handle module_handle, U64 module_base_vaddr, X64_RegBlock *regs, U64 endt_us);
-#endif
-
-//- rjf: abstracted full unwind
 internal D_Unwind d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us);
 
 ////////////////////////////////

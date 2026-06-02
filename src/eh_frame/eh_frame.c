@@ -1,77 +1,8 @@
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
-#if 0
-internal U64
-eh_parse_ptr(String8 frame_base, U64 off, U64 pc, EH_PtrCtx *ptr_ctx, EH_PtrEnc encoding, U64 *ptr_out)
-{
-  U64 ptr_off = off;
-  
-  if (encoding == EH_PtrEnc_Omit) {
-    return 0;
-  }
-  
-  // align read offset as needed
-  if (encoding == EH_PtrEnc_Aligned) {
-    ptr_off  = AlignPow2(ptr_off, ptr_ctx->ptr_align);
-    encoding = EH_PtrEnc_Ptr;
-  }
-  
-  // decode pointer value
-  U64 decode_size  = 0;
-  U64 raw_ptr_size = 0;
-  U64 raw_ptr      = 0;
-  switch (encoding & EH_PtrEnc_TypeMask) {
-    default: { InvalidPath; } break;
-    
-    case EH_PtrEnc_Ptr   : { raw_ptr_size = 8; } goto ufixed;
-    case EH_PtrEnc_UData2: { raw_ptr_size = 2; } goto ufixed;
-    case EH_PtrEnc_UData4: { raw_ptr_size = 4; } goto ufixed;
-    case EH_PtrEnc_UData8: { raw_ptr_size = 8; } goto ufixed;
-    ufixed: {
-      decode_size += str8_deserial_read(frame_base, ptr_off, &raw_ptr, raw_ptr_size, raw_ptr_size);
-    } break;
-    
-    // TODO: Signed is actually just a flag that indicates this int is negavite.
-    // There shouldn't be a read for Signed.
-    // For instance, (EH_PtrEnc_UData2 | EH_PtrEnc_Signed) == EH_PtrEnc_SData etc.
-    case EH_PtrEnc_Signed: { raw_ptr_size = 8; } goto sfixed; 
-    
-    case EH_PtrEnc_SData2: { raw_ptr_size = 2; } goto sfixed;
-    case EH_PtrEnc_SData4: { raw_ptr_size = 4; } goto sfixed;
-    case EH_PtrEnc_SData8: { raw_ptr_size = 8; } goto sfixed;
-    sfixed: {
-      decode_size += str8_deserial_read(frame_base, ptr_off, &raw_ptr, raw_ptr_size, raw_ptr_size);
-      raw_ptr = extend_sign64(raw_ptr, raw_ptr_size);
-    } break;
-    
-    case EH_PtrEnc_ULEB128: { decode_size += str8_deserial_read_uleb128(frame_base, ptr_off, &raw_ptr);       } break;
-    case EH_PtrEnc_SLEB128: { decode_size += str8_deserial_read_sleb128(frame_base, ptr_off, (S64*)&raw_ptr); } break;
-  }
-  
-  // apply relative bases
-  if (decode_size > 0) {
-    U64 ptr = raw_ptr;
-    switch (encoding & EH_PtrEnc_ModifierMask) {
-      case 0: break;
-      case EH_PtrEnc_PcRel:   { ptr = pc + raw_ptr;                  } break;
-      case EH_PtrEnc_TextRel: { ptr = ptr_ctx->text_vaddr + raw_ptr; } break;
-      case EH_PtrEnc_DataRel: { ptr = ptr_ctx->data_vaddr + raw_ptr; } break;
-      case EH_PtrEnc_FuncRel: {
-        Assert(!"TODO: need a sample to verify implementation");
-        ptr = ptr_ctx->func_vaddr + raw_ptr;
-      } break;
-      default: { InvalidPath; } break;
-    }
-    
-    if (ptr_out) {
-      *ptr_out = ptr;
-    }
-  }
-  
-  return decode_size;
-}
-#endif
+////////////////////////////////
+//~ rjf: .eh_frame Parsing Functions
 
 internal EH_FrameHdr
 eh_parse_frame_hdr(String8 data, U64 address_size, EH_PtrCtx *ptr_ctx)
@@ -123,65 +54,6 @@ eh_parse_frame_hdr(String8 data, U64 address_size, EH_PtrCtx *ptr_ctx)
   exit:;
   return header;
 }
-
-#if 0
-internal U64
-eh_parse_aug_data(String8 aug_string, String8 aug_data, U64 pc, EH_PtrCtx *ptr_ctx, EH_Augmentation *aug_out)
-{
-  // TODO: 
-  // Handle "eh" param, it indicates presence of EH Data field.
-  // On 32bit arch it is a 4-byte and on 64-bit 8-byte value.
-  // Reference: https://refspecs.linuxfoundation.org/LSB_3.0.0/LSB-PDA/LSB-PDA/ehframechpt.html
-  // Reference doc doesn't clarify structure for EH Data though
-  
-  U64 cursor = 0;
-  
-  U64         aug_data_size    = 0;
-  EH_AugFlags aug_flags        = 0;
-  EH_PtrEnc   lsda_encoding    = EH_PtrEnc_Omit;
-  EH_PtrEnc   addr_encoding    = EH_PtrEnc_UData8;
-  EH_PtrEnc   handler_encoding = EH_PtrEnc_Omit;
-  U64         handler_ip       = 0;
-  if (str8_match(str8_prefix(aug_string, 1), str8_lit("z"), 0)) {
-    cursor = str8_deserial_read_uleb128(aug_data, cursor, &aug_data_size);
-    
-    for (U8 *ptr = aug_string.str+1; ptr < (aug_string.str+aug_string.size); ptr += 1) {
-      switch (*ptr) {
-        case 'L': {
-          cursor += str8_deserial_read_struct(aug_data, cursor, &lsda_encoding);
-          aug_flags |= EH_AugFlag_HasLSDA;
-        } break;
-        case 'P': {
-          cursor += str8_deserial_read_struct(aug_data, cursor, &handler_encoding);
-          cursor += eh_parse_ptr(aug_data, cursor, pc + cursor, ptr_ctx, handler_encoding, &handler_ip);
-          aug_flags |= EH_AugFlag_HasHandler;
-        } break;
-        case 'R': {
-          cursor += str8_deserial_read_struct(aug_data, cursor, &addr_encoding);
-          aug_flags |= EH_AugFlag_HasAddrEnc;
-        } break;
-        case 'S': {
-          aug_flags |= EH_AugFlag_SignalFrame;
-        } break;
-        default: { Assert(!"failed to parse augmentation string"); goto exit; } break;
-      }
-    }
-  }
-  
-  if (aug_out) {
-    aug_out->handler_ip       = handler_ip;
-    aug_out->handler_encoding = handler_encoding;
-    aug_out->lsda_encoding    = handler_encoding;
-    aug_out->addr_encoding    = addr_encoding;
-    aug_out->flags            = aug_flags;
-    aug_out->size             = aug_data_size;
-  }
-  
-  exit:;
-  U64 parse_size = cursor; 
-  return parse_size;
-}
-#endif
 
 internal U64
 eh_read_ptr(String8 data, U64 off, U64 pc, EH_PtrCtx *ptr_ctx, EH_PtrEnc encoding, U64 *ptr_out)
@@ -464,100 +336,6 @@ eh_read_fde(String8 data, U64 off, DW_Format fmt, Arch arch, U64 pc, EH_PtrCtx *
   return bytes_read;
 }
 
-#if 0
-internal B32
-eh_parse_fde(String8 data, DW_Format format, U64 pc, DW_CIE *cie, EH_PtrCtx *ptr_ctx, DW_FDE *fde_out)
-{
-  B32 is_parsed = 0;
-  U64 cursor    = format == DW_Format_32Bit ? 8 : 20;
-  
-  U64       pc_begin = 0;
-  U64       pc_delta = 0;
-  EH_PtrEnc addr_enc = cie->ext[EH_CIE_Ext_AddrEnc];
-  if (addr_enc != EH_PtrEnc_Omit) {
-    U64 pc_begin_size = eh_parse_ptr(data, cursor, pc + cursor, ptr_ctx, addr_enc, &pc_begin);
-    if (pc_begin_size == 0) { goto exit; }
-    cursor += pc_begin_size;
-    
-    U64 pc_delta_size = eh_parse_ptr(data, cursor, pc + cursor, ptr_ctx, addr_enc & EH_PtrEnc_TypeMask, &pc_delta);
-    if (pc_delta_size == 0) { goto exit; }
-    cursor += pc_delta_size;
-  }
-  
-  if (cursor + cie->aug_data.size > data.size) { goto exit; }
-  cursor += cie->aug_data.size;
-  
-  fde_out->format   = format;
-  fde_out->pc_range = rng_1u64(pc_begin, pc_begin + pc_delta);
-  fde_out->insts    = str8_skip(data, cursor);
-  
-  is_parsed = 1;
-  exit:;
-  return is_parsed;
-}
-#endif
-
-#if 0
-internal U64
-eh_find_nearest_fde(EH_FrameHdr header, EH_PtrCtx *ptr_ctx, U64 pc)
-{
-  U64 fde_addr = max_U64;
-  U64 fde_idx  = max_U64;
-  
-  if (header.version == 1) {
-    if (header.fde_count > 0) {
-      U64 first = 0;
-      U64 first_size = eh_parse_ptr(header.table, 0, ptr_ctx->pc_vaddr, ptr_ctx, header.table_enc, &first);
-      AssertAlways(first_size);
-      if (first == pc) {
-        fde_idx = 0;
-        goto exit;
-      }
-      if (first > pc) {
-        goto exit;
-      }
-      
-      U64 last_off  = header.table.size - header.entry_byte_size;
-      U64 last      = 0;
-      U64 last_size = eh_parse_ptr(header.table, last_off, ptr_ctx->pc_vaddr + last_off, ptr_ctx, header.table_enc, &last);
-      AssertAlways(last_size);
-      if (last <= pc) {
-        fde_idx = header.fde_count - 1;
-        goto exit;
-      }
-      
-      U64 l = 0;
-      U64 r = header.fde_count - 1;
-      while (l <= r) {
-        U64 m         = l + (r - l) / 2;
-        U64 m_pc_off  = m * header.entry_byte_size;
-        U64 m_pc      = 0;
-        U64 m_pc_size = eh_parse_ptr(header.table, m_pc_off, ptr_ctx->pc_vaddr + m_pc_off, ptr_ctx, header.table_enc, &m_pc);
-        Assert(m_pc_size);
-        if (m_pc > pc) {
-          r = m - 1;
-        } else if (m_pc < pc) {
-          l = m + 1;
-        } else {
-          fde_idx = m;
-          goto exit;
-        }
-      }
-      
-      fde_idx = l > 0 ? l-1 : 0;
-    }
-  }
-  
-  exit:;
-  if (fde_idx < header.fde_count) {
-    U64 fde_addr_off  = (fde_idx * header.entry_byte_size) + header.field_byte_size;
-    U64 fde_addr_size = eh_parse_ptr(header.table, fde_addr_off, ptr_ctx->pc_vaddr + fde_addr_off, ptr_ctx, header.table_enc, &fde_addr);
-    Assert(fde_addr_size);
-  }
-  return fde_addr;
-}
-#endif
-
 internal int
 eh_frame_hdr_entry_sort(void *raw_a, void *raw_b)
 {
@@ -599,52 +377,50 @@ eh_frame_hdr_from_call_frame_info(Arena *arena, U64 fde_count, U64 *fde_offsets,
   return eh_frame_hdr;
 }
 
-#if 0
-internal
-DW_DECODE_PTR(eh_decode_ptr)
-{
-  EH_DecodePtrCtx *ctx = ud;
-  return eh_parse_ptr(data, 0, ctx->ptr_ctx->pc_vaddr, ctx->ptr_ctx, ctx->addr_enc, ptr_out);
-}
-#endif
+////////////////////////////////
+//~ rjf: Enum -> String
 
 internal String8
 eh_string_from_ptr_enc_type(EH_PtrEnc type)
 {
-  switch (type) {
-    case EH_PtrEnc_Ptr:     return str8_lit("Ptr");
-    case EH_PtrEnc_ULEB128: return str8_lit("ULEB128");
-    case EH_PtrEnc_UData2:  return str8_lit("UData2");
-    case EH_PtrEnc_UData4:  return str8_lit("UData4");
-    case EH_PtrEnc_UData8:  return str8_lit("UData8");
-    case EH_PtrEnc_Signed:  return str8_lit("Signed");
-    case EH_PtrEnc_SLEB128: return str8_lit("SLEB128");
-    case EH_PtrEnc_SData2:  return str8_lit("SData2");
-    case EH_PtrEnc_SData4:  return str8_lit("SData4");
-    case EH_PtrEnc_SData8:  return str8_lit("SData8");
+  String8 result = {0};
+  switch(type)
+  {
+    case EH_PtrEnc_Ptr:     {result = s("Ptr");}break;
+    case EH_PtrEnc_ULEB128: {result = s("ULEB128");}break;
+    case EH_PtrEnc_UData2:  {result = s("UData2");}break;
+    case EH_PtrEnc_UData4:  {result = s("UData4");}break;
+    case EH_PtrEnc_UData8:  {result = s("UData8");}break;
+    case EH_PtrEnc_Signed:  {result = s("Signed");}break;
+    case EH_PtrEnc_SLEB128: {result = s("SLEB128");}break;
+    case EH_PtrEnc_SData2:  {result = s("SData2");}break;
+    case EH_PtrEnc_SData4:  {result = s("SData4");}break;
+    case EH_PtrEnc_SData8:  {result = s("SData8");}break;
   }
-  return str8_zero();
+  return result;
 }
 
 internal String8
 eh_string_from_ptr_enc_modifier(EH_PtrEnc modifier)
 {
-  switch (modifier) {
-    case EH_PtrEnc_PcRel:   return str8_lit("PcRel");
-    case EH_PtrEnc_TextRel: return str8_lit("TextRel");
-    case EH_PtrEnc_DataRel: return str8_lit("DataRel");
-    case EH_PtrEnc_FuncRel: return str8_lit("FuncRel");
-    case EH_PtrEnc_Aligned: return str8_lit("Aligned");
+  String8 result = {0};
+  switch(modifier)
+  {
+    case EH_PtrEnc_PcRel:   {result = s("PcRel");}break;
+    case EH_PtrEnc_TextRel: {result = s("TextRel");}break;
+    case EH_PtrEnc_DataRel: {result = s("DataRel");}break;
+    case EH_PtrEnc_FuncRel: {result = s("FuncRel");}break;
+    case EH_PtrEnc_Aligned: {result = s("Aligned");}break;
   }
-  return str8_zero();
+  return result;
 }
 
 internal String8
 eh_string_from_ptr_enc(Arena *arena, EH_PtrEnc enc)
 {
-  String8 type_str    = eh_string_from_ptr_enc_type(enc & EH_PtrEnc_TypeMask);
+  String8 type_str = eh_string_from_ptr_enc_type(enc & EH_PtrEnc_TypeMask);
   String8 modifer_str = eh_string_from_ptr_enc_modifier(enc & EH_PtrEnc_ModifierMask);
-  String8 indir_str   = enc & EH_PtrEnc_Indirect ? str8_lit("Indirect") : str8_zero();
-  String8 result      = str8f(arena, "Type: %S, Modifier %S (%S)", type_str, modifer_str, indir_str);
+  String8 indir_str = enc & EH_PtrEnc_Indirect ? str8_lit("Indirect") : str8_zero();
+  String8 result = str8f(arena, "Type: %S, Modifier %S (%S)", type_str, modifer_str, indir_str);
   return result;
 }

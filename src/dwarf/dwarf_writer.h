@@ -4,6 +4,8 @@
 #ifndef DWARF_WRITER_H
 #define DWARF_WRITER_H
 
+// TODO(rjf): this uses concepts from the old parser
+
 ////////////////////////////////
 
 typedef enum

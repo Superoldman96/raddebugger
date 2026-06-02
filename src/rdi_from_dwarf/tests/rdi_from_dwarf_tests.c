@@ -5,7 +5,7 @@
 //
 // [ ] d2r_types alias size and byte size on __float80 typedef mismatch
 
-#if 0
+#if 0 // TODO(rjf): this uses concepts from the old parser - replace with p2r-style exemplar testing to catch regressions
 
 internal RDI_Parsed *
 d2r_rdi_from_dwarf_writer(Arena *arena, DW_Writer *writer)

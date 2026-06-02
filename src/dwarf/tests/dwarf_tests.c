@@ -1,7 +1,7 @@
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
-#if 0
+#if 0 // TODO(rjf): this uses concepts from the old parser
 
 internal U64
 t_dw_test_uleb128(U64 v, U64 expected_length)

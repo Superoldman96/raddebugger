@@ -1,6 +1,8 @@
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
+// TODO(rjf): this uses concepts from the old parser
+
 internal DW_IntEnc
 dw_int_enc_from_sint(S64 v)
 {
