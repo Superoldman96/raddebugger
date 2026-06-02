@@ -41,7 +41,7 @@
 #include "rdi_from_coff/rdi_from_coff.h"
 #include "rdi_from_elf/rdi_from_elf.h"
 #include "rdi_from_pdb/rdi_from_pdb.h"
-#include "rdi_from_dwarf/rdi_from_dwarf_2.h"
+#include "rdi_from_dwarf/rdi_from_dwarf.h"
 #include "radbin/radbin.h"
 
 //- rjf: [c]
@@ -75,7 +75,7 @@
 #include "rdi_from_coff/rdi_from_coff.c"
 #include "rdi_from_elf/rdi_from_elf.c"
 #include "rdi_from_pdb/rdi_from_pdb.c"
-#include "rdi_from_dwarf/rdi_from_dwarf_2.c"
+#include "rdi_from_dwarf/rdi_from_dwarf.c"
 #include "radbin/radbin.c"
 
 ////////////////////////////////
