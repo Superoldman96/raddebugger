@@ -2049,8 +2049,7 @@ ev_string_iter_next(Arena *arena, EV_StringIter *it, String8 *out_string)
                   RDI_Symbol *procedure = rdi_element_from_name_idx(rdi, Procedures, proc_idx);
                   RDI_TypeNode *type_node = rdi_element_from_name_idx(rdi, TypeNodes, procedure->type_idx);
                   E_TypeKey type = e_type_key_ext(e_type_kind_from_rdi(type_node->kind), procedure->type_idx, dbg_info_num);
-                  String8 name = {0};
-                  name.str = rdi_string_from_idx(rdi, procedure->name_string_idx, &name.size);
+                  String8 name = fully_qualified_str8_from_rdi_symbol(scratch.arena, rdi, procedure);
                   if(procedure->type_idx != 0)
                   {
                     String8List list = {0};
@@ -2080,19 +2079,21 @@ ev_string_iter_next(Arena *arena, EV_StringIter *it, String8 *out_string)
               // NOTE(rjf): non-read-only -> only generate thing which can be parsed, so just procedure name
               else
               {
+                Temp scratch = scratch_begin(&arena, 1);
+                
                 // rjf: voff -> scope
                 U64 scope_idx = rdi_vmap_idx_from_section_kind_voff(rdi, RDI_SectionKind_ScopeVMap, voff);
                 RDI_Scope *scope = rdi_scope_from_voff(rdi, voff);
                 
                 // rjf: scope -> procedure / string
                 RDI_Symbol *procedure = rdi_procedure_from_scope(rdi, scope);
-                String8 procedure_name = {0};
-                procedure_name.str = rdi_name_from_procedure(rdi, procedure, &procedure_name.size);
+                String8 procedure_name = fully_qualified_str8_from_rdi_symbol(scratch.arena, rdi, procedure);
                 if(procedure_name.size != 0)
                 {
                   *out_string = str8f(arena, "%S%S", pre_prefix, procedure_name);
                 }
                 good_symbol_match = (procedure_name.size != 0);
+                scratch_end(scratch);
               }
               
               ptr_data->did_prefix_content = good_symbol_match;
