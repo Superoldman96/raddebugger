@@ -4,12 +4,6 @@
 #ifndef BASE_MEMORY_H
 #define BASE_MEMORY_H
 
-typedef struct SharedMemory SharedMemory;
-struct SharedMemory
-{
-  U64 u64[1];
-};
-
 ////////////////////////////////
 //~ rjf: @per_os_impl Platform Memory Allocation
 

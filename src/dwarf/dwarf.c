@@ -2,233 +2,469 @@
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
 ////////////////////////////////
-//~ rjf: Generated Code
+//~ rjf: Includes
 
 #include "dwarf/generated/dwarf.meta.c"
+#if defined(X64_H)
+# include "dwarf/x64/dwarf_x64.c"
+#endif
 
-internal DW_AttribClass
-dw_attrib_class_from_attrib_v2(DW_AttribKind k)
+////////////////////////////////
+//~ rjf: X-List Helpers
+
+//- rjf: format address sizes
+
+internal U64
+dw_addr_size_from_format(DW_Format fmt)
 {
-  switch (k) {
-#define X(_N,_C) case DW_AttribKind_##_N: return _C;
-    DW_AttribKind_ClassFlags_V2_XList
+  U64 result = 0;
+  switch(fmt)
+  {
+    default:{}break;
+#define X(name, string, addr_size) case DW_Format_##name:{result = (addr_size);}break;
+    DW_Format_XList
 #undef X
   }
-  return DW_AttribClass_Null;
-}
-
-internal DW_AttribClass
-dw_attrib_class_from_attrib_v3(DW_AttribKind k)
-{
-  switch (k) {
-#define X(_N,_C) case DW_AttribKind_##_N: return _C;
-    DW_AttribKind_ClassFlags_V3_XList
-#undef X
-  }
-  return DW_AttribClass_Null;
-}
-
-internal DW_AttribClass
-dw_attrib_class_from_attrib_v4(DW_AttribKind k)
-{
-  switch (k) {
-#define X(_N,_C) case DW_AttribKind_##_N: return _C;
-    DW_AttribKind_ClassFlags_V4_XList
-#undef X
-  }
-  return DW_AttribClass_Null;
-}
-
-internal DW_AttribClass
-dw_attrib_class_from_attrib_v5(DW_AttribKind k)
-{
-  switch (k) {
-#define X(_N,_C) case DW_AttribKind_##_N: return _C;
-    DW_AttribKind_ClassFlags_V5_XList
-#undef X
-  }
-  return DW_AttribClass_Null;
-}
-
-internal DW_AttribClass
-dw_attrib_class_from_attrib_gnu(DW_AttribKind k)
-{
-  switch (k) {
-#define X(_N,_C) case DW_AttribKind_##_N: return _C;
-    DW_AttribKind_ClassFlags_GNU_XList
-#undef X
-  }
-  return DW_AttribClass_Null;
-}
-
-internal DW_AttribClass
-dw_attrib_class_from_attrib_llvm(DW_AttribKind k)
-{
-  switch (k) {
-#define X(_N,_C) case DW_AttribKind_##_N: return _C;
-    DW_AttribKind_ClassFlags_LLVM_XList
-#undef X
-  }
-  return DW_AttribClass_Null;
-}
-
-internal DW_AttribClass
-dw_attrib_class_from_attrib_apple(DW_AttribKind k)
-{
-  switch (k) {
-#define X(_N,_C) case DW_AttribKind_##_N: return _C;
-    DW_AttribKind_ClassFlags_APPLE_XList
-#undef X
-  }
-  return DW_AttribClass_Null;
-}
-
-internal DW_AttribClass
-dw_attrib_class_from_attrib_mips(DW_AttribKind k)
-{
-  switch (k) {
-#define X(_N,_C) case DW_AttribKind_##_N: return _C;
-    DW_AttribKind_ClassFlags_MIPS_XList
-#undef X
-  }
-  return DW_AttribClass_Null;
-}
-
-internal DW_AttribClass
-dw_attrib_class_from_attrib(DW_Version ver, DW_Ext ext, DW_AttribKind k)
-{
-  DW_AttribClass result = DW_AttribClass_Null;
-  
-  while (ext) {
-    U64 z = 64-clz64(ext);
-    if (z == 0) {
-      break;
-    }
-    U64 flag = 1 << (z-1);
-    ext &= ~flag;
-    
-    switch (flag) {
-      case DW_Ext_Null: break;
-      case DW_Ext_GNU:   result = dw_attrib_class_from_attrib_gnu(k);   break;
-      case DW_Ext_LLVM:  result = dw_attrib_class_from_attrib_llvm(k);  break;
-      case DW_Ext_APPLE: result = dw_attrib_class_from_attrib_apple(k); break;
-      case DW_Ext_MIPS:  result = dw_attrib_class_from_attrib_mips(k);  break;
-      default: InvalidPath; break;
-    }
-    
-    if (result != DW_AttribClass_Null) {
-      break;
-    }
-  }
-  
-  if (result == DW_AttribClass_Null) {
-    switch (ver) {
-      case DW_Version_Null: break;
-      case DW_Version_1:    AssertAlways(!"DWARF V1 is not supported");      break;
-      case DW_Version_2:    result = dw_attrib_class_from_attrib_v2(k); break;
-      case DW_Version_3:    result = dw_attrib_class_from_attrib_v3(k); break;
-      case DW_Version_4:    result = dw_attrib_class_from_attrib_v4(k); break;
-      case DW_Version_5:    result = dw_attrib_class_from_attrib_v5(k); break;
-      default: InvalidPath; break;
-    }
-  }
-  
   return result;
 }
 
+//- rjf: attribute classes
+
+internal DW_AttribClass
+dw_attrib_class_from_kind(DW_Version version, DW_ExtFlags exts, DW_AttribKind k)
+{
+  DW_AttribClass result = 0;
+  if(result == 0) switch(k)
+  {
+    default:{}break;
+#define X(name, code, version, classes) case DW_AttribKind_##name:{result = (classes);}break;
+    DW_AttribKind_XList
+#undef X
+  }
+  for(B32 retry = 0; !result && retry <= 1; retry += 1)
+  {
+    if(result == 0 && exts & DW_ExtFlag_GNU) switch(k)
+    {
+      default:{}break;
+#define X(name, code, classes) case DW_GNU_AttribKind_##name:{result = (classes);}break;
+      DW_GNU_AttribKind_XList
+#undef X
+    }
+    if(result == 0 && exts & DW_ExtFlag_LLVM) switch(k)
+    {
+      default:{}break;
+#define X(name, code, classes) case DW_LLVM_AttribKind_##name:{result = (classes);}break;
+      DW_LLVM_AttribKind_XList
+#undef X
+    }
+    if(result == 0 && exts & DW_ExtFlag_Apple) switch(k)
+    {
+      default:{}break;
+#define X(name, code, classes) case DW_Apple_AttribKind_##name:{result = (classes);}break;
+      DW_Apple_AttribKind_XList
+#undef X
+    }
+    if(result == 0 && exts & DW_ExtFlag_MIPS) switch(k)
+    {
+      default:{}break;
+#define X(name, code, classes) case DW_MIPS_AttribKind_##name:{result = (classes);}break;
+      DW_MIPS_AttribKind_XList
+#undef X
+    }
+    exts = DW_ExtFlag_All;
+  }
+  return result;
+}
+
+internal DW_AttribClass
+dw_attrib_class_from_form_kind(DW_Version version, DW_ExtFlags exts, DW_FormKind k)
+{
+  DW_AttribClass result = 0;
+  if(result == 0) switch(k)
+  {
+    default:{}break;
+#define X(name, code, version, classes) case DW_FormKind_##name:{result = (classes);}break;
+    DW_FormKind_XList
+#undef X
+  }
+  for(B32 retry = 0; !result && retry <= 1; retry += 1)
+  {
+    if(result == 0 && exts & DW_ExtFlag_GNU) switch(k)
+    {
+      default:{}break;
+#define X(name, code, classes) case DW_GNU_FormKind_##name:{result = (classes);}break;
+      DW_GNU_FormKind_XList
+#undef X
+    }
+    exts = DW_ExtFlag_All;
+  }
+  return result;
+}
+
+//- rjf: expr op metadata
+
+internal DW_ExprOpInfo *
+dw_info_from_expr_op(DW_Version version, DW_ExtFlags exts, DW_ExprOp op)
+{
+  DW_ExprOpInfo *result = &dw_expr_op_info_nil;
+  if(result == &dw_expr_op_info_nil) switch(op)
+  {
+    default:{}break;
+#define X(name_, code, version_, operand_count_, pop_count_, push_count_, operand_kind_0, operand_kind_1, valid_for_cfa_exprs_) case DW_ExprOp_##name_:{local_persist DW_ExprOpInfo info = {.push_count = (push_count_), .pop_count = (pop_count_), .operand_count = (operand_count_), .valid_for_cfa_exprs = (valid_for_cfa_exprs_), .operand_kinds = {DW_ExprOperandKind_##operand_kind_0, DW_ExprOperandKind_##operand_kind_1}, .name = str8_lit_comp(#name_), .version = DW_Version_##version_}; result = &info;}break;
+    DW_ExprOp_XList
+#undef X
+  }
+  for(B32 retry = 0; (result == &dw_expr_op_info_nil) && retry <= 1; retry += 1)
+  {
+    if((result == &dw_expr_op_info_nil) && exts & DW_ExtFlag_GNU) switch(op)
+    {
+      default:{}break;
+#define X(name_, code, operand_count_, pop_count_, push_count_, operand_kind_0, operand_kind_1, valid_for_cfa_exprs_) case DW_GNU_ExprOp_##name_:{local_persist DW_ExprOpInfo info = {.push_count = (push_count_), .pop_count = (pop_count_), .operand_count = (operand_count_), .valid_for_cfa_exprs = (valid_for_cfa_exprs_), .operand_kinds = {DW_ExprOperandKind_##operand_kind_0, DW_ExprOperandKind_##operand_kind_1}, .name = str8_lit_comp(#name_)}; result = &info;}break;
+      DW_GNU_ExprOp_XList
+#undef X
+    }
+    exts = DW_ExtFlag_All;
+  }
+  return result;
+}
+
+//- rjf: enum -> string
+
+internal String8
+dw_string_from_format(DW_Format fmt)
+{
+  String8 result = {0};
+  switch(fmt)
+  {
+    default:{}break;
+#define X(name, string, addr_size) case DW_Format_##name:{result = str8_lit(string);}break;
+    DW_Format_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_tag_kind(DW_Version version, DW_ExtFlags exts, DW_TagKind k)
+{
+  String8 result = {0};
+  if(result.size == 0) switch(k)
+  {
+    default:{}break;
+#define X(name, code, version) case DW_TagKind_##name:{result = s(#name);}break;
+    DW_TagKind_XList
+#undef X
+  }
+  for(B32 retry = 0; !result.size && retry <= 1; retry += 1)
+  {
+    if(result.size == 0 && exts & DW_ExtFlag_GNU) switch(k)
+    {
+#define X(name, code) case DW_GNU_TagKind_##name:{result = s(#name);}break;
+      DW_GNU_TagKind_XList
+#undef X
+    }
+    exts = DW_ExtFlag_All;
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_attrib_kind(DW_Version version, DW_ExtFlags exts, DW_AttribKind k)
+{
+  String8 result = {0};
+  if(result.size == 0) switch(k)
+  {
+    default:{}break;
+#define X(name, code, version, classes) case DW_AttribKind_##name:{result = s(#name);}break;
+    DW_AttribKind_XList
+#undef X
+  }
+  for(B32 retry = 0; !result.size && retry <= 1; retry += 1)
+  {
+    if(result.size == 0 && exts & DW_ExtFlag_GNU) switch(k)
+    {
+      default:{}break;
+#define X(name, code, classes) case DW_GNU_AttribKind_##name:{result = s(#name);}break;
+      DW_GNU_AttribKind_XList
+#undef X
+    }
+    if(result.size == 0 && exts & DW_ExtFlag_LLVM) switch(k)
+    {
+      default:{}break;
+#define X(name, code, classes) case DW_LLVM_AttribKind_##name:{result = s(#name);}break;
+      DW_LLVM_AttribKind_XList
+#undef X
+    }
+    if(result.size == 0 && exts & DW_ExtFlag_Apple) switch(k)
+    {
+      default:{}break;
+#define X(name, code, classes) case DW_Apple_AttribKind_##name:{result = s(#name);}break;
+      DW_Apple_AttribKind_XList
+#undef X
+    }
+    if(result.size == 0 && exts & DW_ExtFlag_MIPS) switch(k)
+    {
+      default:{}break;
+#define X(name, code, classes) case DW_MIPS_AttribKind_##name:{result = s(#name);}break;
+      DW_MIPS_AttribKind_XList
+#undef X
+    }
+    exts = DW_ExtFlag_All;
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_form_kind(DW_Version version, DW_ExtFlags exts, DW_FormKind k)
+{
+  String8 result = {0};
+  if(result.size == 0) switch(k)
+  {
+    default:{}break;
+#define X(name, code, version, classes) case DW_FormKind_##name:{result = s(#name);}break;
+    DW_FormKind_XList
+#undef X
+  }
+  for(B32 retry = 0; !result.size && retry <= 1; retry += 1)
+  {
+    if(result.size == 0 && exts & DW_ExtFlag_GNU) switch(k)
+    {
+      default:{}break;
+#define X(name, code, classes) case DW_GNU_FormKind_##name:{result = s(#name);}break;
+      DW_GNU_FormKind_XList
+#undef X
+    }
+    exts = DW_ExtFlag_All;
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_language(DW_Language k)
+{
+  String8 result = {0};
+  switch(k)
+  {
+    default:{}break;
+#define X(name, ...) case DW_Language_##name:{result = s(#name);}break;
+    DW_Language_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_comp_unit_kind(DW_CompUnitKind k)
+{
+  String8 result = {0};
+  switch(k)
+  {
+    default:{}break;
+#define X(name, ...) case DW_CompUnitKind_##name:{result = s(#name);}break;
+    DW_CompUnitKind_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_inl_kind(DW_InlKind k)
+{
+  String8 result = {0};
+  switch(k)
+  {
+    default:{}break;
+#define X(name, ...) case DW_InlKind_##name:{result = s(#name);}break;
+    DW_InlKind_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_access_kind(DW_AccessKind k)
+{
+  String8 result = {0};
+  switch(k)
+  {
+    default:{}break;
+#define X(name, ...) case DW_AccessKind_##name:{result = s(#name);}break;
+    DW_AccessKind_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_calling_convention_kind(DW_CallingConventionKind k)
+{
+  String8 result = {0};
+  switch(k)
+  {
+    default:{}break;
+#define X(name, ...) case DW_CallingConventionKind_##name:{result = s(#name);}break;
+    DW_CallingConventionKind_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_ate(DW_ATE k)
+{
+  String8 result = {0};
+  switch(k)
+  {
+    default:{}break;
+#define X(name, ...) case DW_ATE_##name:{result = s(#name);}break;
+    DW_ATE_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_visibility_kind(DW_VisibilityKind k)
+{
+  String8 result = {0};
+  switch(k)
+  {
+    default:{}break;
+#define X(name, ...) case DW_VisibilityKind_##name:{result = s(#name);}break;
+    DW_VisibilityKind_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_std_opcode(DW_StdOpcode opcode)
+{
+  String8 result = {0};
+  switch(opcode)
+  {
+    default:{}break;
+#define X(name, ...) case DW_StdOpcode_##name:{result = s(#name);}break;
+    DW_StdOpcode_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_ext_opcode(DW_ExtOpcode opcode)
+{
+  String8 result = {0};
+  switch(opcode)
+  {
+    default:{}break;
+#define X(name, ...) case DW_ExtOpcode_##name:{result = s(#name);}break;
+    DW_ExtOpcode_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_lle(DW_LLE lle)
+{
+  String8 result = {0};
+  switch(lle)
+  {
+    default:{}break;
+#define X(name, ...) case DW_LLE_##name:{result = s(#name);}break;
+    DW_LLE_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_string_from_rle(DW_RLE rle)
+{
+  String8 result = {0};
+  switch(rle)
+  {
+    default:{}break;
+#define X(name, ...) case DW_RLE_##name:{result = s(#name);}break;
+    DW_RLE_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_regular_name_from_section_kind(DW_SectionKind k)
+{
+  String8 result = {0};
+  switch(k)
+  {
+    default:{}break;
+#define X(name, regular_name, ...) case DW_SectionKind_##name:{result = str8_lit(regular_name);}break;
+    DW_SectionKind_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_macho_name_from_section_kind(DW_SectionKind k)
+{
+  String8 result = {0};
+  switch(k)
+  {
+    default:{}break;
+#define X(name, regular_name, macho_name, ...) case DW_SectionKind_##name:{result = str8_lit(macho_name);}break;
+    DW_SectionKind_XList
+#undef X
+  }
+  return result;
+}
+
+internal String8
+dw_dwo_name_from_section_kind(DW_SectionKind k)
+{
+  String8 result = {0};
+  switch(k)
+  {
+    default:{}break;
+#define X(name, regular_name, macho_name, dwo_name, ...) case DW_SectionKind_##name:{result = str8_lit(dwo_name);}break;
+    DW_SectionKind_XList
+#undef X
+  }
+  return result;
+}
+
+//- rjf: architecture info
+
+internal U64
+dw_reg_count_from_arch(Arch arch)
+{
+  U64 result = 0;
+  switch(arch)
+  {
+    default:{}break;
+    case Arch_x64:{result = DW_RegCodeX64_LAST;}break;
+  }
+  return result;
+}
+
+////////////////////////////////
+//~ TODO(rjf): OLD vvvvvvvvvvv
+
+#if 0
 internal DW_AttribClass
 dw_attrib_class_from_form_kind(DW_Version ver, DW_FormKind k)
 {
-  DW_AttribClass result = DW_AttribClass_Null;
-#define X(_N,_C) case DW_Form_##_N:{result = _C;}break;
+  DW_AttribClass result = 0;
   switch(k)
   {
-    DW_Form_AttribClass_GNU_XList
-  }
-  switch(ver)
-  {
-    case DW_Version_5:
-    {
-      switch (k)
-      {
-        DW_Form_AttribClass_V5_XList
-      }
-    }break;
-    case DW_Version_4:
-    {
-      switch (k)
-      {
-        DW_Form_AttribClass_V4_XList
-      }
-    }break;
-    case DW_Version_3:
-    {
-      switch (k)
-      {
-        DW_Form_AttribClass_V2_XList
-      }
-    }break;
-    case DW_Version_2:
-    {
-      switch(k)
-      {
-        DW_Form_AttribClass_V2_XList
-      }
-    }break;
-    case DW_Version_1:{} break;
-    case DW_Version_Null:{}break;
-  }
+    default:{}break;
+#define X(name, code, version, ext, class) case DW_FormKind_##name:{result = (class);}break;
+    DW_FormKind_XList
 #undef X
+  }
   return result;
-}
-
-internal B32
-dw_are_attrib_class_and_form_kind_compatible(DW_Version ver, DW_AttribClass attrib_class, DW_FormKind form_kind)
-{
-  DW_AttribClass compat_flags = dw_attrib_class_from_form_kind(ver, form_kind);
-  B32            are_compat = (attrib_class & compat_flags) != 0;
-  return are_compat;
-}
-
-internal B32
-dw_is_form_kind_ref(DW_Version ver, DW_Ext ext, DW_FormKind form_kind)
-{
-  B32 is_ref = 0;
-  if (form_kind == DW_Form_RefAddr ||
-      form_kind == DW_Form_Ref1 ||
-      form_kind == DW_Form_Ref2 ||
-      form_kind == DW_Form_Ref4 ||
-      form_kind == DW_Form_Ref8 ||
-      form_kind == DW_Form_RefUData) {
-    is_ref = 1;
-  } else {
-    if (ext == DW_Ext_GNU) {
-      is_ref = DW_Form_GNU_RefAlt;
-    }
-  }
-  return is_ref;
-}
-
-internal U64
-dw_reg_size_from_code_x64(DW_Reg reg_code)
-{
-  switch (reg_code) {
-#define X(reg_name_dw, reg_code_dw, reg_name_rdi, reg_pos, reg_size) case DW_RegX64_##reg_name_dw: return reg_size;
-    DW_Regs_X64_XList
-#undef X
-  }
-  return 0;
-}
-
-internal U64
-dw_reg_pos_from_code_x64(DW_Reg reg_code)
-{
-  switch (reg_code) {
-#define X(reg_name_dw, reg_code_dw, reg_name_rdi, reg_pos, reg_size) case DW_RegX64_##reg_name_dw: return reg_pos;
-    DW_Regs_X64_XList
-#undef X
-  }
-  return max_U64;
 }
 
 internal U64
@@ -275,194 +511,6 @@ dw_reg_max_size_from_arch(Arch arch)
     }
   }
   return max_size;
-}
-
-internal U64
-dw_sp_from_arch(Arch arch)
-{
-  switch (arch) {
-    default: NotImplemented;
-    case Arch_Null: return 0;
-    case Arch_x64:  return DW_RegX64_Rsp;
-  }
-}
-
-
-internal U64
-dw_size_from_format(DW_Format format)
-{
-  U64 result = 0;
-  switch(format)
-  {
-    case DW_Format_Null:{}break;
-    case DW_Format_32Bit:{result = 4;}break;
-    case DW_Format_64Bit:{result = 8;}break;
-  }
-  return result;
-}
-
-internal DW_AttribClass
-dw_pick_attrib_value_class(DW_Version ver, DW_Ext ext, B32 relaxed, DW_AttribKind attrib_kind, DW_FormKind form_kind)
-{
-  // NOTE(rjf): DWARF's spec specifies two mappings:
-  // (DW_AttribKind) => List(DW_AttribClass)
-  // (DW_FormKind)   => List(DW_AttribClass)
-  //
-  // This function's purpose is to find the overlapping class between an
-  // DW_AttribKind and DW_FormKind.
-  
-  DW_AttribClass attrib_class = dw_attrib_class_from_attrib(ver, ext, attrib_kind);
-  DW_AttribClass form_class   = dw_attrib_class_from_form_kind(ver, form_kind);
-  
-  if(relaxed)
-  {
-    if(attrib_class == DW_AttribClass_Null || form_class == DW_AttribClass_Null)
-    {
-      attrib_class = dw_attrib_class_from_attrib(DW_Version_Last, ext, attrib_kind);
-      form_class   = dw_attrib_class_from_form_kind(DW_Version_Last, form_kind);
-    }
-  }
-  
-  DW_AttribClass result = DW_AttribClass_Null;
-  if(attrib_class != DW_AttribClass_Null && form_class != DW_AttribClass_Null)
-  {
-    result = DW_AttribClass_Undefined;
-    
-    for(U32 i = 0; i < 32; ++i)
-    {
-      U32 n = 1u << i;
-      if((attrib_class & n) != 0 && (form_class & n) != 0)
-      {
-        result = ((DW_AttribClass) n);
-        break;
-      }
-    }
-  }
-  
-  return result;
-}
-
-internal U64
-dw_pick_default_lower_bound(DW_Language lang)
-{
-  U64 lower_bound = max_U64;
-  switch(lang)
-  {
-    case DW_Language_Null: break;
-    case DW_Language_C89:
-    case DW_Language_C:
-    case DW_Language_CPlusPlus:
-    case DW_Language_C99:
-    case DW_Language_CPlusPlus03:
-    case DW_Language_CPlusPlus11:
-    case DW_Language_C11:
-    case DW_Language_CPlusPlus14:
-    case DW_Language_Java:
-    case DW_Language_ObjC:
-    case DW_Language_ObjCPlusPlus:
-    case DW_Language_UPC:
-    case DW_Language_D:
-    case DW_Language_Python:
-    case DW_Language_OpenCL:
-    case DW_Language_Go:
-    case DW_Language_Haskell:
-    case DW_Language_OCaml:
-    case DW_Language_Rust:
-    case DW_Language_Swift:
-    case DW_Language_Dylan:
-    case DW_Language_RenderScript:
-    case DW_Language_BLISS:
-    {
-      lower_bound = 0;
-    }break;
-    case DW_Language_Ada83:
-    case DW_Language_Cobol74:
-    case DW_Language_Cobol85:
-    case DW_Language_Fortran77:
-    case DW_Language_Fortran90:
-    case DW_Language_Pascal83:
-    case DW_Language_Modula2:
-    case DW_Language_Ada95:
-    case DW_Language_Fortran95:
-    case DW_Language_PLI:
-    case DW_Language_Modula3:
-    case DW_Language_Julia:
-    case DW_Language_Fortran03:
-    case DW_Language_Fortran08:
-    {
-      lower_bound = 1;
-    }break;
-    default:{}break;
-  }
-  return lower_bound;
-}
-
-internal U64
-dw_operand_count_from_expr_op(DW_ExprOp op)
-{
-  U64 result = 0;
-  switch(op)
-  {
-    default:{}break;
-#define X(_N, _ID, _OPER_COUNT, _POP_COUNT, _PUSH_COUNT, ...) case _ID:{result = _OPER_COUNT;}break;
-    DW_Expr_V3_XList
-      DW_Expr_V4_XList
-      DW_Expr_V5_XList
-      DW_Expr_GNU_XList
-#undef X
-  }
-  return result;
-}
-
-internal U64
-dw_pop_count_from_expr_op(DW_ExprOp op)
-{
-  U64 result = 0;
-  switch(op)
-  {
-    default:{}break;
-#define X(_N, _ID, _OPER_COUNT, _POP_COUNT, _PUSH_COUNT, ...) case _ID:{result = _POP_COUNT;}break;
-    DW_Expr_V3_XList
-      DW_Expr_V4_XList
-      DW_Expr_V5_XList
-      DW_Expr_GNU_XList
-#undef X
-  }
-  return result;
-}
-
-internal U64
-dw_push_count_from_expr_op(DW_ExprOp op) 
-{
-  U64 result = 0;
-  switch (op) {
-    default:{}break;
-#define X(_N, _ID, _OPER_COUNT, _POP_COUNT, _PUSH_COUNT, ...) case _ID:{result = _PUSH_COUNT;}break;
-    DW_Expr_V3_XList
-      DW_Expr_V4_XList
-      DW_Expr_V5_XList
-      DW_Expr_GNU_XList
-#undef X
-  }
-  return result;
-}
-
-internal DW_ExprOperandType *
-dw_operand_types_from_expr_opcode(DW_ExprOp op)
-{
-  local_persist DW_ExprOperandType nil_t[] = {DW_ExprOperandType_Null};
-  DW_ExprOperandType *result = nil_t;
-  switch(op)
-  {
-    default:{}break;
-#define X(_N, _ID, _OPER_COUNT, _POP_COUNT, _PUSH_COUNT, _OPER_TYPE0, _OPER_TYPE1) case _ID: { local_persist DW_ExprOperandType t[] = { DW_ExprOperandType_##_OPER_TYPE0, DW_ExprOperandType_##_OPER_TYPE1  }; result = t; }break;
-    DW_Expr_V3_XList
-      DW_Expr_V4_XList
-      DW_Expr_V5_XList
-      DW_Expr_GNU_XList
-#undef X
-  }
-  return result;
 }
 
 internal U64
@@ -532,156 +580,6 @@ dw_operand_types_from_cfa_op(DW_CFA_Opcode opcode)
     default: { NotImplemented; } break;
   }
   return 0;
-}
-
-internal String8
-dw_string_from_format(DW_Format format)
-{
-  switch (format) {
-    case DW_Format_Null:  return str8_lit("NULL");
-    case DW_Format_32Bit: return str8_lit("DWARF32");
-    case DW_Format_64Bit: return str8_lit("DWARF64");
-  }
-  return str8_zero();
-}
-
-internal String8
-dw_string_from_expr_op(Arena *arena, DW_Version ver, DW_Ext ext, DW_ExprOp op)
-{
-  String8 result = {0};
-  
-#define X(_N,...) case DW_ExprOp_##_N: result = str8_lit(Stringify(_N)); goto exit;
-  if (ext & DW_Ext_GNU) {
-    switch (op) {
-      DW_Expr_GNU_XList;
-    }
-  }
-  
-  switch (ver) {
-    case DW_Version_5: {
-      switch (op) {
-        DW_Expr_V5_XList
-      }
-    } // fall-through
-    case DW_Version_4: {
-      switch (op) {
-        DW_Expr_V4_XList
-      }
-    } // fall-through
-    case DW_Version_3:
-    case DW_Version_2:
-    case DW_Version_1: {
-      switch (op) {
-        DW_Expr_V3_XList
-      }
-    } // fall-through
-    case DW_Version_Null:
-    break;
-  }
-#undef X
-  
-  result = push_str8f(arena, "%x", op);
-  
-  exit:;
-  return result;
-}
-
-internal String8
-dw_string_from_tag_kind(Arena *arena, DW_TagKind kind)
-{
-  switch (kind) {
-    case DW_TagKind_Null: return str8_lit("Null");
-#define X(_N,_ID) case DW_TagKind_##_N: return str8_lit(Stringify(_N));
-    DW_TagKind_V3_XList
-      DW_TagKind_V5_XList
-      DW_TagKind_GNU_XList
-#undef X
-  }
-  return push_str8f(arena, "%llx", kind);
-}
-
-internal String8
-dw_string_from_attrib_kind(Arena *arena, DW_Version ver, DW_Ext ext, DW_AttribKind kind)
-{
-#define X(_N,...) case DW_AttribKind_##_N:{result = str8_lit(Stringify(_N));}break;
-  String8 result = {0};
-  
-  //- rjf: try extensions
-  while(ext)
-  {
-    U64 z = 64-clz64(ext);
-    if(z == 0)
-    {
-      break;
-    }
-    U64 flag = 1 << (z-1);
-    ext &= ~flag;
-    switch(flag)
-    {
-      default:{}break;
-      case DW_Ext_Null:  break;
-      case DW_Ext_GNU:   switch (kind) { DW_AttribKind_GNU_XList   } break;
-      case DW_Ext_LLVM:  switch (kind) { DW_AttribKind_LLVM_XList  } break;
-      case DW_Ext_APPLE: switch (kind) { DW_AttribKind_APPLE_XList } break;
-      case DW_Ext_MIPS:  switch (kind) { DW_AttribKind_MIPS_XList  } break;
-    }
-  }
-  
-  //- rjf: try version
-  if(result.size == 0)
-  {
-    for(U64 retry = 0; retry < 2; retry += 1)
-    {
-      DW_Version version = retry ? DW_Version_5 : ver;
-      switch(version)
-      {
-        case DW_Version_5: { switch(kind) { DW_AttribKind_V5_XList } } // fall-through
-        case DW_Version_4: { switch(kind) { DW_AttribKind_V4_XList } } // fall-through
-        case DW_Version_3: { switch(kind) { DW_AttribKind_V3_XList } } // fall-through
-        case DW_Version_2: { switch(kind) { DW_AttribKind_V2_XList } } // fall-through
-        case DW_Version_1: {}break;
-        case DW_Version_Null:{}break;
-        default:{}break;
-      }
-    }
-  }
-  
-  //- rjf: fallback
-  if(result.size == 0)
-  {
-    result = push_str8f(arena, "#%u", kind);
-  }
-  
-#undef X
-  return result;
-}
-
-internal String8
-dw_string_from_form_kind(Arena *arena, DW_Version ver, DW_FormKind kind)
-{
-#define X(_N,...) case DW_Form_##_N: return str8_lit(Stringify(_N));
-  switch (ver) {
-    case DW_Version_5: {
-      switch (kind) {
-        DW_Form_V5_XList
-      }
-    } // fall-through
-    case DW_Version_4: {
-      switch (kind) {
-        DW_Form_V4_XList
-      }
-    } // fall-through
-    case DW_Version_3: 
-    case DW_Version_2: {
-      switch (kind) {
-        DW_Form_V2_XList
-      }
-    } // fall-through
-    case DW_Version_Null: break;
-  }
-#undef X
-  String8 result = push_str8f(arena, "%x", kind);
-  return result;
 }
 
 internal String8
@@ -873,218 +771,4 @@ dw_dwo_name_string_from_section_kind(DW_SectionKind k)
   }
   return str8_zero();
 }
-
-internal U64
-dw_write_to_buffer_uleb128(U8 buffer[10], U64 v)
-{
-  U64 buffer_size = 0;
-  U64 value = v;
-  do {
-    U8 byte = value & 0x7f;
-    value >>= 7;
-    if (value != 0) {
-      byte |= 0x80;
-    }
-    Assert(buffer_size < 10);
-    buffer[buffer_size++] = byte;
-  } while (value > 0);
-  return buffer_size;
-}
-
-internal U64
-dw_write_to_buffer_sleb128(U8 buffer[10], U64 v)
-{
-  U64 buffer_size = 0;
-  for (S64 value = v, more = 1; more != 0; ) {
-    U8 byte = value & 0x7f;
-    value >>= 7;
-    U8 sign_bit = byte & 0x40;
-    if ((value == 0 && sign_bit == 0) || (value == -1 && sign_bit != 0)) {
-      more = 0;
-    } else {
-      byte |= 0x80;
-    }
-    Assert(buffer_size < 10);
-    buffer[buffer_size++] = byte;
-  }
-  return buffer_size;
-}
-
-internal String8
-dw_write_uleb128(Arena *arena, U64 v)
-{
-  U8 buffer[10];
-  U64 buffer_size = dw_write_to_buffer_uleb128(buffer, v);
-  return str8_copy(arena, str8(buffer, buffer_size));
-}
-
-internal String8
-dw_write_sleb128(Arena *arena, S64 v)
-{
-  U8 buffer[10];
-  U64 buffer_size = dw_write_to_buffer_sleb128(buffer, v);
-  return str8_copy(arena, str8(buffer, buffer_size));
-}
-
-internal U64
-dw_size_from_uleb128(U64 v)
-{
-  U8 buffer[10];
-  return dw_write_to_buffer_uleb128(buffer, v);
-}
-
-internal U64
-dw_size_from_sleb128(S64 v)
-{
-  U8 buffer[10];
-  return dw_write_to_buffer_sleb128(buffer, v);
-}
-
-internal void *
-dw_serial_push_length(Arena *arena, String8List *srl, DW_Format format, U64 length)
-{
-  void *result;
-  if (format == DW_Format_64Bit) {
-    U8 buffer[sizeof(U32) + sizeof(U64)];
-    MemorySet(&buffer[0], 0xff, sizeof(U32));
-    MemoryCopy(buffer + sizeof(U32), &length, sizeof(length));
-    result = str8_serial_push_string(arena, srl, str8_array_fixed(buffer));
-  } else {
-    result = str8_serial_push_string(arena, srl, str8((U8 *)&length, sizeof(U32)));
-  }
-  return result;
-}
-
-internal void *
-dw_serial_push_uint(Arena *arena, String8List *srl, DW_Format format, U64 v)
-{
-  String8 uint;
-  if (format == DW_Format_64Bit) {
-    U64 *ptr = push_array(arena, U64, 1);
-    *ptr = v;
-    uint = str8((U8 *)ptr, sizeof(*ptr));
-  } else {
-    U32 *ptr = push_array(arena, U32, 1);
-    *ptr = safe_cast_u32(v);
-    uint = str8((U8 *)ptr, sizeof(*ptr));
-  }
-  return str8_serial_push_string(arena, srl, uint);
-}
-
-internal void *
-dw_serial_push_uleb128(Arena *arena, String8List *srl, U64 v)
-{
-  U8 buffer[10];
-  U64 buffer_size = dw_write_to_buffer_uleb128(buffer, v);
-  return str8_serial_push_string(arena, srl, str8(buffer, buffer_size));
-}
-
-internal void *
-dw_serial_push_sleb128(Arena *arena, String8List *srl, S64 v)
-{
-  U8 buffer[10];
-  U64 buffer_size = dw_write_to_buffer_sleb128(buffer, v);
-  return str8_serial_push_string(arena, srl, str8(buffer, buffer_size));
-}
-
-internal B32
-dw_form_match(DW_Form a, DW_Form b)
-{
-  B32 is_match = 0;
-  
-  if (a.kind == b.kind) {
-    switch (a.kind) {
-      case DW_Form_Null: {} break;
-      
-      case DW_Form_Addr:    { is_match = str8_match(a.addr, b.addr, 0);       } break;
-      case DW_Form_String:  { is_match = str8_match(a.string, b.string, 0);   } break;
-      case DW_Form_ExprLoc: { is_match = str8_match(a.exprloc, b.exprloc, 0); } break;
-      
-      case DW_Form_Block:
-      case DW_Form_Block1:
-      case DW_Form_Block2:
-      case DW_Form_Block4: {
-        is_match = str8_match(a.block, b.block, 0);
-      } break;
-      
-      case DW_Form_Data1:
-      case DW_Form_Data2:
-      case DW_Form_Data4:
-      case DW_Form_Data8:  
-      case DW_Form_Data16: {
-        is_match = str8_match(a.data, b.data, 0);
-      } break;
-      
-      case DW_Form_Flag:  { is_match = a.flag == b.flag;   } break;
-      case DW_Form_SData: { is_match = a.sdata == b.sdata; } break;
-      case DW_Form_UData: { is_match = a.udata == b.udata; } break;
-      
-      case DW_Form_RefAddr:
-      case DW_Form_Ref1:
-      case DW_Form_Ref2:
-      case DW_Form_Ref4:
-      case DW_Form_Ref8: 
-      case DW_Form_RefUData: 
-      case DW_Form_GNU_RefAlt: {
-        is_match = a.ref == b.ref;
-      } break;
-      
-      case DW_Form_Indirect: { NotImplemented; } break;
-      
-      case DW_Form_SecOffset: 
-      case DW_Form_LineStrp:
-      case DW_Form_GNU_StrpAlt: {
-        is_match = a.sec_offset == b.sec_offset;
-      } break;
-      
-      case DW_Form_ImplicitConst: { is_match = a.implicit_const, b.implicit_const; } break;
-      
-      case DW_Form_Strx:
-      case DW_Form_Strx1:
-      case DW_Form_Strx2:
-      case DW_Form_Strx3:
-      case DW_Form_Strx4:
-      case DW_Form_Addrx:
-      case DW_Form_Addrx1:
-      case DW_Form_Addrx2:
-      case DW_Form_Addrx3:
-      case DW_Form_Addrx4:
-      case DW_Form_RngListx:
-      case DW_Form_LocListx: {
-        is_match = a.xval == b.xval;
-      } break;
-      
-      case DW_Form_StrpSup: { is_match = a.strp_sup == b.strp_sup; } break;
-      
-      case DW_Form_RefSup4: { NotImplemented; } break;
-      case DW_Form_RefSup8: { NotImplemented; } break;
-      
-      default: { InvalidPath; } break;
-    }
-  }
-  
-  return is_match;
-}
-
-internal U64
-dw_length_from_std_opcode(DW_StdOpcode opcode)
-{
-  switch (opcode) {
-    case DW_StdOpcode_ExtendedOpcode:   return 0;
-    case DW_StdOpcode_Copy:             return 0;
-    case DW_StdOpcode_AdvancePc:        return 1;
-    case DW_StdOpcode_AdvanceLine:      return 1;
-    case DW_StdOpcode_SetFile:          return 1;
-    case DW_StdOpcode_SetColumn:        return 1;
-    case DW_StdOpcode_NegateStmt:       return 0;
-    case DW_StdOpcode_SetBasicBlock:    return 0;
-    case DW_StdOpcode_ConstAddPc:       return 0;
-    case DW_StdOpcode_FixedAdvancePc:   return 1;
-    case DW_StdOpcode_SetPrologueEnd:   return 0;
-    case DW_StdOpcode_SetEpilogueBegin: return 0;
-    case DW_StdOpcode_SetIsa:           return 1;
-    default: InvalidPath; break;
-  }
-  return 0;
-}
-
+#endif

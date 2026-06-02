@@ -2752,7 +2752,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
         
         arch       = arch_from_elf_machine(bin.hdr.e_machine);
         image_base = elf_base_addr_from_bin(&bin);
-        input      = dw_input_from_elf_bin(scratch.arena, params->dbg_data, &bin);
+        input      = dw_raw_from_elf_bin(scratch.arena, params->dbg_data, &bin);
         path_style = PathStyle_UnixAbsolute;
         
         g_d2r_shared.binary_sections = e2r_rdi_binary_sections_from_elf_section_table(arena, params->dbg_data, &bin, &bin.shdrs);
@@ -2864,16 +2864,16 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
         String8 path;
         {
           Temp temp = temp_begin(scratch.arena);
-
+          
           String8 comp_dir = lookup->vm->header.dir_table.v[0];
           
           PathStyle comp_path_style = path_style_from_str8(comp_dir);
           PathStyle dir_path_style  = path_style_from_str8(lookup->vm->header.dir_table.v[src->dir_idx]);
           PathStyle file_path_style = path_style_from_str8(src->path);
-
+          
           String8List dir_path_list  = str8_split_path(temp.arena, lookup->vm->header.dir_table.v[src->dir_idx]);
           String8List file_path_list = str8_split_path(temp.arena, src->path);
-
+          
           String8List path_list = {0};
           if (dir_path_style == PathStyle_Relative) {
             String8List comp_dir_list = str8_split_path(temp.arena, comp_dir);
@@ -2881,15 +2881,15 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
           }
           str8_list_concat_in_place(&path_list, &dir_path_list);
           str8_list_concat_in_place(&path_list, &file_path_list);
-
+          
           PathStyle path_style      = PathStyle_SystemAbsolute;
           if      (dir_path_style  != PathStyle_Relative) { path_style = dir_path_style;  }
           else if (file_path_style != PathStyle_Relative) { path_style = file_path_style; }
           else if (comp_path_style != PathStyle_Relative) { path_style = comp_path_style; }
-
+          
           str8_path_list_resolve_dots_in_place(&path_list, path_style);
           path = str8_path_list_join_by_style(arena, &path_list, path_style);
-
+          
           temp_end(temp);
         }
         

@@ -316,7 +316,7 @@ commit_memory_large(void *ptr, U64 size)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Shared Memory
+//~ rjf: @per_os_impl Shared Memory
 
 internal SharedMemory
 shared_memory_alloc(U64 size, String8 name)
@@ -476,7 +476,7 @@ thread_detach(Thread thread)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Safe Calls
+//~ rjf: @per_os_impl Safe Calls
 
 internal void
 safe_call(ThreadEntryPointFunctionType *func, ThreadEntryPointFunctionType *fail_handler, void *ptr)

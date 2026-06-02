@@ -58,6 +58,7 @@ ac_artifact_from_key_(Access *access, String8 key, AC_ArtifactParams *params, U6
           cache->slots_count = Max(256, params->slots_count);
           cache->slots = push_array(cache_stripe->arena, AC_Slot, cache->slots_count);
           cache->stripes = stripe_array_alloc(cache_stripe->arena);
+          cache->stripe_free_node_ptrs = push_array(cache_stripe->arena, AC_NodePtr *, cache->stripes.count);
         }
       }
       if(cache != 0)
@@ -72,6 +73,9 @@ ac_artifact_from_key_(Access *access, String8 key, AC_ArtifactParams *params, U6
   U64 slot_idx = hash%cache->slots_count;
   AC_Slot *slot = &cache->slots[slot_idx];
   Stripe *stripe = stripe_from_slot_idx(&cache->stripes, slot_idx);
+  
+  //- rjf: unpack thread context
+  B32 is_node_work_active = (ac_tctx != 0);
   
   //- rjf: cache * key -> existing artifact
   B32 artifact_is_stale = 1;
@@ -92,11 +96,16 @@ ac_artifact_from_key_(Access *access, String8 key, AC_ArtifactParams *params, U6
           artifact_is_stale = is_stale;
           artifact = n->val;
           access_touch(access, &n->access_pt, stripe->cv);
+          ins_atomic_u64_eval_assign(&n->last_touched_ac_request_gen, ins_atomic_u64_eval(&ac_shared->request_gen));
         }
         if(is_stale)
         {
           B32 got_task = (ins_atomic_u64_eval_cond_assign(&n->working_count, 1, 0) == 0);
           need_request = got_task;
+          if(is_node_work_active)
+          {
+            ins_atomic_u32_eval_assign(&n->other_nodes_depend_on_me, 1);
+          }
         }
         break;
       }
@@ -140,6 +149,10 @@ ac_artifact_from_key_(Access *access, String8 key, AC_ArtifactParams *params, U6
         node->key = str8_copy(stripe->arena, key);
         node->working_count = 1;
         node->evict_threshold_us = params->evict_threshold_us;
+        if(is_node_work_active)
+        {
+          node->other_nodes_depend_on_me = 1;
+        }
       }
       node->access_pt.last_time_touched_us = now_time_us();
       node->access_pt.last_update_idx_touched = update_tick_idx();
@@ -181,6 +194,7 @@ ac_artifact_from_key_(Access *access, String8 key, AC_ArtifactParams *params, U6
         artifact_is_stale = (node->last_completed_gen == params->gen);
         artifact = node->val;
         access_touch(access, &node->access_pt, stripe->cv);
+        ins_atomic_u64_eval_assign(&node->last_touched_ac_request_gen, ins_atomic_u64_eval(&ac_shared->request_gen));
       }
       
       // rjf: abort if needed
@@ -243,7 +257,9 @@ ac_async_tick(void)
               for(AC_Node *n = slot->first, *next = 0; n != 0; n = next)
               {
                 next = n->next;
-                if(access_pt_is_expired(&n->access_pt, .time = n->evict_threshold_us) && ins_atomic_u64_eval(&n->working_count) == 0)
+                if(access_pt_is_expired(&n->access_pt, .time = n->evict_threshold_us) &&
+                   ins_atomic_u64_eval(&n->working_count) == 0 &&
+                   (ins_atomic_u32_eval(&n->other_nodes_depend_on_me) == 0 || ac_shared->request_gen > n->last_touched_ac_request_gen))
                 {
                   slot_has_work = 1;
                   if(!write_mode)
@@ -326,6 +342,11 @@ ac_async_tick(void)
   lane_sync_u64(&tasks, 0);
   lane_sync_u64(&tasks_count, 0);
   lane_sync();
+  
+  //////////////////////////////
+  //- rjf: set up artifact cache thread context
+  //
+  ac_tctx = push_array(scratch.arena, AC_TCTX, 1);
   
   //////////////////////////////
   //- rjf: do all requests
@@ -609,6 +630,30 @@ ac_async_tick(void)
     lane_sync();
   }
   lane_sync();
+  
+  //////////////////////////////
+  //- rjf: increment the request gen, only if all requests are empty
+  //
+  if(lane_idx() == 0)
+  {
+    B32 have_live_requests = 0;
+    for EachElement(idx, ac_shared->req_batches)
+    {
+      MutexScope(ac_shared->req_batches[idx].mutex)
+      {
+        have_live_requests = (ac_shared->req_batches[idx].wide_count != 0 || ac_shared->req_batches[idx].thin_count != 0);
+      }
+    }
+    if(!have_live_requests)
+    {
+      ac_shared->request_gen += 1;
+    }
+  }
+  
+  //////////////////////////////
+  //- rjf: reset thread context
+  //
+  ac_tctx = 0;
   
   //////////////////////////////
   //- rjf: disable cancellation scanning

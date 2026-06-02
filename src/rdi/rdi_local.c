@@ -1401,6 +1401,7 @@ lane_sync(); if(flags & (1ull<<(kind))) ProfScope((char *)rdi_name_title_from_du
   }
   lane_sync();
   
+#undef DumpSubsetKind
 #undef DumpSubset
 #undef dumpf
 #undef dump

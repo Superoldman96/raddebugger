@@ -7,7 +7,7 @@
 internal String8
 rd_test__test_binary_path(Arena *arena, TestCtx *ctx, String8 name)
 {
-  String8 path = str8f(arena, "%S/%S/%S%S", ctx->input_data_path, name, name, program_ext_postfix_from_os(OperatingSystem_CURRENT));
+  String8 path = str8f(arena, "%S/%S/%S%S", ctx->input_data_path, name, name, program_ext_postfix_from_os(OperatingSystem_CURRENT, 1));
   return path;
 }
 
@@ -15,7 +15,7 @@ internal String8
 rd_test__raddbg_path(Arena *arena, CmdLine *cmdline)
 {
   String8 raddbg_exe_name = cmd_line_has_flag(cmdline, s("gui")) ? s("raddbg") : s("raddbg_non_graphical");
-  String8 raddbg_exe_filename = str8f(arena, "%S/%S%S", get_process_info()->binary_path, raddbg_exe_name, program_ext_postfix_from_os(OperatingSystem_CURRENT));
+  String8 raddbg_exe_filename = str8f(arena, "%S/%S%S", get_process_info()->binary_path, raddbg_exe_name, program_ext_postfix_from_os(OperatingSystem_CURRENT, 0));
   return raddbg_exe_filename;
 }
 

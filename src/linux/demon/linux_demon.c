@@ -515,7 +515,6 @@ lnx_dmn_module_info_from_process_module(Arena *arena, pid_t pid, int memory_fd, 
     info->tls_index                      = tls_index;
     info->tls_offset                     = tls_offset;
     info->eh_frame_header_vaddr_range    = eh_frame_header_vaddr_range;
-    info->cfi_rebase                     = module_rebase;
     info->raddbg_info_voff_range         = raddbg_info_voff_range;
     info->raddbg_is_attached_marker_voff = raddbg_is_attached_marker_voff;
   }
@@ -1016,6 +1015,7 @@ lnx_dmn_thread_alloc(LNX_DMN_Process *process, LNX_DMN_ThreadState thread_state,
   thread->state     = thread_state;
   thread->process   = process;
   thread->reg_block = reg_block;
+  thread->dtv_base_vaddr = lnx_dmn_tls_root_vaddr_from_reg_block(process->fd, process->ctx->arch, reg_block);
   if(thread_state == LNX_DMN_ThreadState_Stopped)
   {
     thread->is_reg_block_dirty = !lnx_dmn_thread_read_reg_block(thread);
@@ -1823,6 +1823,30 @@ lnx_dmn_set_single_step_flag(LNX_DMN_Thread *thread, B32 is_on)
   return is_flag_set;
 }
 
+internal U64
+lnx_dmn_tls_root_vaddr_from_reg_block(int fd, Arch arch, void *reg_block)
+{
+  U64 result = 0;
+  switch(arch)
+  {
+    case Arch_x86:
+    case Arch_arm32:
+    case Arch_arm64:
+    case Arch_Null:
+    case Arch_COUNT:{}break;
+    case Arch_x64:
+    {
+      X64_RegBlock *reg_block_x64 = (X64_RegBlock *)reg_block;
+      U64 dtv_pointer = 0;
+      if(lnx_dmn_read_struct(fd, reg_block_x64->fsbase + 8, &dtv_pointer))
+      {
+        result = dtv_pointer;
+      }
+    }break;
+  }
+  return result;
+}
+
 internal void
 lnx_dmn_thread_ptr_list_push_node(LNX_DMN_ThreadPtrList *list, LNX_DMN_ThreadPtrNode *n)
 {
@@ -1896,6 +1920,8 @@ lnx_dmn_push_event_create_thread(Arena *arena, DMN_EventList *events, LNX_DMN_Th
   e->thread  = lnx_dmn_handle_from_thread(thread);
   e->arch    = thread->process->ctx->arch;
   e->code    = thread->tid;
+  // TODO(rjf): e->stack_pointer = ???;
+  e->tls_root_vaddr = thread->dtv_base_vaddr;
 }
 
 internal void
@@ -3239,46 +3265,6 @@ dmn_process_write(DMN_Handle process_handle, Rng1U64 range, void *src)
 
 //- rjf: threads
 
-internal U64
-dmn_stack_base_vaddr_from_thread(DMN_Handle thread_handle)
-{
-  return 0;
-}
-
-internal U64
-dmn_tls_root_vaddr_from_thread(DMN_Handle thread_handle)
-{
-  U64 tls_root_vaddr = max_U64;
-  DMN_AccessScope
-  {
-    LNX_DMN_Thread *thread = lnx_dmn_thread_from_handle(thread_handle);
-    if(thread)
-    {
-      switch(thread->process->ctx->arch)
-      {
-        case Arch_Null: {} break;
-        case Arch_x64:
-        {
-          X64_RegBlock *reg_block   = thread->reg_block;
-          U64               dtv_pointer = 0;
-          if(lnx_dmn_read_struct(thread->process->fd, reg_block->fsbase + 8, &dtv_pointer))
-          {
-            tls_root_vaddr = dtv_pointer;
-          }
-        } break;
-        case Arch_x86:
-        case Arch_arm32:
-        case Arch_arm64:
-        {
-          NotImplemented;
-        } break;
-        default: { InvalidPath; } break;
-      }
-    }
-  }
-  return tls_root_vaddr;
-}
-
 internal B32
 dmn_thread_read_reg_block(DMN_Handle thread_handle, void *reg_block)
 {
@@ -3311,6 +3297,40 @@ dmn_thread_write_reg_block(DMN_Handle thread_handle, void *reg_block)
       MemoryCopy(thread->reg_block, reg_block, reg_block_size);
       thread->is_reg_block_dirty = 1;
       result = 1;
+    }
+  }
+  return result;
+}
+
+internal B32
+dmn_thread_get_module_tls_vaddr(DMN_Handle thread_handle, DMN_Handle module_handle, U64 *vaddr_out)
+{
+  B32 result = 0;
+  DMN_AccessScope
+  {
+    LNX_DMN_Thread *thread = lnx_dmn_thread_from_handle(thread_handle);
+    if(thread != 0)
+    {
+      LNX_DMN_Process *process = thread->process;
+      LNX_DMN_Module *module = lnx_dmn_module_from_handle(module_handle);
+      if(process != 0 && module != 0)
+      {
+        Arch arch = thread->process->ctx->arch;
+        U64 addr_size = byte_size_from_arch(arch);
+        U64 dtv_base_vaddr = thread->dtv_base_vaddr;
+        U64 dtv_entry_size = 2 * addr_size;
+        U64 module_dtv_ptr_vaddr = dtv_base_vaddr + module->tls_index * dtv_entry_size;
+        U64 module_dtv_vaddr = 0;
+        if(lnx_dmn_read(process->fd, r1u64(module_dtv_ptr_vaddr, module_dtv_ptr_vaddr+addr_size), &module_dtv_vaddr) == addr_size)
+        {
+          U64 unallocated_dtv_vaddr_marker = (addr_size == 4 ? max_U32 : max_U64);
+          if(module_dtv_vaddr != unallocated_dtv_vaddr_marker)
+          {
+            vaddr_out[0] = module_dtv_vaddr + module->tls_offset;
+            result = 1;
+          }
+        }
+      }
     }
   }
   return result;

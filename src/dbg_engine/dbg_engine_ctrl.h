@@ -49,6 +49,7 @@ struct D_Unwind
   D_UnwindFlags flags;
 };
 
+#if 0 // TODO(rjf): @unwind
 typedef struct D_FrameUnwindContext D_FrameUnwindContext;
 struct D_FrameUnwindContext
 {
@@ -57,6 +58,7 @@ struct D_FrameUnwindContext
   DW_CFI_Row *cfi_row;
   U64 ret_addr_reg;
 };
+#endif
 
 ////////////////////////////////
 //~ rjf: Call Stack Types
@@ -171,21 +173,12 @@ struct D_ThreadRegCache
 ////////////////////////////////
 //~ rjf: Module Image Info Cache Types
 
-typedef struct D_ModuleImageInfoCacheNode D_ModuleImageInfoCacheNode;
-struct D_ModuleImageInfoCacheNode
+typedef struct D_ModuleInfo D_ModuleInfo;
+struct D_ModuleInfo
 {
-  D_ModuleImageInfoCacheNode *next;
-  D_ModuleImageInfoCacheNode *prev;
-  D_Handle module;
-  Arena *arena;
-  PE_IntelPdata *pdatas;
-  U64 pdatas_count;
-  U64 cfi_rebase;
-  String8 dwarf_unwind_data;
-  B32 is_unwind_eh;
-  EH_FrameHdr eh_frame_hdr;
-  EH_PtrCtx eh_ptr_ctx;
   U64 entry_point_voff;
+  UWND_Unwinder unwinder;
+  void *unwind_info;
   String8 local_debug_info_path;
   String8 local_server_cache_debug_info_path;
   String8 debug_info_unique_identifier;
@@ -193,27 +186,30 @@ struct D_ModuleImageInfoCacheNode
   String8 raddbg_data;
 };
 
-typedef struct D_ModuleImageInfoCacheSlot D_ModuleImageInfoCacheSlot;
-struct D_ModuleImageInfoCacheSlot
+typedef struct D_ModuleInfoCacheNode D_ModuleInfoCacheNode;
+struct D_ModuleInfoCacheNode
 {
-  D_ModuleImageInfoCacheNode *first;
-  D_ModuleImageInfoCacheNode *last;
-};
-
-typedef struct D_ModuleImageInfoCacheStripe D_ModuleImageInfoCacheStripe;
-struct D_ModuleImageInfoCacheStripe
-{
+  D_ModuleInfoCacheNode *next;
+  D_ModuleInfoCacheNode *prev;
+  AccessPt access_pt;
+  D_Handle module;
   Arena *arena;
-  RWMutex rw_mutex;
+  D_ModuleInfo v;
 };
 
-typedef struct D_ModuleImageInfoCache D_ModuleImageInfoCache;
-struct D_ModuleImageInfoCache
+typedef struct D_ModuleInfoCacheSlot D_ModuleInfoCacheSlot;
+struct D_ModuleInfoCacheSlot
+{
+  D_ModuleInfoCacheNode *first;
+  D_ModuleInfoCacheNode *last;
+};
+
+typedef struct D_ModuleInfoCache D_ModuleInfoCache;
+struct D_ModuleInfoCache
 {
   U64 slots_count;
-  D_ModuleImageInfoCacheSlot *slots;
-  U64 stripes_count;
-  D_ModuleImageInfoCacheStripe *stripes;
+  D_ModuleInfoCacheSlot *slots;
+  StripeArray stripes;
 };
 
 ////////////////////////////////
@@ -340,7 +336,7 @@ struct D_CtrlState
   
   // rjf: caches
   D_ThreadRegCache thread_reg_cache;
-  D_ModuleImageInfoCache module_image_info_cache;
+  D_ModuleInfoCache module_info_cache;
   D_DumpCache dump_cache;
   
   // rjf: generations
@@ -413,6 +409,7 @@ read_only global D_CallStackTreeNode d_call_stack_tree_node_nil =
   &d_call_stack_tree_node_nil,
 };
 thread_static D_EntityCtxLookupAccel *d_entity_ctx_lookup_accel = 0;
+read_only global D_ModuleInfo d_module_info_nil = {0};
 
 ////////////////////////////////
 //~ rjf: Basic Type Functions
@@ -550,10 +547,10 @@ internal B32 d_thread_read_reg_block(D_Handle handle, void *reg_block);
 internal B32 d_thread_write_reg_block(D_Handle thread, void *reg_block);
 internal U64 d_ip_from_thread(D_Handle handle);
 internal U64 d_sp_from_thread(D_Handle handle);
+internal B32 d_thread_get_module_tls_vaddr(D_Handle thread, D_Handle module, U64 *vaddr_out);
 
 //- rjf: thread register cache reading
 internal void *d_cached_reg_block_from_thread(Arena *arena, D_Handle handle);
-internal U64 d_cached_tls_root_vaddr_from_thread(D_Handle handle);
 internal U64 d_cached_ip_from_thread(D_Handle handle);
 internal U64 d_cached_sp_from_thread(D_Handle handle);
 
@@ -561,14 +558,17 @@ internal U64 d_cached_sp_from_thread(D_Handle handle);
 //~ rjf: Module Image Info Functions
 
 //- rjf: cache lookups
+#if 0 // TODO(rjf): @unwind
 internal PE_IntelPdata *d_intel_pdata_from_module_voff(Arena *arena, D_Handle module_handle, U64 voff);
+#endif
+internal D_ModuleInfo *d_info_from_module(Access *access, D_Handle module);
 internal U64 d_entry_point_voff_from_module(D_Handle module_handle);
 internal String8 d_initial_debug_info_path_from_module(Arena *arena, D_Handle module_handle);
-internal String8 d_raddbg_data_from_module(Arena *arena, D_Handle module_handle);
 
 ////////////////////////////////
 //~ rjf: Unwinding Functions
 
+#if 0 // TODO(rjf): @unwind
 //- rjf: [dwarf]
 internal D_UnwindStepResult d_unwind_step_result_from_machine_op_result(MachineOpResult s);
 internal D_UnwindStepResult d_establish_frame_unwind_context__dwarf(Arena *arena, D_Handle process_handle, D_Handle module_handle, Arch arch, void *regs, U64 endt_us, D_FrameUnwindContext *ctx_out);
@@ -577,6 +577,7 @@ internal D_UnwindStepResult d_unwind_step__dwarf(D_Handle process_handle, Arch a
 //- rjf: [x64]
 internal U64 *d_unwind_reg_from_pe_gpr_reg__pe_x64(X64_RegBlock *regs, PE_UnwindGprRegX64 gpr_reg);
 internal D_UnwindStepResult d_unwind_step__pe_x64(D_Handle process_handle, D_Handle module_handle, U64 module_base_vaddr, X64_RegBlock *regs, U64 endt_us);
+#endif
 
 //- rjf: abstracted full unwind
 internal D_Unwind d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us);
@@ -672,6 +673,13 @@ internal C_Key d_key_from_process_vaddr_range(D_Handle process, Rng1U64 vaddr_ra
 internal D_ProcessMemorySlice d_process_memory_slice_from_vaddr_range(Arena *arena, D_Handle process, Rng1U64 range, B32 wait_for_fresh, U64 endt_us);
 internal B32 d_process_memory_read(D_Handle process, Rng1U64 range, B32 *is_stale_out, void *out, U64 endt_us);
 #define d_process_memory_read_struct(process, vaddr, is_stale_out, ptr, endt_us) d_process_memory_read((process), r1u64((vaddr), (vaddr)+(sizeof(*(ptr)))), (is_stale_out), (ptr), (endt_us))
+
+////////////////////////////////
+//~ rjf: TLS Address Artifact Cache Hooks / Lookups
+
+internal AC_Artifact d_tls_vaddr_artifact_create(String8 key, B32 *cancel_signal, B32 *retry_out, U64 *gen_out);
+internal void d_tls_vaddr_artifact_destroy(AC_Artifact artifact);
+internal U64 d_cached_tls_vaddr_from_thread_module(D_Handle thread_handle, D_Handle module_handle, U64 endt_us, B32 *stale_out);
 
 ////////////////////////////////
 //~ rjf: Call Stack Artifact Cache Hooks / Lookups

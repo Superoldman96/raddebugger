@@ -97,6 +97,119 @@ dw_writer_tag_chunk_list_push(Arena *arena, DW_WriterTagChunkList *list, U64 cap
   return result;
 }
 
+internal U64
+dw_write_to_buffer_uleb128(U8 buffer[10], U64 v)
+{
+  U64 buffer_size = 0;
+  U64 value = v;
+  do {
+    U8 byte = value & 0x7f;
+    value >>= 7;
+    if (value != 0) {
+      byte |= 0x80;
+    }
+    Assert(buffer_size < 10);
+    buffer[buffer_size++] = byte;
+  } while (value > 0);
+  return buffer_size;
+}
+
+internal U64
+dw_write_to_buffer_sleb128(U8 buffer[10], U64 v)
+{
+  U64 buffer_size = 0;
+  for (S64 value = v, more = 1; more != 0; ) {
+    U8 byte = value & 0x7f;
+    value >>= 7;
+    U8 sign_bit = byte & 0x40;
+    if ((value == 0 && sign_bit == 0) || (value == -1 && sign_bit != 0)) {
+      more = 0;
+    } else {
+      byte |= 0x80;
+    }
+    Assert(buffer_size < 10);
+    buffer[buffer_size++] = byte;
+  }
+  return buffer_size;
+}
+
+internal String8
+dw_write_uleb128(Arena *arena, U64 v)
+{
+  U8 buffer[10];
+  U64 buffer_size = dw_write_to_buffer_uleb128(buffer, v);
+  return str8_copy(arena, str8(buffer, buffer_size));
+}
+
+internal String8
+dw_write_sleb128(Arena *arena, S64 v)
+{
+  U8 buffer[10];
+  U64 buffer_size = dw_write_to_buffer_sleb128(buffer, v);
+  return str8_copy(arena, str8(buffer, buffer_size));
+}
+
+internal U64
+dw_size_from_uleb128(U64 v)
+{
+  U8 buffer[10];
+  return dw_write_to_buffer_uleb128(buffer, v);
+}
+
+internal U64
+dw_size_from_sleb128(S64 v)
+{
+  U8 buffer[10];
+  return dw_write_to_buffer_sleb128(buffer, v);
+}
+
+internal void *
+dw_serial_push_length(Arena *arena, String8List *srl, DW_Format format, U64 length)
+{
+  void *result;
+  if (format == DW_Format_64Bit) {
+    U8 buffer[sizeof(U32) + sizeof(U64)];
+    MemorySet(&buffer[0], 0xff, sizeof(U32));
+    MemoryCopy(buffer + sizeof(U32), &length, sizeof(length));
+    result = str8_serial_push_string(arena, srl, str8_array_fixed(buffer));
+  } else {
+    result = str8_serial_push_string(arena, srl, str8((U8 *)&length, sizeof(U32)));
+  }
+  return result;
+}
+
+internal void *
+dw_serial_push_uint(Arena *arena, String8List *srl, DW_Format format, U64 v)
+{
+  String8 uint;
+  if (format == DW_Format_64Bit) {
+    U64 *ptr = push_array(arena, U64, 1);
+    *ptr = v;
+    uint = str8((U8 *)ptr, sizeof(*ptr));
+  } else {
+    U32 *ptr = push_array(arena, U32, 1);
+    *ptr = safe_cast_u32(v);
+    uint = str8((U8 *)ptr, sizeof(*ptr));
+  }
+  return str8_serial_push_string(arena, srl, uint);
+}
+
+internal void *
+dw_serial_push_uleb128(Arena *arena, String8List *srl, U64 v)
+{
+  U8 buffer[10];
+  U64 buffer_size = dw_write_to_buffer_uleb128(buffer, v);
+  return str8_serial_push_string(arena, srl, str8(buffer, buffer_size));
+}
+
+internal void *
+dw_serial_push_sleb128(Arena *arena, String8List *srl, S64 v)
+{
+  U8 buffer[10];
+  U64 buffer_size = dw_write_to_buffer_sleb128(buffer, v);
+  return str8_serial_push_string(arena, srl, str8(buffer, buffer_size));
+}
+
 internal DW_Writer *
 dw_writer_begin(DW_Format format, DW_Version version, DW_CompUnitKind cu_kind, Arch arch)
 {
@@ -1195,7 +1308,18 @@ dw_writer_emit(DW_Writer *writer)
       str8_serial_push_struct(writer->arena, srl, &writer->line.opcode_base);
       // (12) standard_opcode_lengths
       U8 *std_op_lens = push_array(writer->arena, U8, writer->line.opcode_base - 1);
-      for (U64 i = 1; i < writer->line.opcode_base; i += 1) { std_op_lens[i-1] = dw_length_from_std_opcode(i); }
+      for (U64 i = 1; i < writer->line.opcode_base; i += 1)
+      {
+        U64 len = 0;
+        switch(i)
+        {
+          default:{}break;
+#define X(name, code, len_) case DW_StdOpcode_##name:{len = (len_);}break;
+          DW_StdOpcode_XList
+#undef X
+        }
+        std_op_lens[i-1] = len;
+      }
       str8_serial_push_string(writer->arena, srl, str8(std_op_lens, writer->line.opcode_base - 1));
       // directory table
       str8_list_concat_in_place(srl, &dir_table_srl);
@@ -1277,3 +1401,109 @@ dw_writer_emit_to_obj(DW_Writer *writer, OBJ *obj)
 }
 #endif
 
+internal String8
+dw_encode_expr(Arena *arena, Arch arch, DW_Format format, DW_ExprEnc *encs, U64 encs_count)
+{
+  Temp scratch = scratch_begin(&arena, 1);
+  
+  String8List *srl = push_array(scratch.arena, String8List, 1);
+  str8_serial_begin(scratch.arena, srl);
+  
+  HashTable *label_map = hash_table_init(scratch.arena, 128);
+  
+  struct Fixup { U64 offset; String8 label; struct Fixup *next; };
+  struct Fixup *first_fixup = 0, *last_fixup = 0;
+  
+  for EachIndex(i, encs_count) {
+    DW_ExprEnc *e = &encs[i];
+    
+    switch (e->type) {
+      case DW_ExprEncType_Null: {} break;
+      case DW_ExprEncType_Op: {
+        str8_serial_push_struct(scratch.arena, srl, &e->op);
+      } break;
+      case DW_ExprEncType_U8: {
+        str8_serial_push_struct(scratch.arena, srl, &e->u8);
+      } break;
+      case DW_ExprEncType_U16: {
+        str8_serial_push_struct(scratch.arena, srl, &e->u16);
+      } break;
+      case DW_ExprEncType_U32: {
+        str8_serial_push_struct(scratch.arena, srl, &e->u32);
+      } break;
+      case DW_ExprEncType_U64: {
+        str8_serial_push_struct(scratch.arena, srl, &e->u64);
+      } break;
+      case DW_ExprEncType_S8: {
+        str8_serial_push_struct(scratch.arena, srl, &e->s8);
+      } break;
+      case DW_ExprEncType_S16: {
+        str8_serial_push_struct(scratch.arena, srl, &e->s16);
+      } break;
+      case DW_ExprEncType_S32: {
+        str8_serial_push_struct(scratch.arena, srl, &e->s32);
+      } break;
+      case DW_ExprEncType_S64: {
+        str8_serial_push_struct(scratch.arena, srl, &e->s64);
+      } break;
+      case DW_ExprEncType_ULEB128: {
+        str8_serial_push_string(scratch.arena, srl, dw_write_uleb128(scratch.arena, e->u64));
+      } break;
+      case DW_ExprEncType_SLEB128: {
+        str8_serial_push_string(scratch.arena, srl, dw_write_sleb128(scratch.arena, e->s64));
+      } break;
+      case DW_ExprEncType_Addr: {
+        U64 addr_size = byte_size_from_arch(arch);
+        Assert(addr_size <= sizeof(e->addr));
+        str8_serial_push_string(scratch.arena, srl, str8((U8 *)&e->addr, addr_size));
+      } break;
+      case DW_ExprEncType_Block: {
+        Assert(e->block.size <= max_U8);
+        str8_serial_push_u8(scratch.arena, srl, (U8)e->block.size);
+        str8_serial_push_string(scratch.arena, srl, e->block);
+      } break;
+      case DW_ExprEncType_DwarfUInt: {
+        switch (format) {
+          case DW_Format_Null:  {} break;
+          case DW_Format_32Bit: { str8_serial_push_u32(scratch.arena, srl, e->u32); } break;
+          case DW_Format_64Bit: { str8_serial_push_u64(scratch.arena, srl, e->u64); } break;
+          default: { InvalidPath; } break;
+        }
+      } break;
+      case DW_ExprEncType_Label: {
+        struct Fixup *fixup = push_array(scratch.arena, struct Fixup, 1);
+        fixup->offset = srl->total_size;
+        fixup->label  = e->label;
+        SLLQueuePush(first_fixup, last_fixup, fixup);
+        
+        S16 delta_placeholder = 0;
+        str8_serial_push_struct(scratch.arena, srl, &delta_placeholder);
+      } break;
+      case DW_ExprEncType_DeclLabel: {
+        hash_table_push_string_u64(scratch.arena, label_map, e->label, srl->total_size);
+      } break;
+      default: { InvalidPath; } break;
+    }
+  }
+  
+  // finalize expression
+  String8 expr = str8_serial_end(arena, srl);
+  
+  // apply fixups
+  for EachNode(fixup, struct Fixup, first_fixup) {
+    U64 label_offset;
+    if (!hash_table_search_string_u64(label_map, fixup->label, &label_offset)) {
+      Assert(0 && "undefined label");
+      continue;
+    }
+    
+    S64 delta = (S64)label_offset - (S64)fixup->offset;
+    AssertAlways(min_S16 <= delta && delta <= max_S16);
+    
+    S16 *delta_ptr = (S16 *)(expr.str + fixup->offset);
+    *delta_ptr = delta;
+  }
+  
+  scratch_end(scratch);
+  return expr;
+}

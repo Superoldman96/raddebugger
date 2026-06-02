@@ -1,5 +1,5 @@
 ////////////////////////////////
-//~ rjf: @os_hooks Main Initialization API (Implemented Per-OS)
+//~ rjf: @per_os_impl Main Initialization API (Implemented Per-OS)
 
 internal void
 wm_init(void)
@@ -7,7 +7,7 @@ wm_init(void)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Graphics System Info (Implemented Per-OS)
+//~ rjf: @per_os_impl Graphics System Info (Implemented Per-OS)
 
 internal WM_SystemInfo *
 wm_get_system_info(void)
@@ -18,7 +18,7 @@ wm_get_system_info(void)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Clipboards (Implemented Per-OS)
+//~ rjf: @per_os_impl Clipboards (Implemented Per-OS)
 
 internal void
 wm_set_clipboard_text(String8 string)
@@ -32,7 +32,7 @@ wm_get_clipboard_text(Arena *arena)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Windows (Implemented Per-OS)
+//~ rjf: @per_os_impl Windows (Implemented Per-OS)
 
 internal WM_Window
 wm_window_open(Rng2F32 rect, WM_WindowFlags flags, String8 title)
@@ -151,7 +151,7 @@ wm_dpi_from_window(WM_Window window)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks External Windows (Implemented Per-OS)
+//~ rjf: @per_os_impl External Windows (Implemented Per-OS)
 
 internal WM_ExtWindow
 wm_focused_external_window(void)
@@ -166,7 +166,7 @@ wm_focus_external_window(WM_ExtWindow handle)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Monitors (Implemented Per-OS)
+//~ rjf: @per_os_impl Monitors (Implemented Per-OS)
 
 internal WM_MonitorArray
 wm_push_monitors_array(Arena *arena)
@@ -209,7 +209,7 @@ wm_dpi_from_monitor(WM_Monitor monitor)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Events (Implemented Per-OS)
+//~ rjf: @per_os_impl Events (Implemented Per-OS)
 
 internal void
 wm_send_wakeup_event(void)
@@ -243,7 +243,7 @@ wm_mouse_from_window(WM_Window window)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Cursors (Implemented Per-OS)
+//~ rjf: @per_os_impl Cursors (Implemented Per-OS)
 
 internal void
 wm_set_cursor(WM_Cursor cursor)
@@ -251,7 +251,7 @@ wm_set_cursor(WM_Cursor cursor)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Native User-Facing Graphical Messages (Implemented Per-OS)
+//~ rjf: @per_os_impl Native User-Facing Graphical Messages (Implemented Per-OS)
 
 internal void
 wm_graphical_message(B32 error, String8 title, String8 message)
@@ -265,7 +265,7 @@ wm_graphical_pick_file(Arena *arena, String8 initial_path)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Shell Operations
+//~ rjf: @per_os_impl Shell Operations
 
 internal void
 wm_show_in_filesystem_ui(String8 path)

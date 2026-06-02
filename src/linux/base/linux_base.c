@@ -276,7 +276,7 @@ commit_memory_large(void *ptr, U64 size)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Shared Memory
+//~ rjf: @per_os_impl Shared Memory
 
 internal SharedMemory
 shared_memory_alloc(U64 size, String8 name)

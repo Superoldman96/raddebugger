@@ -56,6 +56,17 @@ dw2_read_fmt_u64(String8 data, U64 off, DW_Format format, U64 *out)
   return bytes_read;
 }
 
+internal DW_SectionKind
+dw_section_kind_from_string(String8 string)
+{
+  DW_SectionKind s = DW_SectionKind_Null;
+  if(0){}
+#define X(name, regular_string, macho_string, dwo_string) else if(str8_match(string, s(regular_string), 0) || str8_match(string, s(macho_string), 0) || str8_match(string, s(dwo_string), 0)) { s = DW_SectionKind_##name; }
+  DW_SectionKind_XList
+#undef X
+  return s;
+}
+
 ////////////////////////////////
 //~ rjf: Unit Range Set Parsing (Top-Level .debug_info, .debug_aranges)
 
@@ -190,6 +201,72 @@ dw2_read_unit_header(String8 data, U64 off, DW2_UnitHeader *out)
 ////////////////////////////////
 //~ rjf: Abbreviation Map Parsing
 
+internal U64
+dw2_read_abbrev(Arena *arena, String8 data, U64 off, DW2_AbbrevHeader *header_out, DW2_AbbrevAttribList *attribs_out)
+{
+  U64 start_off = off;
+  
+  // rjf: read tag abbrev
+  U64 id = 0;
+  U64 tag_kind = 0;
+  U8 has_children = 0;
+  {
+    off += str8_deserial_read_uleb128(data, off, &id);
+    if(id != 0)
+    {
+      off += str8_deserial_read_uleb128(data, off, &tag_kind);
+      off += str8_deserial_read_struct(data, off, &has_children);
+    }
+  }
+  
+  // rjf: read all tag attribute abbreviations
+  DW2_AbbrevAttribList attribs = {0};
+  if(id != 0)
+  {
+    for(;;)
+    {
+      U64 attrib_start_off = off;
+      U64 attrib_kind = 0;
+      U64 attrib_form_kind = 0;
+      U64 implicit_const = 0;
+      off += str8_deserial_read_uleb128(data, off, &attrib_kind);
+      off += str8_deserial_read_uleb128(data, off, &attrib_form_kind);
+      if(attrib_form_kind == DW_FormKind_ImplicitConst)
+      {
+        off += str8_deserial_read_uleb128(data, off, &implicit_const);
+      }
+      if(attrib_kind != 0 && attribs_out != 0)
+      {
+        DW2_AbbrevAttribNode *n = push_array(arena, DW2_AbbrevAttribNode, 1);
+        SLLQueuePush(attribs.first, attribs.last, n);
+        attribs.count += 1;
+        n->v.attrib_kind = attrib_kind;
+        n->v.form_kind = attrib_form_kind;
+        n->v.implicit_const = implicit_const;
+      }
+      if(off == attrib_start_off || attrib_kind == 0)
+      {
+        break;
+      }
+    }
+  }
+  
+  // rjf: fill
+  if(header_out != 0)
+  {
+    header_out->id           = id;
+    header_out->tag_kind     = tag_kind;
+    header_out->has_children = has_children;
+  }
+  if(attribs_out != 0)
+  {
+    MemoryCopyStruct(attribs_out, &attribs);
+  }
+  
+  U64 bytes_read = (off-start_off);
+  return bytes_read;
+}
+
 internal DW2_AbbrevMap
 dw2_abbrev_map_from_data(Arena *arena, String8 data, U64 off)
 {
@@ -206,60 +283,29 @@ dw2_abbrev_map_from_data(Arena *arena, String8 data, U64 off)
     {
       U64 start_off = read_off;
       
-      // rjf: read tag abbrev
-      U64 id = 0;
-      U64 tag_kind = 0;
-      U8 has_children = 0;
-      {
-        read_off += str8_deserial_read_uleb128(data, read_off, &id);
-        if(id != 0)
-        {
-          read_off += str8_deserial_read_uleb128(data, read_off, &tag_kind);
-          read_off += str8_deserial_read_struct(data, read_off, &has_children);
-        }
-      }
+      // rjf: read next abbrev
+      DW2_AbbrevHeader header = {0};
+      read_off += dw2_read_abbrev(arena, data, read_off, &header, 0);
       
       // rjf: count tag
-      if(id != 0)
+      if(header.id != 0)
       {
         tag_count += 1;
-      }
-      
-      // rjf: read all tag attribute abbreviations
-      if(id != 0)
-      {
-        for(;;)
-        {
-          U64 attrib_start_off = read_off;
-          U64 attrib_kind = 0;
-          U64 attrib_form_kind = 0;
-          U64 implicit_const = 0;
-          read_off += str8_deserial_read_uleb128(data, read_off, &attrib_kind);
-          read_off += str8_deserial_read_uleb128(data, read_off, &attrib_form_kind);
-          if(attrib_form_kind == DW_Form_ImplicitConst)
-          {
-            read_off += str8_deserial_read_uleb128(data, read_off, &implicit_const);
-          }
-          if(read_off == attrib_start_off || attrib_kind == 0)
-          {
-            break;
-          }
-        }
       }
       
       // rjf: if building (second loop) -> insert into map
       if(build)
       {
-        U64 hash = u64_hash_from_str8(str8_struct(&id));
+        U64 hash = u64_hash_from_str8(str8_struct(&header.id));
         U64 slot_idx = hash%map.slots_count;
         DW2_AbbrevMapNode *n = push_array(arena, DW2_AbbrevMapNode, 1);
         SLLStackPush(map.slots[slot_idx], n);
-        n->id  = id;
+        n->id  = header.id;
         n->off = start_off;
       }
       
       // rjf: no tag ID, or no movement? -> exit
-      if(read_off == start_off || id == 0)
+      if(read_off == start_off || header.id == 0)
       {
         break;
       }
@@ -276,11 +322,132 @@ dw2_abbrev_map_from_data(Arena *arena, String8 data, U64 off)
   return map;
 }
 
+internal DW2_UnitAbbrevMapMap
+dw2_unit_abbrev_map_map_from_data(Arena *arena, String8 data, DW2_UnitHeader *unit_headers, U64 unit_headers_count)
+{
+  DW2_UnitAbbrevMapMap result = {0};
+  Temp scratch = scratch_begin(&arena, 1);
+  
+  //- rjf: gather deduplicated .debug_abbrev offsets, representing beginnings
+  // of abbreviation tables. we want to do this because many units may refer
+  // to the same abbreviation table.
+  //
+  typedef struct AbbrevOffNode AbbrevOffNode;
+  struct AbbrevOffNode
+  {
+    AbbrevOffNode *order_next;
+    AbbrevOffNode *hash_next;
+    U64 off;
+    U64 idx;
+  };
+  U64 abbrev_off_slots_count = unit_headers_count;
+  AbbrevOffNode **abbrev_off_slots = 0;
+  U64 abbrev_map_count = 0;
+  U64 *abbrev_map_off_from_idx_table = 0;
+  DW2_AbbrevMap *abbrev_map_from_idx_table = 0;
+  DW2_AbbrevMap **abbrev_map_from_unit_idx_table = 0;
+  ProfScope("gather deduplicated .debug_abbrev offsets") if(lane_idx() == 0)
+  {
+    AbbrevOffNode *abbrev_off_first = 0;
+    AbbrevOffNode *abbrev_off_last = 0;
+    abbrev_off_slots = push_array(scratch.arena, AbbrevOffNode *, abbrev_off_slots_count);
+    for EachIndex(unit_idx, unit_headers_count)
+    {
+      U64 abbrev_off = unit_headers[unit_idx].abbrev_off;
+      U64 hash = u64_hash_from_str8(str8_struct(&abbrev_off));
+      U64 slot_idx = hash%abbrev_off_slots_count;
+      AbbrevOffNode *node = 0;
+      for(AbbrevOffNode *n = abbrev_off_slots[slot_idx]; n != 0; n = n->hash_next)
+      {
+        if(n->off == abbrev_off)
+        {
+          node = n;
+          break;
+        }
+      }
+      if(node == 0)
+      {
+        node = push_array(arena, AbbrevOffNode, 1);
+        SLLStackPush_N(abbrev_off_slots[slot_idx], node, hash_next);
+        SLLQueuePush_N(abbrev_off_first, abbrev_off_last, node, order_next);
+        node->off = abbrev_off;
+        node->idx = abbrev_map_count;
+        abbrev_map_count += 1;
+      }
+    }
+    abbrev_map_off_from_idx_table = push_array(scratch.arena, U64, abbrev_map_count);
+    abbrev_map_from_idx_table = push_array(arena, DW2_AbbrevMap, abbrev_map_count);
+    abbrev_map_from_unit_idx_table = push_array(arena, DW2_AbbrevMap *, unit_headers_count);
+    {
+      U64 abbrev_map_idx = 0;
+      for(AbbrevOffNode *n = abbrev_off_first; n != 0; n = n->order_next)
+      {
+        abbrev_map_off_from_idx_table[abbrev_map_idx] = n->off;
+        abbrev_map_idx += 1;
+      }
+    }
+  }
+  lane_sync_u64(&abbrev_off_slots, 0);
+  lane_sync_u64(&abbrev_map_count, 0);
+  lane_sync_u64(&abbrev_map_off_from_idx_table, 0);
+  lane_sync_u64(&abbrev_map_from_idx_table, 0);
+  lane_sync_u64(&abbrev_map_from_unit_idx_table, 0);
+  
+  //- rjf: build all unique abbreviation maps
+  ProfScope("build all unique abbreviation maps")
+  {
+    U64 abbrev_map_take_idx = 0;
+    U64 *abbrev_map_take_idx_ptr = &abbrev_map_take_idx;
+    lane_sync_u64(&abbrev_map_take_idx_ptr, 0);
+    for(;;)
+    {
+      U64 abbrev_map_idx = ins_atomic_u64_inc_eval(abbrev_map_take_idx_ptr) - 1;
+      if(abbrev_map_idx >= abbrev_map_count)
+      {
+        break;
+      }
+      abbrev_map_from_idx_table[abbrev_map_idx] = dw2_abbrev_map_from_data(arena, data, abbrev_map_off_from_idx_table[abbrev_map_idx]);
+    }
+    lane_sync();
+  }
+  
+  //- rjf: build unit -> abbrev map table
+  ProfScope("build unit -> abbrev map table")
+  {
+    Rng1U64 range = lane_range(unit_headers_count);
+    for EachInRange(unit_idx, range)
+    {
+      U64 abbrev_off = unit_headers[unit_idx].abbrev_off;
+      U64 hash = u64_hash_from_str8(str8_struct(&abbrev_off));
+      U64 slot_idx = hash%abbrev_off_slots_count;
+      U64 abbrev_map_idx = 0;
+      for(AbbrevOffNode *n = abbrev_off_slots[slot_idx]; n != 0; n = n->hash_next)
+      {
+        if(n->off == abbrev_off)
+        {
+          abbrev_map_idx = n->idx;
+          break;
+        }
+      }
+      abbrev_map_from_unit_idx_table[unit_idx] = &abbrev_map_from_idx_table[abbrev_map_idx];
+    }
+    lane_sync();
+  }
+  
+  //- rjf: fill result
+  result.map_count = abbrev_map_count;
+  result.map_from_idx_table = abbrev_map_from_idx_table;
+  result.map_from_unit_idx_table = abbrev_map_from_unit_idx_table;
+  
+  scratch_end(scratch);
+  return result;
+}
+
 ////////////////////////////////
 //~ rjf: Form Value Parsing
 
 internal U64
-dw2_read_form_val(DW2_ParseCtx *ctx, String8 data, U64 off, DW_FormKind form_kind, U64 implicit_const, DW2_FormVal *out)
+dw2_read_form_val(DW_Raw *raw, DW2_ParseCtx *ctx, String8 data, U64 off, DW_FormKind form_kind, U64 implicit_const, DW2_FormVal *out)
 {
   U64 start_off = off;
   DW2_FormVal val = {form_kind};
@@ -291,60 +458,60 @@ dw2_read_form_val(DW2_ParseCtx *ctx, String8 data, U64 off, DW_FormKind form_kin
     {
       //- rjf: no-ops
       default:
-      case DW_Form_Indirect:
-      case DW_Form_Null:
+      case DW_FormKind_Indirect:
+      case DW_FormKind_Null:
       {}break;
       
       //- rjf: 1-byte uint reads
-      case DW_Form_Ref1:
-      case DW_Form_Data1:
-      case DW_Form_Flag:
-      case DW_Form_Strx1:
-      case DW_Form_Addrx1:
+      case DW_FormKind_Ref1:
+      case DW_FormKind_Data1:
+      case DW_FormKind_Flag:
+      case DW_FormKind_Strx1:
+      case DW_FormKind_Addrx1:
       bytes_to_read = 1; goto read_fixed_uint;
       
       //- rjf: 2-byte uint reads
-      case DW_Form_Ref2:
-      case DW_Form_Data2:
-      case DW_Form_Strx2:
-      case DW_Form_Addrx2:
+      case DW_FormKind_Ref2:
+      case DW_FormKind_Data2:
+      case DW_FormKind_Strx2:
+      case DW_FormKind_Addrx2:
       bytes_to_read = 2; goto read_fixed_uint;
       
       //- rjf: 3-byte uint reads
-      case DW_Form_Strx3:
-      case DW_Form_Addrx3:
+      case DW_FormKind_Strx3:
+      case DW_FormKind_Addrx3:
       bytes_to_read = 3; goto read_fixed_uint;
       
       //- rjf: 4-byte uint reads
-      case DW_Form_Data4:
-      case DW_Form_Ref4:
-      case DW_Form_RefSup4:
-      case DW_Form_Strx4:
-      case DW_Form_Addrx4:
+      case DW_FormKind_Data4:
+      case DW_FormKind_Ref4:
+      case DW_FormKind_RefSup4:
+      case DW_FormKind_Strx4:
+      case DW_FormKind_Addrx4:
       bytes_to_read = 4; goto read_fixed_uint;
       
       //- rjf: 8-byte uint reads
-      case DW_Form_Data8:
-      case DW_Form_Ref8:
-      case DW_Form_RefSig8:
-      case DW_Form_RefSup8:
+      case DW_FormKind_Data8:
+      case DW_FormKind_Ref8:
+      case DW_FormKind_RefSig8:
+      case DW_FormKind_RefSup8:
       bytes_to_read = 8; goto read_fixed_uint;
       
       //- rjf: 16-byte uint reads
-      case DW_Form_Data16:
+      case DW_FormKind_Data16:
       bytes_to_read = 16; goto read_fixed_uint;
       
       //- rjf: address-sized reads
-      case DW_Form_Addr:
+      case DW_FormKind_Addr:
       bytes_to_read = ctx->addr_size; goto read_fixed_uint;
       
       //- rjf: format-defined-size reads
-      case DW_Form_RefAddr:
-      case DW_Form_SecOffset:
-      case DW_Form_LineStrp:
-      case DW_Form_Strp:
-      case DW_Form_StrpSup:
-      bytes_to_read = dw_size_from_format(ctx->format); goto read_fixed_uint;
+      case DW_FormKind_RefAddr:
+      case DW_FormKind_SecOffset:
+      case DW_FormKind_LineStrp:
+      case DW_FormKind_Strp:
+      case DW_FormKind_StrpSup:
+      bytes_to_read = dw_addr_size_from_format(ctx->format); goto read_fixed_uint;
       
       //- rjf: fixed-size uint reads
       read_fixed_uint:
@@ -353,26 +520,26 @@ dw2_read_form_val(DW2_ParseCtx *ctx, String8 data, U64 off, DW_FormKind form_kin
       }break;
       
       //- rjf: uleb128 reads
-      case DW_Form_UData:
-      case DW_Form_RefUData:
-      case DW_Form_Strx:
-      case DW_Form_Addrx:
-      case DW_Form_LocListx:
-      case DW_Form_RngListx:
+      case DW_FormKind_UData:
+      case DW_FormKind_RefUData:
+      case DW_FormKind_Strx:
+      case DW_FormKind_Addrx:
+      case DW_FormKind_LocListx:
+      case DW_FormKind_RngListx:
       {
         off += str8_deserial_read_uleb128(data, off, &val.u128.u64[0]);
       }break;
       
       //- rjf: sleb128 reads
-      case DW_Form_SData:
+      case DW_FormKind_SData:
       {
         off += str8_deserial_read_sleb128(data, off, (S64 *)(&val.u128.u64[0]));
       }break;
       
       //- rjf: fixed-size uint reads / skips
-      case DW_Form_Block1: bytes_to_read = 1; goto read_fixed_uint_and_skip;
-      case DW_Form_Block2: bytes_to_read = 2; goto read_fixed_uint_and_skip;
-      case DW_Form_Block4: bytes_to_read = 4; goto read_fixed_uint_and_skip;
+      case DW_FormKind_Block1: bytes_to_read = 1; goto read_fixed_uint_and_skip;
+      case DW_FormKind_Block2: bytes_to_read = 2; goto read_fixed_uint_and_skip;
+      case DW_FormKind_Block4: bytes_to_read = 4; goto read_fixed_uint_and_skip;
       read_fixed_uint_and_skip:
       {
         U64 size = 0;
@@ -384,7 +551,7 @@ dw2_read_form_val(DW2_ParseCtx *ctx, String8 data, U64 off, DW_FormKind form_kin
       }break;
       
       //- rjf: uleb128 read & skip
-      case DW_Form_Block:
+      case DW_FormKind_Block:
       {
         U64 size = 0;
         U64 og_read_off = off;
@@ -394,7 +561,7 @@ dw2_read_form_val(DW2_ParseCtx *ctx, String8 data, U64 off, DW_FormKind form_kin
       }break;
       
       //- rjf: strings
-      case DW_Form_String:
+      case DW_FormKind_String:
       {
         String8 string = {0};
         U64 og_read_off = off;
@@ -403,24 +570,25 @@ dw2_read_form_val(DW2_ParseCtx *ctx, String8 data, U64 off, DW_FormKind form_kin
       }break;
       
       //- rjf: implicit constants (no reading in .debug_info; value comes from .debug_abbrev)
-      case DW_Form_ImplicitConst:
+      case DW_FormKind_ImplicitConst:
       {
         val.u128.u64[0] = implicit_const;
       }break;
       
       //- rjf: exprloc
-      case DW_Form_ExprLoc:
+      case DW_FormKind_ExprLoc:
       {
         U64 size = 0;
         U64 og_read_off = off;
         U64 bytes_read = str8_deserial_read_uleb128(data, off, &size);
         val.u128.u64[0] = og_read_off + bytes_read;
         val.u128.u64[1] = size;
+        val.string = str8_substr(data, r1u64(og_read_off, og_read_off+size));
         off += size + bytes_read;
       }break;
       
       //- rjf: flag present
-      case DW_Form_FlagPresent:
+      case DW_FormKind_FlagPresent:
       {
         val.u128.u64[0] = 1;
       }break;
@@ -431,32 +599,32 @@ dw2_read_form_val(DW2_ParseCtx *ctx, String8 data, U64 off, DW_FormKind form_kin
       switch(form_kind)
       {
         default:{}break;
-        case DW_Form_Strx1:
-        case DW_Form_Strx2:
-        case DW_Form_Strx3:
-        case DW_Form_Strx4:
-        case DW_Form_Strx:
+        case DW_FormKind_Strx1:
+        case DW_FormKind_Strx2:
+        case DW_FormKind_Strx3:
+        case DW_FormKind_Strx4:
+        case DW_FormKind_Strx:
         if(ctx->str_offsets_table != 0)
         {
           U64 entry_idx = val.u128.u64[0];
           U64 string_data_off = 0;
           if(dw2_try_offset_from_table_idx(ctx->str_offsets_table, entry_idx, &string_data_off))
           {
-            String8 string_section_data = ctx->raw->sec[DW_Section_Str].data;
+            String8 string_section_data = raw->sec[DW_SectionKind_Str].data;
             val.string = str8_cstring_capped(string_section_data.str + string_data_off,
                                              string_section_data.str + string_section_data.size);
           }
         }break;
-        case DW_Form_LineStrp:
+        case DW_FormKind_LineStrp:
         {
-          String8 string_section_data = ctx->raw->sec[DW_Section_LineStr].data;
+          String8 string_section_data = raw->sec[DW_SectionKind_LineStr].data;
           val.string = str8_cstring_capped(string_section_data.str + val.u128.u64[0],
                                            string_section_data.str + string_section_data.size);
         }break;
-        case DW_Form_Strp:
-        case DW_Form_StrpSup:
+        case DW_FormKind_Strp:
+        case DW_FormKind_StrpSup:
         {
-          String8 string_section_data = ctx->raw->sec[DW_Section_Str].data;
+          String8 string_section_data = raw->sec[DW_SectionKind_Str].data;
           val.string = str8_cstring_capped(string_section_data.str + val.u128.u64[0],
                                            string_section_data.str + string_section_data.size);
         }break;
@@ -468,11 +636,11 @@ dw2_read_form_val(DW2_ParseCtx *ctx, String8 data, U64 off, DW_FormKind form_kin
       switch(form_kind)
       {
         default:{val.addr = val.u128.u64[0];}break;
-        case DW_Form_Addrx:
-        case DW_Form_Addrx1:
-        case DW_Form_Addrx2:
-        case DW_Form_Addrx3:
-        case DW_Form_Addrx4:
+        case DW_FormKind_Addrx:
+        case DW_FormKind_Addrx1:
+        case DW_FormKind_Addrx2:
+        case DW_FormKind_Addrx3:
+        case DW_FormKind_Addrx4:
         if(ctx->addr_table != 0)
         {
           U64 addr_idx = val.u128.u64[0];
@@ -487,10 +655,113 @@ dw2_read_form_val(DW2_ParseCtx *ctx, String8 data, U64 off, DW_FormKind form_kin
 }
 
 ////////////////////////////////
+//~ rjf: Parse Context Construction
+
+internal void
+dw2_parse_ctx_equip_unit_header(DW2_ParseCtx *ctx_out, DW2_UnitHeader *hdr, U64 unit_base_info_off)
+{
+  ctx_out->version            = hdr->version;
+  ctx_out->format             = hdr->format;
+  ctx_out->addr_size          = hdr->addr_size;
+  ctx_out->unit_base_info_off = unit_base_info_off;
+}
+
+internal void
+dw2_parse_ctx_equip_unit_abbrev_map(DW2_ParseCtx *ctx_out, DW2_UnitAbbrevMapMap *map, U64 unit_idx)
+{
+  ctx_out->abbrev_map = map->map_from_unit_idx_table[unit_idx];
+}
+
+internal void
+dw2_parse_ctx_equip_unit_root_tag(DW2_ParseCtx *ctx_out, DW2_Tag *tag, DW2_OffsetTableSet *offset_tables)
+{
+  // rjf: unpack attributes
+  DW2_Attrib *low_pc_attrib = &dw2_attrib_nil;
+  DW2_Attrib *lang_attrib = &dw2_attrib_nil;
+  DW2_Attrib *rnglists_base_off_attrib = &dw2_attrib_nil;
+  DW2_Attrib *str_offsets_base_off_attrib = &dw2_attrib_nil;
+  DW2_Attrib *addr_base_off_attrib = &dw2_attrib_nil;
+  DW2_Attrib *loclist_base_off_attrib = &dw2_attrib_nil;
+  DW2_Attrib *comp_dir_attrib = &dw2_attrib_nil;
+  for EachNode(n, DW2_AttribNode, tag->attribs.first)
+  {
+    switch(n->v.attrib_kind)
+    {
+      default:{}break;
+#define Case(name, name_upper) case DW_AttribKind_##name_upper:{name##_attrib = &n->v;}break
+      Case(low_pc,               LowPc);
+      Case(lang,                 Language);
+      Case(rnglists_base_off,    RngListsBase);
+      Case(str_offsets_base_off, StrOffsetsBase);
+      Case(addr_base_off,        AddrBase);
+      Case(loclist_base_off,     LocListsBase);
+      Case(comp_dir,             CompDir);
+#undef Case
+    }
+  }
+  
+  // rjf: fill basics
+  ctx_out->unit_base_addr = low_pc_attrib->val.addr;
+  ctx_out->language = lang_attrib->val.u128.u64[0];
+  ctx_out->unit_dir = comp_dir_attrib->val.string;
+  
+  // rjf: find offset tables
+  Rng1U64Array rnglists_tables_ranges_array = {offset_tables->rnglists_tables_ranges, offset_tables->rnglists_tables_count};
+  Rng1U64Array str_offsets_tables_ranges_array = {offset_tables->str_offsets_tables_ranges, offset_tables->str_offsets_tables_count};
+  Rng1U64Array addr_tables_ranges_array = {offset_tables->addr_tables_ranges, offset_tables->addr_tables_count};
+  Rng1U64Array loclist_tables_ranges_array = {offset_tables->loclists_tables_ranges, offset_tables->loclists_tables_count};
+  {
+    // rjf: find rnglists table
+    {
+      U64 rnglists_base_off = rnglists_base_off_attrib->val.u128.u64[0];
+      U64 rnglists_table_num = rng1u64_array_num_from_value__binary_search(&rnglists_tables_ranges_array, rnglists_base_off);
+      if(0 < rnglists_table_num && rnglists_table_num <= rnglists_tables_ranges_array.count)
+      {
+        DW2_OffsetTable *table = &offset_tables->rnglists_tables[rnglists_table_num-1];
+        ctx_out->rnglists_table = table;
+      }
+    }
+    
+    // rjf: find str offsets table
+    {
+      U64 str_offsets_base_off = str_offsets_base_off_attrib->val.u128.u64[0];
+      U64 str_offsets_table_num = rng1u64_array_num_from_value__binary_search(&str_offsets_tables_ranges_array, str_offsets_base_off);
+      if(0 < str_offsets_table_num && str_offsets_table_num <= str_offsets_tables_ranges_array.count)
+      {
+        DW2_OffsetTable *table = &offset_tables->str_offsets_tables[str_offsets_table_num-1];
+        ctx_out->str_offsets_table = table;
+      }
+    }
+    
+    // rjf: find addr table
+    {
+      U64 addr_base_off = addr_base_off_attrib->val.u128.u64[0];
+      U64 addr_table_num = rng1u64_array_num_from_value__binary_search(&addr_tables_ranges_array, addr_base_off);
+      if(0 < addr_table_num && addr_table_num <= addr_tables_ranges_array.count)
+      {
+        DW2_OffsetTable *table = &offset_tables->addr_tables[addr_table_num-1];
+        ctx_out->addr_table = table;
+      }
+    }
+    
+    // rjf: find loclists table
+    {
+      U64 loclist_base_off = loclist_base_off_attrib->val.u128.u64[0];
+      U64 loclist_table_num = rng1u64_array_num_from_value__binary_search(&loclist_tables_ranges_array, loclist_base_off);
+      if(0 < loclist_table_num && loclist_table_num <= loclist_tables_ranges_array.count)
+      {
+        DW2_OffsetTable *table = &offset_tables->loclists_tables[loclist_table_num-1];
+        ctx_out->loclists_table = table;
+      }
+    }
+  }
+}
+
+////////////////////////////////
 //~ rjf: Tag Parsing
 
 internal U64
-dw2_read_tag(Arena *arena, DW2_ParseCtx *ctx, String8 data, U64 off, DW2_Tag *tag_out)
+dw2_read_tag(Arena *arena, DW_Raw *raw, DW2_ParseCtx *ctx, String8 data, U64 off, DW2_Tag *tag_out)
 {
   U64 start_off = off;
   
@@ -519,7 +790,7 @@ dw2_read_tag(Arena *arena, DW2_ParseCtx *ctx, String8 data, U64 off, DW2_Tag *ta
   U8 has_children = 0;
   U64 attrib_abbrev_read_off = 0;
   {
-    String8 abbrev_data = ctx->raw->sec[DW_Section_Abbrev].data;
+    String8 abbrev_data = raw->sec[DW_SectionKind_Abbrev].data;
     U64 abbrev_read_off = abbrev_off;
     U64 id = 0;
     abbrev_read_off += str8_deserial_read_uleb128(abbrev_data, abbrev_read_off, &id);
@@ -535,7 +806,7 @@ dw2_read_tag(Arena *arena, DW2_ParseCtx *ctx, String8 data, U64 off, DW2_Tag *ta
   DW2_AttribList attribs = {0};
   if(abbrev_id != 0)
   {
-    String8 abbrev_data = ctx->raw->sec[DW_Section_Abbrev].data;
+    String8 abbrev_data = raw->sec[DW_SectionKind_Abbrev].data;
     U64 abbrev_read_off = attrib_abbrev_read_off;
     for(;;)
     {
@@ -547,13 +818,13 @@ dw2_read_tag(Arena *arena, DW2_ParseCtx *ctx, String8 data, U64 off, DW2_Tag *ta
       U64 implicit_const = 0;
       abbrev_read_off += str8_deserial_read_uleb128(abbrev_data, abbrev_read_off, &attrib_kind);
       abbrev_read_off += str8_deserial_read_uleb128(abbrev_data, abbrev_read_off, &attrib_form_kind);
-      if(attrib_form_kind == DW_Form_ImplicitConst)
+      if(attrib_form_kind == DW_FormKind_ImplicitConst)
       {
         abbrev_read_off += str8_deserial_read_uleb128(abbrev_data, abbrev_read_off, &implicit_const);
       }
       
       // rjf: indirect form -> form kind is encoded in .debug_info (because why not)
-      if(attrib_form_kind == DW_Form_Indirect)
+      if(attrib_form_kind == DW_FormKind_Indirect)
       {
         off += str8_deserial_read_uleb128(data, off, &attrib_form_kind);
       }
@@ -562,7 +833,7 @@ dw2_read_tag(Arena *arena, DW2_ParseCtx *ctx, String8 data, U64 off, DW2_Tag *ta
       DW2_FormVal val = {0};
       if(attrib_kind != 0)
       {
-        off += dw2_read_form_val(ctx, data, off, attrib_form_kind, implicit_const, &val);
+        off += dw2_read_form_val(raw, ctx, data, off, attrib_form_kind, implicit_const, &val);
       }
       
       // rjf: push
@@ -615,14 +886,14 @@ dw2_reference_info_off_from_form_val(DW2_ParseCtx *ctx, DW2_FormVal *v)
   switch(v->kind)
   {
     default:{}break;
-    case DW_Form_Ref1:
-    case DW_Form_Ref2:
-    case DW_Form_Ref4:
-    case DW_Form_Ref8:
+    case DW_FormKind_Ref1:
+    case DW_FormKind_Ref2:
+    case DW_FormKind_Ref4:
+    case DW_FormKind_Ref8:
     {
       result = ctx->unit_base_info_off + v->u128.u64[0];
     }break;
-    // TODO(rjf): DW_Form_RefAddr, DW_Form_RefUData, DW_Form_RefSig8, DW_Form_RefSup8, etc.
+    // TODO(rjf): DW_FormKind_RefAddr, DW_FormKind_RefUData, DW_FormKind_RefSig8, DW_FormKind_RefSup8, etc.
   }
   return result;
 }
@@ -631,7 +902,7 @@ dw2_reference_info_off_from_form_val(DW2_ParseCtx *ctx, DW2_FormVal *v)
 //~ rjf: Line Table Parsing
 
 internal U64
-dw2_read_line_table_header(Arena *arena, DW2_ParseCtx *ctx, String8 data, U64 off, DW2_LineTableHeader *out)
+dw2_read_line_table_header(Arena *arena, DW_Raw *raw, DW2_ParseCtx *ctx, String8 data, U64 off, DW2_LineTableHeader *out)
 {
   Temp scratch = scratch_begin(&arena, 1);
   U64 start_off = off;
@@ -847,7 +1118,7 @@ dw2_read_line_table_header(Arena *arena, DW2_ParseCtx *ctx, String8 data, U64 of
               DW_LNCT lnct          =     (DW_LNCT)entry_formats[entry_format_idx*2 + 0];
               DW_FormKind form_kind = (DW_FormKind)entry_formats[entry_format_idx*2 + 1];
               DW2_FormVal form_val = {0};
-              off += dw2_read_form_val(ctx, data, off, form_kind, 0, &form_val);
+              off += dw2_read_form_val(raw, ctx, data, off, form_kind, 0, &form_val);
               switch(lnct)
               {
                 default:
@@ -952,7 +1223,7 @@ dw2_read_offset_table(String8 data, U64 off, DW2_OffsetTable *out)
       off += str8_deserial_read_struct(data, off, &segment_selector_size);
       
       // rjf: determine entry size
-      U64 entry_size = dw_size_from_format(format);
+      U64 entry_size = dw_addr_size_from_format(format);
       if(addr_size != 0)
       {
         entry_size = addr_size + segment_selector_size;
@@ -973,6 +1244,31 @@ dw2_read_offset_table(String8 data, U64 off, DW2_OffsetTable *out)
   }
   U64 bytes_read = (off - start_off);
   return bytes_read;
+}
+
+internal DW2_OffsetTableList
+dw2_offset_table_list_from_data(Arena *arena, String8 data)
+{
+  DW2_OffsetTableList list = {0};
+  for(U64 off = 0; off < data.size;)
+  {
+    U64 start_off = off;
+    DW2_OffsetTable table = {0};
+    off += dw2_read_offset_table(data, off, &table);
+    if(table.entries != 0)
+    {
+      DW2_OffsetTableNode *n = push_array(arena, DW2_OffsetTableNode, 1);
+      SLLQueuePush(list.first, list.last, n);
+      n->v = table;
+      n->range = r1u64(start_off, off);
+      list.count += 1;
+    }
+    if(off == start_off)
+    {
+      break;
+    }
+  }
+  return list;
 }
 
 internal B32
@@ -1003,6 +1299,48 @@ dw2_try_offset_from_table_idx(DW2_OffsetTable *tbl, U64 idx, U64 *out)
   return result;
 }
 
+internal DW2_OffsetTableSet
+dw2_offset_table_set_from_raw(Arena *arena, DW_Raw *raw)
+{
+  DW2_OffsetTableSet result = {0};
+  {
+    struct
+    {
+      String8 data;
+      U64 *tables_count_out;
+      DW2_OffsetTable **tables_out;
+      Rng1U64 **tables_ranges_out;
+    }
+    tasks[] =
+    {
+      {raw->sec[DW_SectionKind_StrOffsets].data, &result.str_offsets_tables_count, &result.str_offsets_tables, &result.str_offsets_tables_ranges},
+      {raw->sec[DW_SectionKind_RngLists].data, &result.rnglists_tables_count, &result.rnglists_tables, &result.rnglists_tables_ranges},
+      {raw->sec[DW_SectionKind_Addr].data, &result.addr_tables_count, &result.addr_tables, &result.addr_tables_ranges},
+      {raw->sec[DW_SectionKind_LocLists].data, &result.loclists_tables_count, &result.loclists_tables, &result.loclists_tables_ranges},
+    };
+    for EachElement(task_idx, tasks)
+    {
+      Temp scratch = scratch_begin(&arena, 1);
+      String8 data = tasks[task_idx].data;
+      DW2_OffsetTableList tables = dw2_offset_table_list_from_data(scratch.arena, data);
+      tasks[task_idx].tables_count_out[0] = tables.count;
+      tasks[task_idx].tables_out[0] = push_array(arena, DW2_OffsetTable, tables.count);
+      tasks[task_idx].tables_ranges_out[0] = push_array(arena, Rng1U64, tables.count);
+      {
+        U64 idx = 0;
+        for EachNode(n, DW2_OffsetTableNode, tables.first)
+        {
+          tasks[task_idx].tables_out[0][idx] = n->v;
+          tasks[task_idx].tables_ranges_out[0][idx] = n->range;
+          idx += 1;
+        }
+      }
+      scratch_end(scratch);
+    }
+  }
+  return result;
+}
+
 ////////////////////////////////
 //~ rjf: Range List Parsing (.debug_rnglists)
 
@@ -1020,7 +1358,7 @@ dw2_rnglist_from_form_val(Arena *arena, DW2_ParseCtx *ctx, DW_Raw *raw, DW2_Form
     case DW_Version_3:
     case DW_Version_4:
     {
-      String8 data = raw->sec[DW_Section_Ranges].data;
+      String8 data = raw->sec[DW_SectionKind_Ranges].data;
       U64 ranges_off = ranges_off = form_val.u128.u64[0];;
       U64 base_addr = ctx->unit_base_addr;
       U64 sentinel = (ctx->addr_size == 4 ? max_U32 : max_U64);
@@ -1063,7 +1401,7 @@ dw2_rnglist_from_form_val(Arena *arena, DW2_ParseCtx *ctx, DW_Raw *raw, DW2_Form
     //- rjf: @dwarf5
     case DW_Version_5:
     {
-      String8 data = raw->sec[DW_Section_RngLists].data;
+      String8 data = raw->sec[DW_SectionKind_RngLists].data;
       
       // rjf: determine section offset - sometimes this is encoded directly,
       // other times it is relative, based on the form kind - more variability
@@ -1072,11 +1410,11 @@ dw2_rnglist_from_form_val(Arena *arena, DW2_ParseCtx *ctx, DW_Raw *raw, DW2_Form
       switch(form_val.kind)
       {
         default:{}break;
-        case DW_Form_SecOffset:
+        case DW_FormKind_SecOffset:
         {
           rnglist_off = form_val.u128.u64[0];
         }break;
-        case DW_Form_RngListx:
+        case DW_FormKind_RngListx:
         if(ctx->rnglists_table != 0)
         {
           U64 rnglist_off_idx = form_val.u128.u64[0];
@@ -1219,7 +1557,7 @@ dw2_loclist_from_form_val(Arena *arena, DW2_ParseCtx *ctx, DW_Raw *raw, DW2_Form
     case DW_Version_3:
     case DW_Version_4:
     {
-      String8 data = raw->sec[DW_Section_Loc].data;
+      String8 data = raw->sec[DW_SectionKind_Loc].data;
       U64 locs_off = locs_off = form_val.u128.u64[0];
       U64 base_addr = ctx->unit_base_addr;
       U64 sentinel = (ctx->addr_size == 4 ? max_U32 : max_U64);
@@ -1269,7 +1607,7 @@ dw2_loclist_from_form_val(Arena *arena, DW2_ParseCtx *ctx, DW_Raw *raw, DW2_Form
     //- rjf: @dwarf5
     case DW_Version_5:
     {
-      String8 data = raw->sec[DW_Section_LocLists].data;
+      String8 data = raw->sec[DW_SectionKind_LocLists].data;
       
       // rjf: determine section offset - sometimes this is encoded directly,
       // other times it is relative, based on the form kind - more variability
@@ -1278,11 +1616,11 @@ dw2_loclist_from_form_val(Arena *arena, DW2_ParseCtx *ctx, DW_Raw *raw, DW2_Form
       switch(form_val.kind)
       {
         default:{}break;
-        case DW_Form_SecOffset:
+        case DW_FormKind_SecOffset:
         {
           loclist_off = form_val.u128.u64[0];
         }break;
-        case DW_Form_LocListx:
+        case DW_FormKind_LocListx:
         if(ctx->rnglists_table != 0)
         {
           U64 loclist_off_idx = form_val.u128.u64[0];
@@ -1422,6 +1760,157 @@ dw2_loclist_from_form_val(Arena *arena, DW2_ParseCtx *ctx, DW_Raw *raw, DW2_Form
         }
       }
     }break;
+  }
+  return result;
+}
+
+////////////////////////////////
+//~ rjf: Unwind Info Parsing (.debug_frame)
+
+internal U64
+dw2_read_cfi_header(String8 data, U64 off, DW_CFIHeader *cfi_header_out)
+{
+  U64 start_off = off;
+  
+  // rjf: read length / format
+  U64 length = 0;
+  DW_Format fmt = DW_Format_Null;
+  U64 length_size = dw2_read_initial_length(data, off, &length, &fmt);
+  
+  // rjf: find entry info, read ID
+  Rng1U64 entry_range = r1u64(off, off + length_size + length);
+  String8 entry_data  = str8_substr(data, entry_range);
+  U64 id = 0;
+  U64 id_size = dw2_read_fmt_u64(entry_data, length_size, fmt, &id);
+  
+  // rjf: fill
+  cfi_header_out->kind            = ((fmt == DW_Format_32Bit && id == max_U32) || (fmt == DW_Format_64Bit && id == max_U64)) ? DW_CFIKind_CIE : DW_CFIKind_FDE;
+  cfi_header_out->fmt             = fmt;
+  cfi_header_out->entry_range     = entry_range;
+  cfi_header_out->cie_pointer     = id;
+  cfi_header_out->cie_pointer_off = off + length_size;
+  
+  U64 bytes_read = (off - start_off);
+  return bytes_read;
+}
+
+internal U64
+dw2_read_cie(String8 data, U64 off, DW_Format fmt, Arch arch, DW_CIE *cie_out)
+{
+  U64 start_off = off;
+  
+  // rjf: read id
+  U64 id = 0;
+  off += dw2_read_fmt_u64(data, off, fmt, &id);
+  
+  // rjf: read version
+  U8 version = 0;
+  off += str8_deserial_read_struct(data, off, &version);
+  
+  // rjf: read aug string
+  String8 aug_string = {0};
+  U64 aug_string_off = off;
+  off += str8_deserial_read_cstr(data, off, &aug_string);
+  U64 aug_string_off_opl = off;
+  
+  // rjf: read address/segment-selector size
+  U8 address_size = 0;
+  U8 segment_selector_size = 0;
+  if(version >= DW_Version_4)
+  {
+    off += str8_deserial_read_struct(data, off, &address_size);
+    off += str8_deserial_read_struct(data, off, &segment_selector_size);
+  }
+  else
+  {
+    address_size = byte_size_from_arch(arch);
+  }
+  
+  // rjf: read alignments
+  U64 code_align_factor = 0;
+  U64 data_align_factor = 0;
+  off += str8_deserial_read_uleb128(data, off, &code_align_factor);
+  off += str8_deserial_read_uleb128(data, off, &data_align_factor);
+  
+  // rjf: read return address register encoding
+  U64 ret_addr_reg = 0;
+  switch(version)
+  {
+    case DW_Version_1:
+    {
+      off += str8_deserial_read(data, off, &ret_addr_reg, 1, 1);
+    }break;
+    default:
+    {
+      off += str8_deserial_read_uleb128(data, off, &ret_addr_reg);
+    }break;
+  }
+  
+  // rjf: fill output
+  {
+    cie_out->aug_string_range      = r1u64(aug_string_off, aug_string_off_opl);
+    cie_out->code_align_factor     = code_align_factor;
+    cie_out->data_align_factor     = data_align_factor;
+    cie_out->ret_addr_reg          = ret_addr_reg;
+    cie_out->format                = fmt;
+    cie_out->version               = version;
+    cie_out->address_size          = address_size;
+    cie_out->segment_selector_size = segment_selector_size;
+  }
+  
+  U64 bytes_read = (off - start_off);
+  return bytes_read;
+}
+
+internal U64
+dw2_read_fde(String8 data, U64 off, DW_Format fmt, Arch arch, DW_CIE *cie, DW_FDE *fde_out)
+{
+  U64 start_off = off;
+  
+  // rjf: skip format-dependent prefix
+  off += (fmt == DW_Format_32Bit) ? 4 : 12;
+  
+  // rjf: read cie ptr
+  U64 cie_ptr = 0;
+  off += dw2_read_fmt_u64(data, off, fmt, &cie_ptr);
+  
+  // rjf: read address of first instruction
+  U64 pc_begin = 0;
+  off += str8_deserial_read(data, off, &pc_begin, cie->address_size, cie->address_size);
+  
+  // rjf: read instruction range size
+  U64 pc_range_size = 0;
+  off += str8_deserial_read(data, off, &pc_range_size, cie->address_size, cie->address_size);
+  
+  // rjf: skip aug data
+  off += dim_1u64(cie->aug_string_range);
+  
+  // rjf: fill output
+  fde_out->cie_pointer = cie_ptr;
+  fde_out->pc_range = r1u64(pc_begin, pc_begin + pc_range_size);
+  
+  U64 bytes_read = (off - start_off);
+  return bytes_read;
+}
+
+internal B32
+dw2_try_cfi_from_data(String8 data, U64 off, Arch arch, DW_CIE *cie_out, DW_FDE *fde_out)
+{
+  B32 result = 0;
+  {
+    DW_CFIHeader fde_header = {0};
+    off += dw2_read_cfi_header(data, off, &fde_header);
+    if(fde_header.kind == DW_CFIKind_FDE)
+    {
+      DW_CFIHeader cie_header = {0};
+      dw2_read_cfi_header(data, fde_header.cie_pointer, &cie_header);
+      if(cie_header.kind == DW_CFIKind_CIE)
+      {
+        result = 1;
+        dw2_read_cie(data, cie_header.entry_range.min, cie_header.fmt, arch, cie_out);
+        dw2_read_fde(data, fde_header.entry_range.min, fde_header.fmt, arch, cie_out, fde_out);
+      }
+    }
   }
   return result;
 }

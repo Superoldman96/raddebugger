@@ -1217,6 +1217,50 @@ w32_dmn_thread_write_reg_block(Arch arch, HANDLE thread, void *reg_block)
   return result;
 }
 
+internal U64
+w32_dmn_thread_stack_base_vaddr_from_tlb_vaddr(HANDLE process, Arch arch, U64 tlb_vaddr)
+{
+  U64 stack_base_vaddr = 0;
+  {
+    switch(arch)
+    {
+      case Arch_Null:
+      case Arch_COUNT:
+      case Arch_arm64:
+      case Arch_arm32:
+      case Arch_x86:
+      {}break;
+      case Arch_x64:
+      {
+        U64 stack_base_vaddr = tlb_vaddr + 0x8;
+        w32_dmn_process_read(process, r1u64(stack_base_vaddr, stack_base_vaddr+8), &stack_base_vaddr);
+      }break;
+    }
+  }
+  return stack_base_vaddr;
+}
+
+internal U64
+w32_dmn_thread_tls_root_vaddr_from_tlb_vaddr(Arch arch, U64 tlb_vaddr)
+{
+  U64 result = 0;
+  switch(arch)
+  {
+    case Arch_Null:
+    case Arch_COUNT:
+    {}break;
+    case Arch_arm64:
+    case Arch_arm32:
+    case Arch_x86:
+    {}break;
+    case Arch_x64:
+    {
+      result = tlb_vaddr + 88;
+    }break;
+  }
+  return result;
+}
+
 //- rjf: remote thread injection
 
 internal DWORD
@@ -2066,6 +2110,10 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
                 thread->thread.thread_local_base = tls_base;
               }
               
+              // rjf: unpack thread addresses
+              U64 stack_base_vaddr = w32_dmn_thread_stack_base_vaddr_from_tlb_vaddr(process_handle, module_info->arch, tls_base);
+              U64 tls_root_vaddr = w32_dmn_thread_tls_root_vaddr_from_tlb_vaddr(module_info->arch, tls_base);
+              
               // rjf: put thread into suspended state, so it matches expected initial state
               SuspendThread(thread_handle);
               
@@ -2096,11 +2144,13 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
                 // rjf: create thread
                 {
                   DMN_Event *e = dmn_event_list_push(arena, &events);
-                  e->kind    = DMN_EventKind_CreateThread;
-                  e->process = w32_dmn_handle_from_entity(process);
-                  e->thread  = w32_dmn_handle_from_entity(thread);
-                  e->arch    = module_info->arch;
-                  e->code    = evt.dwThreadId;
+                  e->kind          = DMN_EventKind_CreateThread;
+                  e->process       = w32_dmn_handle_from_entity(process);
+                  e->thread        = w32_dmn_handle_from_entity(thread);
+                  e->arch          = module_info->arch;
+                  e->code          = evt.dwThreadId;
+                  e->stack_pointer = stack_base_vaddr;
+                  e->tls_root_vaddr= tls_root_vaddr;
                 }
                 
                 // rjf: load module
@@ -2192,6 +2242,10 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
               DWORD sus_result = SuspendThread(thread->handle);
               (void)sus_result;
               
+              // rjf: unpack thread addresses
+              U64 stack_base_vaddr = w32_dmn_thread_stack_base_vaddr_from_tlb_vaddr(process->handle, thread->arch, (U64)evt.u.CreateThread.lpThreadLocalBase);
+              U64 tls_root_vaddr = w32_dmn_thread_tls_root_vaddr_from_tlb_vaddr(thread->arch, (U64)evt.u.CreateThread.lpThreadLocalBase);
+              
               // rjf: unpack thread name
               String8 thread_name = {0};
               if(w32_dmn_GetThreadDescription != 0)
@@ -2213,11 +2267,13 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
               {
                 DMN_Event *e = dmn_event_list_push(arena, &events);
                 e->kind = DMN_EventKind_CreateThread;
-                e->process = w32_dmn_handle_from_entity(process);
-                e->thread  = w32_dmn_handle_from_entity(thread);
-                e->arch    = thread->arch;
-                e->code    = evt.dwThreadId;
-                e->string  = thread_name;
+                e->process        = w32_dmn_handle_from_entity(process);
+                e->thread         = w32_dmn_handle_from_entity(thread);
+                e->arch           = thread->arch;
+                e->code           = evt.dwThreadId;
+                e->string         = thread_name;
+                e->stack_pointer  = stack_base_vaddr;
+                e->tls_root_vaddr = tls_root_vaddr;
               }
             }break;
             
@@ -3207,78 +3263,6 @@ dmn_process_write(DMN_Handle process, Rng1U64 range, void *src)
 
 //- rjf: threads
 
-internal Arch
-dmn_arch_from_thread(DMN_Handle handle)
-{
-  Arch arch = Arch_Null;
-  DMN_AccessScope
-  {
-    W32_DMN_Entity *entity = w32_dmn_entity_from_handle(handle);
-    arch = entity->arch;
-  }
-  return arch;
-}
-
-internal U64
-dmn_stack_base_vaddr_from_thread(DMN_Handle handle)
-{
-  U64 result = 0;
-  DMN_AccessScope
-  {
-    W32_DMN_Entity *thread = w32_dmn_entity_from_handle(handle);
-    if(thread->kind == W32_DMN_EntityKind_Thread)
-    {
-      W32_DMN_Entity *process = thread->parent;
-      U64 tlb = thread->thread.thread_local_base;
-      switch(thread->arch)
-      {
-        case Arch_Null:
-        case Arch_COUNT:
-        {}break;
-        case Arch_arm64:
-        case Arch_arm32:
-        case Arch_x86:
-        {NotImplemented;}break;
-        case Arch_x64:
-        {
-          U64 stack_base_addr = tlb + 0x8;
-          w32_dmn_process_read(process->handle, r1u64(stack_base_addr, stack_base_addr+8), &result);
-        }break;
-      }
-    }
-  }
-  return result;
-}
-
-internal U64
-dmn_tls_root_vaddr_from_thread(DMN_Handle handle)
-{
-  U64 result = 0;
-  DMN_AccessScope
-  {
-    W32_DMN_Entity *entity = w32_dmn_entity_from_handle(handle);
-    if(entity->kind == W32_DMN_EntityKind_Thread)
-    {
-      result = entity->thread.thread_local_base;
-      switch(entity->arch)
-      {
-        case Arch_Null:
-        case Arch_COUNT:
-        {}break;
-        case Arch_arm64:
-        case Arch_arm32:
-        case Arch_x86:
-        {NotImplemented;}break;
-        case Arch_x64:
-        {
-          result += 88;
-        }break;
-      }
-    }
-  }
-  return result;
-}
-
 internal B32
 dmn_thread_read_reg_block(DMN_Handle handle, void *reg_block)
 {
@@ -3299,6 +3283,31 @@ dmn_thread_write_reg_block(DMN_Handle handle, void *reg_block)
   {
     W32_DMN_Entity *thread = w32_dmn_entity_from_handle(handle);
     result = w32_dmn_thread_write_reg_block(thread->arch, thread->handle, reg_block);
+  }
+  return result;
+}
+
+internal B32
+dmn_thread_get_module_tls_vaddr(DMN_Handle thread_handle, DMN_Handle module_handle, U64 *vaddr_out)
+{
+  B32 result = 0;
+  DMN_AccessScope
+  {
+    W32_DMN_Entity *thread = w32_dmn_entity_from_handle(thread_handle);
+    W32_DMN_Entity *process = thread->parent;
+    W32_DMN_Entity *module = w32_dmn_entity_from_handle(module_handle);
+    Arch arch = thread->arch;
+    U64 addr_size = byte_size_from_arch(arch);
+    U64 tls_vaddr = w32_dmn_thread_tls_root_vaddr_from_tlb_vaddr(arch, thread->thread.thread_local_base);
+    U64 tls_addr_array_vaddr = 0;
+    if(w32_dmn_process_read_struct(process->handle, tls_vaddr, &tls_addr_array_vaddr) == addr_size)
+    {
+      U64 tls_ptr_vaddr = tls_addr_array_vaddr + module->module.tls_index*addr_size;
+      if(w32_dmn_process_read_struct(process->handle, tls_ptr_vaddr, vaddr_out) == addr_size)
+      {
+        result = 1;
+      }
+    }
   }
   return result;
 }

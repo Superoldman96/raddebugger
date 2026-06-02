@@ -8,8 +8,8 @@
 //~ Dump Subset Types
 
 #define EH_DumpSubset_XList                    \
-  X(EhFrameHdr, eh_frame_hdr, ".eh_frame_hdr") \
-  X(EhFrame,    eh_frame,     ".eh_frame")
+X(EhFrameHdr, eh_frame_hdr, ".eh_frame_hdr") \
+X(EhFrame,    eh_frame,     ".eh_frame")
 
 typedef enum EH_DumpSubset {
 #define X(name, name_lower, title) EH_DumpSubset_##name,

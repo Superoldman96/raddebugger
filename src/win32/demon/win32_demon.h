@@ -205,6 +205,7 @@ struct W32_DMN_Entity
     {
       Rng1U64 vaddr_range;
       U64 address_of_name_pointer;
+      U64 tls_index;
       B32 is_main;
       B32 name_is_unicode;
     }
@@ -349,6 +350,8 @@ internal DMN_ModuleInfo *w32_dmn_module_info_from_process_module(Arena *arena, H
 //- rjf: threads
 internal B32 w32_dmn_thread_read_reg_block(Arch arch, HANDLE thread, void *reg_block);
 internal B32 w32_dmn_thread_write_reg_block(Arch arch, HANDLE thread, void *reg_block);
+internal U64 w32_dmn_thread_stack_base_vaddr_from_tlb_vaddr(HANDLE process, Arch arch, U64 tlb_vaddr);
+internal U64 w32_dmn_thread_tls_root_vaddr_from_tlb_vaddr(Arch arch, U64 tlb_vaddr);
 
 //- rjf: remote thread injection
 internal DWORD w32_dmn_inject_thread(HANDLE process, U64 start_address);

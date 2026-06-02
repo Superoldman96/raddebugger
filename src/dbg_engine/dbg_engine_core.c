@@ -37,15 +37,9 @@ d_init(void)
       d_ctrl_state->thread_reg_cache.stripes[idx].arena = arena_alloc();
       d_ctrl_state->thread_reg_cache.stripes[idx].rw_mutex = rw_mutex_alloc();
     }
-    d_ctrl_state->module_image_info_cache.slots_count = 1024;
-    d_ctrl_state->module_image_info_cache.slots = push_array(arena, D_ModuleImageInfoCacheSlot, d_ctrl_state->module_image_info_cache.slots_count);
-    d_ctrl_state->module_image_info_cache.stripes_count = get_system_info()->logical_processor_count;
-    d_ctrl_state->module_image_info_cache.stripes = push_array(arena, D_ModuleImageInfoCacheStripe, d_ctrl_state->module_image_info_cache.stripes_count);
-    for(U64 idx = 0; idx < d_ctrl_state->module_image_info_cache.stripes_count; idx += 1)
-    {
-      d_ctrl_state->module_image_info_cache.stripes[idx].arena = arena_alloc();
-      d_ctrl_state->module_image_info_cache.stripes[idx].rw_mutex = rw_mutex_alloc();
-    }
+    d_ctrl_state->module_info_cache.slots_count = 1024;
+    d_ctrl_state->module_info_cache.slots = push_array(arena, D_ModuleInfoCacheSlot, d_ctrl_state->module_info_cache.slots_count);
+    d_ctrl_state->module_info_cache.stripes = stripe_array_alloc(arena);
     d_ctrl_state->u2c_ring_size = KB(64);
     d_ctrl_state->u2c_ring_base = push_array_no_zero(arena, U8, d_ctrl_state->u2c_ring_size);
     d_ctrl_state->u2c_ring_mutex = mutex_alloc();

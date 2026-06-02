@@ -97,7 +97,6 @@ struct DMN_ModuleInfo
   // rjf: unwinding info
   Rng1U64 pe_intel_pdatas_vaddr_range;
   Rng1U64 eh_frame_header_vaddr_range;
-  U64 cfi_rebase;
   
   // rjf: special raddbg data
   Rng1U64 raddbg_info_voff_range;
@@ -135,6 +134,9 @@ struct DMN_Event
   
   // rjf: module info
   DMN_ModuleInfo *module_info;
+  
+  // rjf: thread info
+  U64 tls_root_vaddr;
 };
 
 typedef struct DMN_EventNode DMN_EventNode;
@@ -291,10 +293,9 @@ internal U64 dmn_process_read(DMN_Handle process, Rng1U64 range, void *dst);
 internal B32 dmn_process_write(DMN_Handle process, Rng1U64 range, void *src);
 
 //- rjf: threads
-internal U64 dmn_stack_base_vaddr_from_thread(DMN_Handle handle);
-internal U64 dmn_tls_root_vaddr_from_thread(DMN_Handle handle);
 internal B32 dmn_thread_read_reg_block(DMN_Handle handle, void *reg_block);
 internal B32 dmn_thread_write_reg_block(DMN_Handle handle, void *reg_block);
+internal B32 dmn_thread_get_module_tls_vaddr(DMN_Handle thread, DMN_Handle module, U64 *vaddr_out);
 
 //- rjf: system process listing
 internal void dmn_process_iter_begin(DMN_ProcessIter *iter);

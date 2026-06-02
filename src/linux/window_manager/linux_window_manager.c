@@ -20,7 +20,7 @@ lnx_window_from_x11window(Window window)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Main Initialization API (Implemented Per-OS)
+//~ rjf: @per_os_impl Main Initialization API (Implemented Per-OS)
 
 internal void
 wm_init(void)
@@ -68,14 +68,14 @@ wm_init(void)
       lnx_wm_state->cursors[map[idx].cursor] = XCreateFontCursor(lnx_wm_state->display, map[idx].id);
     }
   }
-
+  
   // create wakeup event for polling
   lnx_wm_state->wakeup_fd = eventfd(0, EFD_CLOEXEC);
   Assert(lnx_wm_state->wakeup_fd > 0);
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Graphics System Info (Implemented Per-OS)
+//~ rjf: @per_os_impl Graphics System Info (Implemented Per-OS)
 
 internal WM_SystemInfo *
 wm_get_system_info(void)
@@ -84,7 +84,7 @@ wm_get_system_info(void)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Clipboards (Implemented Per-OS)
+//~ rjf: @per_os_impl Clipboards (Implemented Per-OS)
 
 internal void
 wm_set_clipboard_text(String8 string)
@@ -100,7 +100,7 @@ wm_get_clipboard_text(Arena *arena)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Windows (Implemented Per-OS)
+//~ rjf: @per_os_impl Windows (Implemented Per-OS)
 
 internal WM_Window
 wm_window_open(Rng2F32 rect, WM_WindowFlags flags, String8 title)
@@ -342,7 +342,7 @@ wm_dpi_from_window(WM_Window handle)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks External Windows (Implemented Per-OS)
+//~ rjf: @per_os_impl External Windows (Implemented Per-OS)
 
 internal WM_ExtWindow
 wm_focused_external_window(void)
@@ -359,7 +359,7 @@ wm_focus_external_window(WM_ExtWindow handle)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Monitors (Implemented Per-OS)
+//~ rjf: @per_os_impl Monitors (Implemented Per-OS)
 
 internal WM_MonitorArray
 wm_push_monitors_array(Arena *arena)
@@ -407,7 +407,7 @@ wm_dpi_from_monitor(WM_Monitor monitor)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Events (Implemented Per-OS)
+//~ rjf: @per_os_impl Events (Implemented Per-OS)
 
 internal void
 wm_send_wakeup_event(void)
@@ -448,210 +448,210 @@ wm_get_events(Arena *arena, B32 wait)
       switch(evt.type)
       {
         default:{}break;
-      
-      //- rjf: key presses/releases
-      case KeyPress:
-      case KeyRelease:
-      {
-        // rjf: determine flags
-        WM_Modifiers modifiers = 0;
-        if(evt.xkey.state & ShiftMask)   { modifiers |= WM_Modifier_Shift; }
-        if(evt.xkey.state & ControlMask) { modifiers |= WM_Modifier_Ctrl; }
-        if(evt.xkey.state & Mod1Mask)    { modifiers |= WM_Modifier_Alt; }
         
-        // rjf: map keycode -> keysym & codepoint
-        LNX_WM_Window *window = lnx_window_from_x11window(evt.xkey.window);
-        KeySym keysym = 0;
-        U8 text[256] = {0};
-        U64 text_size = Xutf8LookupString(window->xic, &evt.xkey, (char *)text, sizeof(text), &keysym, 0);
-        
-        // rjf: map keysym -> WM_Key
-        B32 is_right_sided = 0;
-        WM_Key key = WM_Key_Null;
-        switch(keysym)
+        //- rjf: key presses/releases
+        case KeyPress:
+        case KeyRelease:
         {
-          default:
+          // rjf: determine flags
+          WM_Modifiers modifiers = 0;
+          if(evt.xkey.state & ShiftMask)   { modifiers |= WM_Modifier_Shift; }
+          if(evt.xkey.state & ControlMask) { modifiers |= WM_Modifier_Ctrl; }
+          if(evt.xkey.state & Mod1Mask)    { modifiers |= WM_Modifier_Alt; }
+          
+          // rjf: map keycode -> keysym & codepoint
+          LNX_WM_Window *window = lnx_window_from_x11window(evt.xkey.window);
+          KeySym keysym = 0;
+          U8 text[256] = {0};
+          U64 text_size = Xutf8LookupString(window->xic, &evt.xkey, (char *)text, sizeof(text), &keysym, 0);
+          
+          // rjf: map keysym -> WM_Key
+          B32 is_right_sided = 0;
+          WM_Key key = WM_Key_Null;
+          switch(keysym)
           {
-            if(0){}
-            else if(XK_F1 <= keysym && keysym <= XK_F24) { key = (WM_Key)(WM_Key_F1 + (keysym - XK_F1)); }
-            else if('0' <= keysym && keysym <= '9')      { key = WM_Key_0 + (keysym-'0'); }
-          }break;
-          case XK_Escape:{key = WM_Key_Esc;};break;
-          case XK_BackSpace:{key = WM_Key_Backspace;}break;
-          case XK_Delete:{key = WM_Key_Delete;}break;
-          case XK_Return:{key = WM_Key_Return;}break;
-          case XK_Pause:{key = WM_Key_Pause;}break;
-          case XK_Tab:{key = WM_Key_Tab;}break;
-          case XK_Left:{key = WM_Key_Left;}break;
-          case XK_Right:{key = WM_Key_Right;}break;
-          case XK_Up:{key = WM_Key_Up;}break;
-          case XK_Down:{key = WM_Key_Down;}break;
-          case XK_Home:{key = WM_Key_Home;}break;
-          case XK_End:{key = WM_Key_End;}break;
-          case XK_Page_Up:{key = WM_Key_PageUp;}break;
-          case XK_Page_Down:{key = WM_Key_PageDown;}break;
-          case XK_Alt_L:{ key = WM_Key_Alt; }break;
-          case XK_Alt_R:{ key = WM_Key_Alt; is_right_sided = 1;}break;
-          case XK_Shift_L:{ key = WM_Key_Shift; }break;
-          case XK_Shift_R:{ key = WM_Key_Shift; is_right_sided = 1;}break;
-          case XK_Control_L:{ key = WM_Key_Ctrl; }break;
-          case XK_Control_R:{ key = WM_Key_Ctrl; is_right_sided = 1;}break;
-          case '-':{key = WM_Key_Minus;}break;
-          case '=':{key = WM_Key_Equal;}break;
-          case '[':{key = WM_Key_LeftBracket;}break;
-          case ']':{key = WM_Key_RightBracket;}break;
-          case ';':{key = WM_Key_Semicolon;}break;
-          case '\'':{key = WM_Key_Quote;}break;
-          case '.':{key = WM_Key_Period;}break;
-          case ',':{key = WM_Key_Comma;}break;
-          case '/':{key = WM_Key_Slash;}break;
-          case '\\':{key = WM_Key_BackSlash;}break;
-          case '\t':{key = WM_Key_Tab;}break;
-          case 'a':case 'A':{key = WM_Key_A;}break;
-          case 'b':case 'B':{key = WM_Key_B;}break;
-          case 'c':case 'C':{key = WM_Key_C;}break;
-          case 'd':case 'D':{key = WM_Key_D;}break;
-          case 'e':case 'E':{key = WM_Key_E;}break;
-          case 'f':case 'F':{key = WM_Key_F;}break;
-          case 'g':case 'G':{key = WM_Key_G;}break;
-          case 'h':case 'H':{key = WM_Key_H;}break;
-          case 'i':case 'I':{key = WM_Key_I;}break;
-          case 'j':case 'J':{key = WM_Key_J;}break;
-          case 'k':case 'K':{key = WM_Key_K;}break;
-          case 'l':case 'L':{key = WM_Key_L;}break;
-          case 'm':case 'M':{key = WM_Key_M;}break;
-          case 'n':case 'N':{key = WM_Key_N;}break;
-          case 'o':case 'O':{key = WM_Key_O;}break;
-          case 'p':case 'P':{key = WM_Key_P;}break;
-          case 'q':case 'Q':{key = WM_Key_Q;}break;
-          case 'r':case 'R':{key = WM_Key_R;}break;
-          case 's':case 'S':{key = WM_Key_S;}break;
-          case 't':case 'T':{key = WM_Key_T;}break;
-          case 'u':case 'U':{key = WM_Key_U;}break;
-          case 'v':case 'V':{key = WM_Key_V;}break;
-          case 'w':case 'W':{key = WM_Key_W;}break;
-          case 'x':case 'X':{key = WM_Key_X;}break;
-          case 'y':case 'Y':{key = WM_Key_Y;}break;
-          case 'z':case 'Z':{key = WM_Key_Z;}break;
-          case ' ':{key = WM_Key_Space;}break;
-        }
-        
-        // rjf: push text event
-        if(evt.type == KeyPress && text_size != 0)
-        {
-          for(U64 off = 0; off < text_size;)
-          {
-            UnicodeDecode decode = utf8_decode(text+off, text_size-off);
-            if(decode.codepoint != 0 && (decode.codepoint >= 32 || decode.codepoint == '\t'))
+            default:
             {
-              WM_Event *e = wm_event_list_push_new(arena, &evts, WM_EventKind_Text);
-              e->window.u64[0] = (U64)window;
-              e->character = decode.codepoint;
-            }
-            if(decode.inc == 0)
-            {
-              break;
-            }
-            off += decode.inc;
+              if(0){}
+              else if(XK_F1 <= keysym && keysym <= XK_F24) { key = (WM_Key)(WM_Key_F1 + (keysym - XK_F1)); }
+              else if('0' <= keysym && keysym <= '9')      { key = WM_Key_0 + (keysym-'0'); }
+            }break;
+            case XK_Escape:{key = WM_Key_Esc;};break;
+            case XK_BackSpace:{key = WM_Key_Backspace;}break;
+            case XK_Delete:{key = WM_Key_Delete;}break;
+            case XK_Return:{key = WM_Key_Return;}break;
+            case XK_Pause:{key = WM_Key_Pause;}break;
+            case XK_Tab:{key = WM_Key_Tab;}break;
+            case XK_Left:{key = WM_Key_Left;}break;
+            case XK_Right:{key = WM_Key_Right;}break;
+            case XK_Up:{key = WM_Key_Up;}break;
+            case XK_Down:{key = WM_Key_Down;}break;
+            case XK_Home:{key = WM_Key_Home;}break;
+            case XK_End:{key = WM_Key_End;}break;
+            case XK_Page_Up:{key = WM_Key_PageUp;}break;
+            case XK_Page_Down:{key = WM_Key_PageDown;}break;
+            case XK_Alt_L:{ key = WM_Key_Alt; }break;
+            case XK_Alt_R:{ key = WM_Key_Alt; is_right_sided = 1;}break;
+            case XK_Shift_L:{ key = WM_Key_Shift; }break;
+            case XK_Shift_R:{ key = WM_Key_Shift; is_right_sided = 1;}break;
+            case XK_Control_L:{ key = WM_Key_Ctrl; }break;
+            case XK_Control_R:{ key = WM_Key_Ctrl; is_right_sided = 1;}break;
+            case '-':{key = WM_Key_Minus;}break;
+            case '=':{key = WM_Key_Equal;}break;
+            case '[':{key = WM_Key_LeftBracket;}break;
+            case ']':{key = WM_Key_RightBracket;}break;
+            case ';':{key = WM_Key_Semicolon;}break;
+            case '\'':{key = WM_Key_Quote;}break;
+            case '.':{key = WM_Key_Period;}break;
+            case ',':{key = WM_Key_Comma;}break;
+            case '/':{key = WM_Key_Slash;}break;
+            case '\\':{key = WM_Key_BackSlash;}break;
+            case '\t':{key = WM_Key_Tab;}break;
+            case 'a':case 'A':{key = WM_Key_A;}break;
+            case 'b':case 'B':{key = WM_Key_B;}break;
+            case 'c':case 'C':{key = WM_Key_C;}break;
+            case 'd':case 'D':{key = WM_Key_D;}break;
+            case 'e':case 'E':{key = WM_Key_E;}break;
+            case 'f':case 'F':{key = WM_Key_F;}break;
+            case 'g':case 'G':{key = WM_Key_G;}break;
+            case 'h':case 'H':{key = WM_Key_H;}break;
+            case 'i':case 'I':{key = WM_Key_I;}break;
+            case 'j':case 'J':{key = WM_Key_J;}break;
+            case 'k':case 'K':{key = WM_Key_K;}break;
+            case 'l':case 'L':{key = WM_Key_L;}break;
+            case 'm':case 'M':{key = WM_Key_M;}break;
+            case 'n':case 'N':{key = WM_Key_N;}break;
+            case 'o':case 'O':{key = WM_Key_O;}break;
+            case 'p':case 'P':{key = WM_Key_P;}break;
+            case 'q':case 'Q':{key = WM_Key_Q;}break;
+            case 'r':case 'R':{key = WM_Key_R;}break;
+            case 's':case 'S':{key = WM_Key_S;}break;
+            case 't':case 'T':{key = WM_Key_T;}break;
+            case 'u':case 'U':{key = WM_Key_U;}break;
+            case 'v':case 'V':{key = WM_Key_V;}break;
+            case 'w':case 'W':{key = WM_Key_W;}break;
+            case 'x':case 'X':{key = WM_Key_X;}break;
+            case 'y':case 'Y':{key = WM_Key_Y;}break;
+            case 'z':case 'Z':{key = WM_Key_Z;}break;
+            case ' ':{key = WM_Key_Space;}break;
           }
-        }
+          
+          // rjf: push text event
+          if(evt.type == KeyPress && text_size != 0)
+          {
+            for(U64 off = 0; off < text_size;)
+            {
+              UnicodeDecode decode = utf8_decode(text+off, text_size-off);
+              if(decode.codepoint != 0 && (decode.codepoint >= 32 || decode.codepoint == '\t'))
+              {
+                WM_Event *e = wm_event_list_push_new(arena, &evts, WM_EventKind_Text);
+                e->window.u64[0] = (U64)window;
+                e->character = decode.codepoint;
+              }
+              if(decode.inc == 0)
+              {
+                break;
+              }
+              off += decode.inc;
+            }
+          }
+          
+          // rjf: push key event
+          {
+            WM_Event *e = wm_event_list_push_new(arena, &evts, evt.type == KeyPress ? WM_EventKind_Press : WM_EventKind_Release);
+            e->window.u64[0] = (U64)window;
+            e->modifiers = modifiers;
+            e->key = key;
+            e->right_sided = is_right_sided;
+          }
+        }break;
         
-        // rjf: push key event
+        //- rjf: mouse button presses/releases
+        case ButtonPress:
+        case ButtonRelease:
         {
-          WM_Event *e = wm_event_list_push_new(arena, &evts, evt.type == KeyPress ? WM_EventKind_Press : WM_EventKind_Release);
-          e->window.u64[0] = (U64)window;
-          e->modifiers = modifiers;
-          e->key = key;
-          e->right_sided = is_right_sided;
-        }
-      }break;
-      
-      //- rjf: mouse button presses/releases
-      case ButtonPress:
-      case ButtonRelease:
-      {
-        // rjf: determine flags
-        WM_Modifiers modifiers = 0;
-        if(evt.xbutton.state & ShiftMask)   { modifiers |= WM_Modifier_Shift; }
-        if(evt.xbutton.state & ControlMask) { modifiers |= WM_Modifier_Ctrl; }
-        if(evt.xbutton.state & Mod1Mask)    { modifiers |= WM_Modifier_Alt; }
+          // rjf: determine flags
+          WM_Modifiers modifiers = 0;
+          if(evt.xbutton.state & ShiftMask)   { modifiers |= WM_Modifier_Shift; }
+          if(evt.xbutton.state & ControlMask) { modifiers |= WM_Modifier_Ctrl; }
+          if(evt.xbutton.state & Mod1Mask)    { modifiers |= WM_Modifier_Alt; }
+          
+          // rjf: map button -> WM_Key
+          WM_Key key = WM_Key_Null;
+          switch(evt.xbutton.button)
+          {
+            default:{}break;
+            case Button1:{key = WM_Key_LeftMouseButton;}break;
+            case Button2:{key = WM_Key_MiddleMouseButton;}break;
+            case Button3:{key = WM_Key_RightMouseButton;}break;
+          }
+          
+          // rjf: push event
+          LNX_WM_Window *window = lnx_window_from_x11window(evt.xbutton.window);
+          if(key != WM_Key_Null)
+          {
+            WM_Event *e = wm_event_list_push_new(arena, &evts, evt.type == ButtonPress ? WM_EventKind_Press : WM_EventKind_Release);
+            e->window.u64[0] = (U64)window;
+            e->modifiers = modifiers;
+            e->key = key;
+            e->pos = v2f32((F32)evt.xbutton.x, (F32)evt.xbutton.y);
+          }
+          else if(evt.xbutton.button == Button4 ||
+                  evt.xbutton.button == Button5)
+          {
+            WM_Event *e = wm_event_list_push_new(arena, &evts, WM_EventKind_Scroll);
+            e->window.u64[0] = (U64)window;
+            e->modifiers = modifiers;
+            e->delta = v2f32(0, evt.xbutton.button == Button4 ? -1.f : +1.f);
+            e->pos = v2f32((F32)evt.xbutton.x, (F32)evt.xbutton.y);
+          }
+        }break;
         
-        // rjf: map button -> WM_Key
-        WM_Key key = WM_Key_Null;
-        switch(evt.xbutton.button)
-        {
-          default:{}break;
-          case Button1:{key = WM_Key_LeftMouseButton;}break;
-          case Button2:{key = WM_Key_MiddleMouseButton;}break;
-          case Button3:{key = WM_Key_RightMouseButton;}break;
-        }
-        
-        // rjf: push event
-        LNX_WM_Window *window = lnx_window_from_x11window(evt.xbutton.window);
-        if(key != WM_Key_Null)
-        {
-          WM_Event *e = wm_event_list_push_new(arena, &evts, evt.type == ButtonPress ? WM_EventKind_Press : WM_EventKind_Release);
-          e->window.u64[0] = (U64)window;
-          e->modifiers = modifiers;
-          e->key = key;
-          e->pos = v2f32((F32)evt.xbutton.x, (F32)evt.xbutton.y);
-        }
-        else if(evt.xbutton.button == Button4 ||
-                evt.xbutton.button == Button5)
-        {
-          WM_Event *e = wm_event_list_push_new(arena, &evts, WM_EventKind_Scroll);
-          e->window.u64[0] = (U64)window;
-          e->modifiers = modifiers;
-          e->delta = v2f32(0, evt.xbutton.button == Button4 ? -1.f : +1.f);
-          e->pos = v2f32((F32)evt.xbutton.x, (F32)evt.xbutton.y);
-        }
-      }break;
-      
-      //- rjf: mouse motion
-      case MotionNotify:
-      {
-        LNX_WM_Window *window = lnx_window_from_x11window(evt.xclient.window);
-        WM_Event *e = wm_event_list_push_new(arena, &evts, WM_EventKind_MouseMove);
-        e->window.u64[0] = (U64)window;
-        e->pos.x = (F32)evt.xmotion.x;
-        e->pos.y = (F32)evt.xmotion.y;
-        set_mouse_cursor = 1;
-      }break;
-      
-      //- rjf: window focus/unfocus
-      case FocusIn:
-      {
-      }break;
-      case FocusOut:
-      {
-        LNX_WM_Window *window = lnx_window_from_x11window(evt.xfocus.window);
-        WM_Event *e = wm_event_list_push_new(arena, &evts, WM_EventKind_WindowLoseFocus);
-        e->window.u64[0] = (U64)window;
-      }break;
-      
-      //- rjf: client messages
-      case ClientMessage:
-      {
-        if((Atom)evt.xclient.data.l[0] == lnx_wm_state->wm_delete_window_atom)
+        //- rjf: mouse motion
+        case MotionNotify:
         {
           LNX_WM_Window *window = lnx_window_from_x11window(evt.xclient.window);
-          WM_Event *e = wm_event_list_push_new(arena, &evts, WM_EventKind_WindowClose);
+          WM_Event *e = wm_event_list_push_new(arena, &evts, WM_EventKind_MouseMove);
           e->window.u64[0] = (U64)window;
-        }
-        else if((Atom)evt.xclient.data.l[0] == lnx_wm_state->wm_sync_request_atom)
+          e->pos.x = (F32)evt.xmotion.x;
+          e->pos.y = (F32)evt.xmotion.y;
+          set_mouse_cursor = 1;
+        }break;
+        
+        //- rjf: window focus/unfocus
+        case FocusIn:
         {
-          LNX_WM_Window *window = lnx_window_from_x11window(evt.xclient.window);
-          if(window != 0)
+        }break;
+        case FocusOut:
+        {
+          LNX_WM_Window *window = lnx_window_from_x11window(evt.xfocus.window);
+          WM_Event *e = wm_event_list_push_new(arena, &evts, WM_EventKind_WindowLoseFocus);
+          e->window.u64[0] = (U64)window;
+        }break;
+        
+        //- rjf: client messages
+        case ClientMessage:
+        {
+          if((Atom)evt.xclient.data.l[0] == lnx_wm_state->wm_delete_window_atom)
           {
-            window->counter_value = 0;
-            window->counter_value |= evt.xclient.data.l[2];
-            window->counter_value |= (evt.xclient.data.l[3] << 32);
-            XSyncValue value;
-            XSyncIntToValue(&value, window->counter_value);
-            XSyncSetCounter(lnx_wm_state->display, window->counter_xid, value);
+            LNX_WM_Window *window = lnx_window_from_x11window(evt.xclient.window);
+            WM_Event *e = wm_event_list_push_new(arena, &evts, WM_EventKind_WindowClose);
+            e->window.u64[0] = (U64)window;
           }
-        }
-      }break;
+          else if((Atom)evt.xclient.data.l[0] == lnx_wm_state->wm_sync_request_atom)
+          {
+            LNX_WM_Window *window = lnx_window_from_x11window(evt.xclient.window);
+            if(window != 0)
+            {
+              window->counter_value = 0;
+              window->counter_value |= evt.xclient.data.l[2];
+              window->counter_value |= (evt.xclient.data.l[3] << 32);
+              XSyncValue value;
+              XSyncIntToValue(&value, window->counter_value);
+              XSyncSetCounter(lnx_wm_state->display, window->counter_xid, value);
+            }
+          }
+        }break;
       }
       
       if(set_mouse_cursor)
@@ -716,7 +716,7 @@ wm_mouse_from_window(WM_Window handle)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Cursors (Implemented Per-OS)
+//~ rjf: @per_os_impl Cursors (Implemented Per-OS)
 
 internal void
 wm_set_cursor(WM_Cursor cursor)
@@ -725,7 +725,7 @@ wm_set_cursor(WM_Cursor cursor)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Native User-Facing Graphical Messages (Implemented Per-OS)
+//~ rjf: @per_os_impl Native User-Facing Graphical Messages (Implemented Per-OS)
 
 internal void
 wm_graphical_message(B32 error, String8 title, String8 message)
@@ -745,7 +745,7 @@ wm_graphical_pick_file(Arena *arena, String8 initial_path)
 }
 
 ////////////////////////////////
-//~ rjf: @os_hooks Shell Operations
+//~ rjf: @per_os_impl Shell Operations
 
 internal void
 wm_show_in_filesystem_ui(String8 path)

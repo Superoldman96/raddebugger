@@ -323,9 +323,7 @@ g_path_style_map[] =
   { str8_lit_comp("system"),   PathStyle_SystemAbsolute  },
 };
 
-internal String8 default_exe_name_suffix_from_os(OperatingSystem os);
-internal String8 program_data_folder_prefix_from_os(OperatingSystem os);
-internal String8 program_ext_postfix_from_os(OperatingSystem os);
+internal String8 program_ext_postfix_from_os(OperatingSystem os, B32 require_ext);
 
 internal String8 str8_chop_last_slash(String8 string);
 internal String8 str8_skip_last_slash(String8 string);
@@ -457,6 +455,8 @@ internal U64    str8_deserial_read_windows_utf16_string16(String8 string, U64 of
 internal U64    str8_deserial_read_block(String8 string, U64 off, U64 size, String8 *block_out);
 #define str8_deserial_read_array(string, off, ptr, count) str8_deserial_read((string), (off), (ptr), sizeof(*(ptr))*(count), sizeof(*(ptr)))
 #define str8_deserial_read_struct(string, off, ptr)       str8_deserial_read_array(string, off, ptr, 1)
+internal U64 str8_deserial_read_uleb128(String8 string, U64 off, U64 *value_out);
+internal U64 str8_deserial_read_sleb128(String8 string, U64 off, S64 *value_out);
 
 ////////////////////////////////
 //~ string buffer

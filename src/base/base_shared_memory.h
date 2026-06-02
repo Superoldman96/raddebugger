@@ -4,8 +4,14 @@
 #ifndef BASE_SHARED_MEMORY_H
 #define BASE_SHARED_MEMORY_H
 
+typedef struct SharedMemory SharedMemory;
+struct SharedMemory
+{
+  U64 u64[1];
+};
+
 ////////////////////////////////
-//~ rjf: @os_hooks Shared Memory
+//~ rjf: @per_os_impl Shared Memory
 
 internal SharedMemory shared_memory_alloc(U64 size, String8 name);
 internal SharedMemory shared_memory_open(String8 name);

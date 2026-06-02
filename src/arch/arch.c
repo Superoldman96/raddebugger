@@ -69,7 +69,7 @@ arch_reg_code_from_rdi(Arch arch, RDI_RegCode code)
 }
 
 internal ARCH_RegCode
-arch_reg_code_from_dw(Arch arch, DW_Reg code)
+arch_reg_code_from_dw(Arch arch, DW_RegCode code)
 {
   ARCH_RegCode result = 0;
   {

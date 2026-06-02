@@ -335,22 +335,6 @@ typedef struct DW_Expr
 ////////////////////////////////
 // .debug_frame
 
-typedef enum
-{
-  DW_DescriptorEntryType_Null,
-  DW_DescriptorEntryType_CIE,
-  DW_DescriptorEntryType_FDE
-} DW_DescriptorEntryType;
-
-typedef struct DW_DescriptorEntry
-{
-  DW_DescriptorEntryType type;
-  DW_Format              format;
-  Rng1U64                entry_range;
-  U64                    cie_pointer_off;
-  U64                    cie_pointer;
-} DW_DescriptorEntry;
-
 typedef struct DW_CIE
 {
   String8   insts;
@@ -418,8 +402,6 @@ internal U64 dw_hash_from_string(String8 string);
 
 internal U64 str8_deserial_read_dwarf_packed_size(String8 string, U64 off, U64 *size_out);
 internal U64 str8_deserial_read_dwarf_uint       (String8 string, U64 off, DW_Format format, U64 *uint_out);
-internal U64 str8_deserial_read_uleb128          (String8 string, U64 off, U64 *value_out);
-internal U64 str8_deserial_read_sleb128          (String8 string, U64 off, S64 *value_out);
 internal U64 str8_deserial_read_uleb128_array(Arena *arena, String8 string, U64 off, U64 count, U64 **arr_out);
 internal U64 str8_deserial_read_sleb128_array(Arena *arena, String8 string, U64 off, U64 count, S64 **arr_out);
 

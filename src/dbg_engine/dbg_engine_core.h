@@ -139,6 +139,7 @@ struct D_Entity
   D_TlsModel tls_model;
   U64 tls_index;
   U64 tls_offset;
+  U64 tls_root_vaddr;
   OperatingSystem target_os;
   D_MsgID src_msg_id;
 };

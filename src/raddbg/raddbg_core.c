@@ -11380,7 +11380,7 @@ rd_frame(void)
     U64 rip_vaddr = d_query_cached_rip_from_thread_unwind(thread, unwind_count);
     D_Entity *module = d_module_from_process_vaddr(process, rip_vaddr);
     U64 rip_voff = d_voff_from_vaddr(module, rip_vaddr);
-    U64 tls_root_vaddr = d_cached_tls_root_vaddr_from_thread(thread->handle);
+    U64 tls_root_vaddr = thread->tls_root_vaddr;
     ProfEnd();
     
     ////////////////////////////
@@ -12212,8 +12212,10 @@ rd_frame(void)
     {
       for EachIndex(idx, modules.count)
       {
+        Access *access = access_open();
         D_Entity *module = modules.v[idx];
-        String8 raddbg_data = d_raddbg_data_from_module(scratch.arena, module->handle);
+        D_ModuleInfo *module_info = d_info_from_module(access, module->handle);
+        String8 raddbg_data = module_info->raddbg_data;
         U8 split_char = 0;
         String8List raddbg_data_text_parts = str8_split(scratch.arena, raddbg_data, &split_char, 1, 0);
         U64 cfg_idx = 0;
@@ -12230,6 +12232,7 @@ rd_frame(void)
             cfg_node_ptr_list_push(scratch.arena, &immediate_type_views, n->v);
           }
         }
+        access_close(access);
       }
     }
     
@@ -12333,7 +12336,7 @@ rd_frame(void)
       ctx->module_base[0]    = module->vaddr_range.min;
       ctx->frame_base        = push_array(scratch.arena, U64, 1);
       ctx->tls_base          = push_array(scratch.arena, U64, 1);
-      ctx->tls_base[0]       = d_query_cached_tls_base_vaddr_from_process_root_rip(process, tls_root_vaddr, rip_vaddr);
+      ctx->tls_base[0]       = d_cached_tls_vaddr_from_thread_module(thread->handle, module->handle, rd_state->frame_eval_memread_endt_us, 0);
       ctx->cfa               = d_query_cached_cfa_from_thread_unwind(thread, unwind_count);
     }
     e_select_interpret_ctx(interpret_ctx, eval_dbg_infos_primary->rdi, rip_voff);
@@ -16810,7 +16813,7 @@ rd_frame(void)
           D_EntityArray all_processes = d_entity_array_from_kind(D_EntityKind_Process);
           
           // rjf: no processes before this one -> new session
-          if(process_count_pre_tick == 0)
+          if(process_count_pre_tick == 0 && all_processes.count != 0)
           {
             D_Entity *process = all_processes.v[0];
             CFG_Node *target = cfg_node_from_id(process->src_msg_id);

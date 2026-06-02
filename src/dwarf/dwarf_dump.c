@@ -1185,7 +1185,7 @@ DW_PRINTER(dw_print_frame)
   for (U64 cursor = 0, desc_size; cursor < debug_frame.size; cursor += desc_size) {
     DW_DescriptorEntry desc = {0};
     desc_size = dw_parse_descriptor_entry_header(debug_frame, cursor, &desc);
-    if (desc.type == DW_DescriptorEntryType_CIE) {
+    if (desc.type == DW_DescriptorEntryKind_CIE) {
       String8         raw_cie     = str8_substr(debug_frame, desc.entry_range);
       U64             restore_pos = arena_pos(scratch.arena);
       DW_CIE *cie         = push_array(scratch.arena, DW_CIE, 1);
@@ -1202,8 +1202,8 @@ DW_PRINTER(dw_print_frame)
     desc_size = dw_parse_descriptor_entry_header(debug_frame, cursor, &desc);
     String8 raw_desc  = str8_substr(debug_frame, desc.entry_range);
     switch (desc.type) {
-      case DW_DescriptorEntryType_Null: {} break;
-      case DW_DescriptorEntryType_CIE: {
+      case DW_DescriptorEntryKind_Null: {} break;
+      case DW_DescriptorEntryKind_CIE: {
         DW_CIE cie = {0};
         if (dw_parse_cie(raw_desc, desc.format, arch, &cie)) {
           String8List init_insts_str_list = dw_string_list_from_cfi_program(scratch.arena, 0, arch, DW_Version_5, DW_Ext_All, cie.format, 0, &cie, dw_decode_ptr_debug_frame, &cie, cie.insts);
@@ -1229,7 +1229,7 @@ DW_PRINTER(dw_print_frame)
           dw_printf("ERROR: unable to parse CIE @ %I64x\n", desc.entry_range.min);
         }
       } break;
-      case DW_DescriptorEntryType_FDE: {
+      case DW_DescriptorEntryKind_FDE: {
         DW_DescriptorEntry cie_desc      = {0};
         U64                cie_desc_size = dw_parse_descriptor_entry_header(debug_frame, desc.cie_pointer, &cie_desc);
         String8            cie_data      = str8_substr(debug_frame, cie_desc.entry_range);

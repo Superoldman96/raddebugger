@@ -220,7 +220,24 @@ entry_point(CmdLine *cmdline)
     MD_Node *file = n->v.root;
     for MD_EachNode(node, file->first)
     {
+      // rjf: @enum tags -> generate strings from table generators
       MD_Node *tag = md_tag_from_string(node, str8_lit("enum"), 0);
+      String8List gen_strings = {0};
+      if(!md_node_is_nil(tag))
+      {
+        gen_strings = mg_string_list_from_table_gen(mg_arena, table_grid_map, table_col_map, str8_lit(""), node);
+      }
+      
+      // rjf: @table_enum tags -> generate strings from 'name' column from table
+      if(md_node_is_nil(tag))
+      {
+        tag = md_tag_from_string(node, str8_lit("table_enum"), 0);
+        String8 gen_string = str8f(mg_arena, "{ expand(%S a) `$(a.name) = $(a.code)` }", node->string);
+        MD_Node *gen_node = md_tree_from_string(mg_arena, gen_string);
+        gen_strings = mg_string_list_from_table_gen(mg_arena, table_grid_map, table_col_map, str8_lit(""), node);
+      }
+      
+      // rjf: generate
       if(!md_node_is_nil(tag))
       {
         String8 enum_name = node->string;
@@ -232,7 +249,6 @@ entry_point(CmdLine *cmdline)
         String8 enum_base_type_name = tag->first->string;
         String8 layer_key = mg_layer_key_from_path(file->string);
         MG_Layer *layer = mg_layer_from_key(layer_key);
-        String8List gen_strings = mg_string_list_from_table_gen(mg_arena, table_grid_map, table_col_map, str8_lit(""), node);
         if(enum_base_type_name.size == 0)
         {
           str8_list_pushf(mg_arena, &layer->enums, "typedef enum %S\n{\n", enum_name);

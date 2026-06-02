@@ -245,6 +245,23 @@ typedef struct DW_Writer
   DW_WriterTagChunkList    tag_chunk_list;
 } DW_Writer;
 
+
+////////////////////////////////
+// Serializers
+
+internal U64 dw_write_to_buffer_uleb128(U8 buffer[10], U64 v);
+internal U64 dw_write_to_buffer_sleb128(U8 buffer[10], U64 v);
+
+internal String8 dw_write_uleb128(Arena *arena, U64 v);
+internal String8 dw_write_sleb128(Arena *arena, S64 v);
+internal U64 dw_size_from_uleb128(U64 v);
+internal U64 dw_size_from_sleb128(S64 v);
+
+internal void * dw_serial_push_length(Arena *arena, String8List *srl, DW_Format format, U64 length);
+internal void * dw_serial_push_uint(Arena *arena, String8List *srl, DW_Format format, U64 v);
+internal void * dw_serial_push_uleb128(Arena *arena, String8List *srl, U64 v);
+internal void * dw_serial_push_sleb128(Arena *arena, String8List *srl, S64 v);
+
 ////////////////////////////////
 // Writer
 
@@ -333,6 +350,9 @@ internal DW_IntEnc dw_int_enc_from_uint(U64 v);
 
 internal U64 dw_size_from_sint(S64 v);
 internal U64 dw_size_from_uint(U64 v);
+
+// encoder
+internal String8 dw_encode_expr(Arena *arena, Arch arch, DW_Format format, DW_ExprEnc *encs, U64 encs_count);
 
 #endif // DWARF_WRITER_H
 

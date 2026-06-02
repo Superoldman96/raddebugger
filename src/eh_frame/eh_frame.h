@@ -20,7 +20,7 @@ enum
   EH_PtrEnc_SData2  = 0x0A, // Signed 16-bit value
   EH_PtrEnc_SData4  = 0x0B, // Signed 32-bit value
   EH_PtrEnc_SData8  = 0x0C, // Signed 64-bit value
- 
+  
   EH_PtrEnc_TypeMask = 0x0F,
 };
 
@@ -31,7 +31,7 @@ enum
   EH_PtrEnc_DataRel = 0x30, // Value is relative to the .got or .eh_frame_hdr section.
   EH_PtrEnc_FuncRel = 0x40, // Value is relative to the function.
   EH_PtrEnc_Aligned = 0x50, // Value is aligned to an address unit sized boundary.
-                                 
+  
   EH_PtrEnc_ModifierMask = 0x70,
 };
 
@@ -104,13 +104,23 @@ typedef struct EH_DecodePtrCtx
   EH_PtrEnc  addr_enc;
   EH_PtrCtx *ptr_ctx;
 } EH_DecodePtrCtx;
-   
+
 ////////////////////////////////
 
+#if 0
 internal U64         eh_parse_ptr(String8 frame_base, U64 off, U64 pc, EH_PtrCtx *ptr_ctx, EH_PtrEnc encoding, U64 *ptr_out);
+#endif
 internal EH_FrameHdr eh_parse_frame_hdr(String8 data, U64 address_size, EH_PtrCtx *ptr_ctx);
+#if 0
 internal U64         eh_parse_aug_data(String8 aug_string, String8 aug_data, U64 pc, EH_PtrCtx *ptr_ctx, EH_Augmentation *aug_out);
-internal B32         eh_parse_cie(String8 data, DW_Format format, Arch arch, U64 pc, EH_PtrCtx *ptr_ctx, DW_CIE *cie_out);
+#endif
+
+internal U64         eh_read_ptr(String8 data, U64 off, U64 pc, EH_PtrCtx *ptr_ctx, EH_PtrEnc encoding, U64 *ptr_out);
+internal U64         eh_read_aug_data(String8 data, U64 off, String8 string, U64 pc, EH_PtrCtx *ptr_ctx, EH_Augmentation *aug_out);
+internal U64         eh_read_cfi_header(String8 data, U64 off, DW_CFIHeader *cfi_header_out);
+internal U64         eh_read_cie(String8 data, U64 off, DW_Format fmt, Arch arch, U64 pc, EH_PtrCtx *ptr_ctx, DW_CIE *cie_out);
+internal U64         eh_read_fde(String8 data, U64 off, DW_Format fmt, Arch arch, U64 pc, EH_PtrCtx *ptr_ctx, DW_CIE *cie, DW_FDE *fde_out);
+
 internal B32         eh_parse_fde(String8 data, DW_Format format, U64 pc, DW_CIE *cie, EH_PtrCtx *ptr_ctx, DW_FDE *fde_out);
 internal U64         eh_find_nearest_fde(EH_FrameHdr header, EH_PtrCtx *ptr_ctx, U64 pc);
 internal String8     eh_frame_hdr_from_call_frame_info(Arena *arena, U64 fde_count, U64 *fde_offsets, struct DW_FDE *fde);

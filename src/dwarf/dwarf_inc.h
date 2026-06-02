@@ -5,19 +5,23 @@
 #define DWARF_INC_H
 
 #include "dwarf/dwarf.h"
-#include "dwarf/dwarf_parse.h"
-#include "dwarf/dwarf_expr.h"
-#include "dwarf/dwarf_coff.h"
-#include "dwarf/dwarf_elf.h"
-#include "dwarf/dwarf_unwind.h"
-#include "dwarf/dwarf_dump.h"
-#include "dwarf/dwarf_help.h"
-#include "dwarf/dwarf_writer.h"
+// #include "dwarf/dwarf_parse.h"
+// #include "dwarf/dwarf_expr.h"
+#include "dwarf/dwarf_expr_2.h"
+// #include "dwarf/dwarf_unwind.h"
+// #include "dwarf/dwarf_dump.h"
 #include "dwarf/dwarf_parse_2.h"
-#include "dwarf/eh_frame.h"
-#include "dwarf/eh_dump.h"
-#if defined(X64_H)
-# include "dwarf/x64/dwarf_x64.h"
+#include "dwarf/dwarf_unwind_2.h"
+#include "dwarf/dwarf_dump_2.h"
+#if defined(COFF_H)
+# include "dwarf/dwarf_parse_coff.h"
+#endif
+#if defined(ELF_H)
+# include "dwarf/dwarf_parse_elf.h"
+#endif
+
+#if 0 // TODO(rjf): this uses concepts from the old parser
+# include "dwarf/dwarf_writer.h"
 #endif
 
 #endif // DWARF_INC_H

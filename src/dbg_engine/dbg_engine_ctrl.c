@@ -1358,6 +1358,7 @@ d_entity_store_apply_events(D_EntityCtxRWStore *store, D_EventList *list)
             }
           }
           thread->stack_base = event->stack_base;
+          thread->tls_root_vaddr = event->tls_root;
         }
         //d_cached_ip_from_thread(&store->ctx, event->entity);
       }break;
@@ -1633,6 +1634,25 @@ d_sp_from_thread(D_Handle handle)
   return result;
 }
 
+internal B32
+d_thread_get_module_tls_vaddr(D_Handle thread, D_Handle module, U64 *vaddr_out)
+{
+  B32 result = 0;
+  
+  // rjf: resolve to demon
+  DMN_Handle thread_dmn = d_dmn_from_handle(thread);
+  DMN_Handle module_dmn = d_dmn_from_handle(module);
+  
+  // rjf: compute vaddr
+  if(!dmn_handle_match(thread_dmn, dmn_handle_zero()) &&
+     !dmn_handle_match(module_dmn, dmn_handle_zero()))
+  {
+    result = dmn_thread_get_module_tls_vaddr(thread_dmn, module_dmn, vaddr_out);
+  }
+  
+  return result;
+}
+
 //- rjf: thread register cache reading
 
 internal void *
@@ -1696,14 +1716,6 @@ d_cached_reg_block_from_thread(Arena *arena, D_Handle handle)
 }
 
 internal U64
-d_cached_tls_root_vaddr_from_thread(D_Handle handle)
-{
-  DMN_Handle handle_dmn = d_dmn_from_handle(handle);
-  U64 result = dmn_tls_root_vaddr_from_thread(handle_dmn);
-  return result;
-}
-
-internal U64
 d_cached_ip_from_thread(D_Handle handle)
 {
   Temp scratch = scratch_begin(0, 0);
@@ -1734,17 +1746,18 @@ d_cached_sp_from_thread(D_Handle handle)
 
 //- rjf: cache lookups
 
+#if 0 // TODO(rjf): @unwind
 internal PE_IntelPdata *
 d_intel_pdata_from_module_voff(Arena *arena, D_Handle module_handle, U64 voff)
 {
   PE_IntelPdata *first_pdata = 0;
   {
     U64 hash = d_hash_from_handle(module_handle);
-    U64 slot_idx = hash%d_ctrl_state->module_image_info_cache.slots_count;
-    U64 stripe_idx = slot_idx%d_ctrl_state->module_image_info_cache.stripes_count;
-    D_ModuleImageInfoCacheSlot *slot = &d_ctrl_state->module_image_info_cache.slots[slot_idx];
-    D_ModuleImageInfoCacheStripe *stripe = &d_ctrl_state->module_image_info_cache.stripes[stripe_idx];
-    MutexScopeR(stripe->rw_mutex) for(D_ModuleImageInfoCacheNode *n = slot->first; n != 0; n = n->next)
+    U64 slot_idx = hash%d_ctrl_state->module_info_cache.slots_count;
+    U64 stripe_idx = slot_idx%d_ctrl_state->module_info_cache.stripes_count;
+    D_ModuleInfoCacheSlot *slot = &d_ctrl_state->module_info_cache.slots[slot_idx];
+    D_ModuleInfoCacheStripe *stripe = &d_ctrl_state->module_info_cache.stripes[stripe_idx];
+    MutexScopeR(stripe->rw_mutex) for(D_ModuleInfoCacheNode *n = slot->first; n != 0; n = n->next)
     {
       if(d_handle_match(n->module, module_handle))
       {
@@ -1800,69 +1813,53 @@ d_intel_pdata_from_module_voff(Arena *arena, D_Handle module_handle, U64 voff)
   }
   return first_pdata;
 }
+#endif
+
+internal D_ModuleInfo *
+d_info_from_module(Access *access, D_Handle module)
+{
+  D_ModuleInfo *result = &d_module_info_nil;
+  {
+    D_ModuleInfoCache *cache = &d_ctrl_state->module_info_cache;
+    U64 hash = d_hash_from_handle(module);
+    U64 slot_idx = hash%cache->slots_count;
+    D_ModuleInfoCacheSlot *slot = &cache->slots[slot_idx];
+    Stripe *stripe = stripe_from_slot_idx(&cache->stripes, slot_idx);
+    MutexScopeR(stripe->rw_mutex) for(D_ModuleInfoCacheNode *n = slot->first; n != 0; n = n->next)
+    {
+      if(d_handle_match(n->module, module))
+      {
+        access_touch(access, &n->access_pt, stripe->cv);
+        result = &n->v;
+        break;
+      }
+    }
+  }
+  return result;
+}
 
 internal U64
 d_entry_point_voff_from_module(D_Handle module_handle)
 {
-  U64 result = 0;
-  U64 hash = d_hash_from_handle(module_handle);
-  U64 slot_idx = hash%d_ctrl_state->module_image_info_cache.slots_count;
-  U64 stripe_idx = slot_idx%d_ctrl_state->module_image_info_cache.stripes_count;
-  D_ModuleImageInfoCacheSlot *slot = &d_ctrl_state->module_image_info_cache.slots[slot_idx];
-  D_ModuleImageInfoCacheStripe *stripe = &d_ctrl_state->module_image_info_cache.stripes[stripe_idx];
-  MutexScopeR(stripe->rw_mutex) for(D_ModuleImageInfoCacheNode *n = slot->first; n != 0; n = n->next)
-  {
-    if(d_handle_match(n->module, module_handle))
-    {
-      result = n->entry_point_voff;
-      break;
-    }
-  }
+  Access *access = access_open();
+  U64 result = d_info_from_module(access, module_handle)->entry_point_voff;
+  access_close(access);
   return result;
 }
 
 internal String8
 d_initial_debug_info_path_from_module(Arena *arena, D_Handle module_handle)
 {
-  String8 result = {0};
-  U64 hash = d_hash_from_handle(module_handle);
-  U64 slot_idx = hash%d_ctrl_state->module_image_info_cache.slots_count;
-  U64 stripe_idx = slot_idx%d_ctrl_state->module_image_info_cache.stripes_count;
-  D_ModuleImageInfoCacheSlot *slot = &d_ctrl_state->module_image_info_cache.slots[slot_idx];
-  D_ModuleImageInfoCacheStripe *stripe = &d_ctrl_state->module_image_info_cache.stripes[stripe_idx];
-  MutexScopeR(stripe->rw_mutex) for(D_ModuleImageInfoCacheNode *n = slot->first; n != 0; n = n->next)
-  {
-    if(d_handle_match(n->module, module_handle))
-    {
-      result = str8_copy(arena, n->local_debug_info_path);
-      break;
-    }
-  }
-  return result;
-}
-
-internal String8
-d_raddbg_data_from_module(Arena *arena, D_Handle module_handle)
-{
-  String8 result = {0};
-  U64 hash = d_hash_from_handle(module_handle);
-  U64 slot_idx = hash%d_ctrl_state->module_image_info_cache.slots_count;
-  U64 stripe_idx = slot_idx%d_ctrl_state->module_image_info_cache.stripes_count;
-  D_ModuleImageInfoCacheSlot *slot = &d_ctrl_state->module_image_info_cache.slots[slot_idx];
-  D_ModuleImageInfoCacheStripe *stripe = &d_ctrl_state->module_image_info_cache.stripes[stripe_idx];
-  MutexScopeR(stripe->rw_mutex) for(D_ModuleImageInfoCacheNode *n = slot->first; n != 0; n = n->next)
-  {
-    if(d_handle_match(n->module, module_handle))
-    {
-      result = push_str8_copy(arena, n->raddbg_data);
-      break;
-    }
-  }
+  Access *access = access_open();
+  String8 result = str8_copy(arena, d_info_from_module(access, module_handle)->local_debug_info_path);
+  access_close(access);
   return result;
 }
 
 ////////////////////////////////
 //~ rjf: Unwinding Functions
+
+#if 0 // TODO(rjf): @unwind
 
 //- rjf: [dwarf]
 
@@ -1930,11 +1927,11 @@ d_establish_frame_unwind_context__dwarf(Arena *arena, D_Handle process_handle, D
   EH_PtrCtx   eh_ptr_ctx   = {0};
   {
     U64 hash = d_hash_from_handle(module_handle);
-    U64 slot_idx = hash%d_ctrl_state->module_image_info_cache.slots_count;
-    U64 stripe_idx = slot_idx%d_ctrl_state->module_image_info_cache.stripes_count;
-    D_ModuleImageInfoCacheSlot *slot = &d_ctrl_state->module_image_info_cache.slots[slot_idx];
-    D_ModuleImageInfoCacheStripe *stripe = &d_ctrl_state->module_image_info_cache.stripes[stripe_idx];
-    MutexScopeR(stripe->rw_mutex) for EachNode(n, D_ModuleImageInfoCacheNode, slot->first)
+    U64 slot_idx = hash%d_ctrl_state->module_info_cache.slots_count;
+    U64 stripe_idx = slot_idx%d_ctrl_state->module_info_cache.stripes_count;
+    D_ModuleInfoCacheSlot *slot = &d_ctrl_state->module_info_cache.slots[slot_idx];
+    D_ModuleInfoCacheStripe *stripe = &d_ctrl_state->module_info_cache.stripes[stripe_idx];
+    MutexScopeR(stripe->rw_mutex) for EachNode(n, D_ModuleInfoCacheNode, slot->first)
     {
       if(d_handle_match(n->module, module_handle))
       {
@@ -2998,6 +2995,7 @@ d_unwind_step__pe_x64(D_Handle process_handle, D_Handle module_handle, U64 modul
   if(is_stale) {result.flags |= D_UnwindFlag_Stale;}
   return result;
 }
+#endif
 
 //- rjf: abstracted full unwind
 
@@ -3008,35 +3006,149 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
   Temp scratch = scratch_begin(&arena, 1);
   D_Unwind unwind = { .flags = D_UnwindFlag_Error };
   
+  //////////////////////////////
+  //- rjf: grab run state pre-unwind computing
+  //
+  U64 run_gen = d_run_gen();
+  
+  //////////////////////////////
   //- rjf: unpack args
+  //
   D_Entity *thread_entity = d_entity_from_handle(thread);
   D_Entity *process_entity = thread_entity->parent;
   Arch arch = thread_entity->arch;
   ARCH_Info *arch_info = arch_info_from_arch(arch);
   U64 arch_reg_block_size = arch_info->reg_block_size;
   
+  //////////////////////////////
   //- rjf: grab initial register block
+  //
   void *regs_block = d_cached_reg_block_from_thread(scratch.arena, thread);
   B32 regs_block_good = (arch != Arch_Null && regs_block != 0);
   
-  //- rjf: loop & unwind
+  //////////////////////////////
+  //- rjf: grab initial memory
+  //
+  MemoryMap memory_map = {0};
+  {
+    // NOTE(rjf): we can pre-fill memory that we can expect to load here -
+    // otherwise we will lazily evaluate it via the unwinding backends below
+  }
+  
+  //////////////////////////////
+  //- rjf: push one frame for register block we already have
+  //
   D_UnwindFrameNode *first_frame_node = 0;
   D_UnwindFrameNode *last_frame_node = 0;
   U64 frame_node_count = 0;
   if(regs_block_good)
   {
-    for(unwind.flags = 0;;)
+    D_UnwindFrameNode *frame_node = push_array(scratch.arena, D_UnwindFrameNode, 1);
+    D_UnwindFrame *f = &frame_node->v;
+    f->regs = push_array_no_zero(arena, U8, arch_reg_block_size);
+    MemoryCopy(f->regs, regs_block, arch_reg_block_size);
+    DLLPushBack(first_frame_node, last_frame_node, frame_node);
+    frame_node_count += 1;
+  }
+  
+  //////////////////////////////
+  //- rjf: loop & unwind
+  //
+  if(regs_block_good)
+  {
+    unwind.flags = 0;
+    for(;!unwind.flags;)
     {
       ARCH_Info *arch_info = arch_info_from_arch(arch);
-      U64 rip = arch_ip_from_reg_block(arch_info, regs_block);
-      U64 rsp = arch_sp_from_reg_block(arch_info, regs_block);
+      U64 start_ip = arch_ip_from_reg_block(arch_info, regs_block);
+      U64 start_sp = arch_sp_from_reg_block(arch_info, regs_block);
       
-      // rjf: cancel on zero rip (except the top frame)
-      if(rip == 0 && frame_node_count > 0)
+      //- rjf: cancel on zero rip (except the top frame)
+      if(start_ip == 0 && frame_node_count > 0)
       {
         break;
       }
       
+      //- rjf: open access for this step
+      Access *access = access_open();
+      
+      //- rjf: ip -> module / unpack
+      D_Entity *module_entity = d_module_from_process_vaddr(process_entity, start_ip);
+      D_ModuleInfo *module_info = d_info_from_module(access, module_entity->handle);
+      UWND_Unwinder unwinder = module_info->unwinder;
+      UWND_ModuleInfo unwinder_module_info = {module_entity->vaddr_range.min, module_info->unwind_info};
+      
+      //- rjf: thread * module -> tls vaddr
+      U64 tls_vaddr = 0;
+      d_thread_get_module_tls_vaddr(thread_entity->handle, module_entity->handle, &tls_vaddr);
+      
+      //- rjf: do one unwind step
+      B32 step_is_good = 0;
+      for(;!unwind.flags;)
+      {
+        // rjf: try step
+        U64 cfa = 0;
+        UWND_StepResult step = uwnd_step(unwinder, arch, &memory_map, &unwinder_module_info, tls_vaddr, regs_block, &cfa);
+        
+        // rjf: if we failed to read memory, try to read that memory, equip to memory map.
+        // if it is stale and we run out of time, we will need to mark the whole unwind as
+        // stale. if it can't be read, the unwind fails.
+        if(step.status == UWND_StepStatus_FailedMemoryRead)
+        {
+          D_ProcessMemorySlice slice = d_process_memory_slice_from_vaddr_range(scratch.arena, process_entity->handle, step.missed_read_vaddr_range, 1, 0);
+          String8 data = slice.data;
+          if(slice.stale)
+          {
+            unwind.flags |= D_UnwindFlag_Stale;
+          }
+          else if(data.size < dim_1u64(step.missed_read_vaddr_range))
+          {
+            unwind.flags |= D_UnwindFlag_Error;
+          }
+          else
+          {
+            memory_map_push(scratch.arena, &memory_map, step.missed_read_vaddr_range, data.str);
+          }
+        }
+        
+        // rjf: if the step itself failed, we just fail out.
+        else if(step.status == UWND_StepStatus_Error)
+        {
+          unwind.flags |= D_UnwindFlag_Error;
+        }
+        
+        // rjf: if the step worked, we're good. equip this step's CFA to the previously added frame,
+        // then exit the step loop.
+        else if(step.status == UWND_StepStatus_Good)
+        {
+          last_frame_node->v.cfa = cfa;
+          step_is_good = 1;
+          break;
+        }
+      }
+      
+      //- rjf: push successful steps to frame list
+      if(step_is_good && arch_ip_from_reg_block(arch_info, regs_block) != 0 && arch_ip_from_reg_block(arch_info, regs_block) != start_ip)
+      {
+        D_UnwindFrameNode *frame_node = push_array(scratch.arena, D_UnwindFrameNode, 1);
+        D_UnwindFrame *f = &frame_node->v;
+        f->regs = push_array_no_zero(arena, U8, arch_reg_block_size);
+        MemoryCopy(f->regs, regs_block, arch_reg_block_size);
+        DLLPushBack(first_frame_node, last_frame_node, frame_node);
+        frame_node_count += 1;
+      }
+      
+      //- rjf: close access
+      access_close(access);
+      
+      //- rjf: exit if we made no progress on the unwind
+      if(arch_ip_from_reg_block(arch_info, regs_block) == start_ip ||
+         arch_sp_from_reg_block(arch_info, regs_block) == start_sp)
+      {
+        break;
+      }
+      
+#if 0 // TODO(rjf): @unwind
       // rip -> module
       D_Entity *module_entity = d_module_from_process_vaddr(process_entity, rip);
       
@@ -3097,13 +3209,14 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
         }break;
       }
       
-      // stop unwinding on errors or stale data
+      // rjf: stop unwinding on errors or stale data
       unwind.flags |= step_result.flags;
       if(unwind.flags & (D_UnwindFlag_Stale|D_UnwindFlag_Error) ||
          (arch_sp_from_reg_block(arch_info, regs_block) == rsp && arch_ip_from_reg_block(arch_info, regs_block) == rip))
       {
         break;
       }
+#endif
     }
   }
   
@@ -3758,23 +3871,47 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
 {
   Temp scratch = scratch_begin(0,0);
   
-  //- rjf: set up per-module info
+  //////////////////////////////
+  //- rjf: allocate / set up basic per-module info
+  //
   Arena *arena = arena_alloc();
   String8 raddbg_data = d_data_from_process_vaddr_range(arena, process, shift_1u64(module_info->raddbg_info_voff_range, base_vaddr), 0);
-  U64 pdatas_count = dim_1u64(module_info->pe_intel_pdatas_vaddr_range) / sizeof(PE_IntelPdata);
-  String8 pdatas_data = d_data_from_process_vaddr_range(arena, process, module_info->pe_intel_pdatas_vaddr_range, 0);
-  pdatas_count = Min(pdatas_count, pdatas_data.size / sizeof(PE_IntelPdata));
-  PE_IntelPdata *pdatas = (PE_IntelPdata *)pdatas_data.str;
-  EH_PtrCtx eh_ptr_ctx = {.pc_vaddr = max_U64, .text_vaddr = max_U64, .data_vaddr = max_U64, .func_vaddr = max_U64, .ptr_align = 0};
-  EH_FrameHdr eh_frame_hdr = {0};
-  B32 is_unwind_eh = 0;
-  if(module_info->eh_frame_header_vaddr_range.min != 0)
+  
+  //////////////////////////////
+  //- rjf: prepare unwind info
+  //
+  UWND_Unwinder unwinder = UWND_Unwinder_Null;
+  void *unwind_info_opaque = 0;
   {
-    String8 eh_frame_hdr_data = d_data_from_process_vaddr_range(arena, process, module_info->eh_frame_header_vaddr_range, 0);
-    eh_ptr_ctx.pc_vaddr   = module_info->eh_frame_header_vaddr_range.min;
-    eh_ptr_ctx.data_vaddr = module_info->eh_frame_header_vaddr_range.min;
-    eh_frame_hdr = eh_parse_frame_hdr(eh_frame_hdr_data, byte_size_from_arch(module_info->arch), &eh_ptr_ctx);
-    is_unwind_eh = 1;
+    //- rjf: PE/x64 unwinder
+    if(dim_1u64(module_info->pe_intel_pdatas_vaddr_range) != 0)
+    {
+      unwinder = UWND_Unwinder_PEx64;
+      PE_X64_UWND_ModuleUnwindInfo *unwind_info = push_array(arena, PE_X64_UWND_ModuleUnwindInfo, 1);
+      {
+        U64 pdatas_count = dim_1u64(module_info->pe_intel_pdatas_vaddr_range) / sizeof(PE_IntelPdata);
+        String8 pdatas_data = d_data_from_process_vaddr_range(arena, process, module_info->pe_intel_pdatas_vaddr_range, 0);
+        pdatas_count = Min(pdatas_count, pdatas_data.size / sizeof(PE_IntelPdata));
+        PE_IntelPdata *pdatas = (PE_IntelPdata *)pdatas_data.str;
+        unwind_info->pdatas = pdatas;
+        unwind_info->pdatas_count = pdatas_count;
+      }
+      unwind_info_opaque = unwind_info;
+    }
+    
+    //- rjf: .eh_frame unwinder
+    else if(dim_1u64(module_info->eh_frame_header_vaddr_range) != 0)
+    {
+      unwinder = UWND_Unwinder_EHFrame;
+      EH_UWND_ModuleUnwindInfo *unwind_info = push_array(arena, EH_UWND_ModuleUnwindInfo, 1);
+      {
+        String8 eh_frame_hdr_data = d_data_from_process_vaddr_range(arena, process, module_info->eh_frame_header_vaddr_range, 0);
+        unwind_info->ptr_ctx.pc_vaddr   = module_info->eh_frame_header_vaddr_range.min;
+        unwind_info->ptr_ctx.data_vaddr = module_info->eh_frame_header_vaddr_range.min;
+        unwind_info->header = eh_parse_frame_hdr(eh_frame_hdr_data, byte_size_from_arch(module_info->arch), &unwind_info->ptr_ctx);
+      }
+      unwind_info_opaque = unwind_info;
+    }
   }
   
   //////////////////////////////
@@ -3854,18 +3991,32 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
   }
   
   //////////////////////////////
+  //- rjf: fill info
+  //
+  D_ModuleInfo info = {0};
+  {
+    info.entry_point_voff             = module_info->entry_point_voff;
+    info.unwinder                     = unwinder;
+    info.unwind_info                  = unwind_info_opaque;
+    info.local_debug_info_path        = initial_debug_info_path;
+    info.debug_info_unique_identifier = debug_info_unique_identifier;
+    info.raddbg_attached_marker_voff  = module_info->raddbg_is_attached_marker_voff;
+    info.raddbg_data                  = raddbg_data;
+  }
+  
+  //////////////////////////////
   //- rjf: insert info into cache
   //
   {
+    D_ModuleInfoCache *cache = &d_ctrl_state->module_info_cache;
     U64 hash = d_hash_from_handle(module);
-    U64 slot_idx = hash%d_ctrl_state->module_image_info_cache.slots_count;
-    U64 stripe_idx = slot_idx%d_ctrl_state->module_image_info_cache.stripes_count;
-    D_ModuleImageInfoCacheSlot *slot = &d_ctrl_state->module_image_info_cache.slots[slot_idx];
-    D_ModuleImageInfoCacheStripe *stripe = &d_ctrl_state->module_image_info_cache.stripes[stripe_idx];
+    U64 slot_idx = hash%cache->slots_count;
+    D_ModuleInfoCacheSlot *slot = &cache->slots[slot_idx];
+    Stripe *stripe = stripe_from_slot_idx(&cache->stripes, slot_idx);
     MutexScopeW(stripe->rw_mutex)
     {
-      D_ModuleImageInfoCacheNode *node = 0;
-      for EachNode(n, D_ModuleImageInfoCacheNode, slot->first)
+      D_ModuleInfoCacheNode *node = 0;
+      for EachNode(n, D_ModuleInfoCacheNode, slot->first)
       {
         if(d_handle_match(n->module, module))
         {
@@ -3875,21 +4026,11 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
       }
       if(!node)
       {
-        node = push_array(arena, D_ModuleImageInfoCacheNode, 1);
+        node = push_array(arena, D_ModuleInfoCacheNode, 1);
         DLLPushBack(slot->first, slot->last, node);
-        node->module                      = module;
-        node->arena                       = arena;
-        node->pdatas                      = pdatas;
-        node->pdatas_count                = pdatas_count;
-        node->cfi_rebase                  = module_info->cfi_rebase;
-        node->is_unwind_eh                = is_unwind_eh;
-        node->eh_frame_hdr                = eh_frame_hdr;
-        node->eh_ptr_ctx                  = eh_ptr_ctx;
-        node->entry_point_voff            = module_info->entry_point_voff;
-        node->local_debug_info_path       = initial_debug_info_path;
-        node->debug_info_unique_identifier= debug_info_unique_identifier;
-        node->raddbg_attached_marker_voff = module_info->raddbg_is_attached_marker_voff;
-        node->raddbg_data                 = str8_copy(arena, raddbg_data);
+        node->module  = module;
+        node->arena   = arena;
+        node->v       = info;
       }
     }
   }
@@ -3903,19 +4044,19 @@ d_ctrl_thread__module_close(D_Handle process, D_Handle module, U64 base_vaddr)
   DMN_Handle process_dmn = d_dmn_from_handle(process);
   
   //////////////////////////////
-  //- rjf: evict module image info from cache
+  //- rjf: evict module info from cache
   //
   U64 raddbg_attached_marker_voff = 0;
   {
+    D_ModuleInfoCache *cache = &d_ctrl_state->module_info_cache;
     U64 hash = d_hash_from_handle(module);
-    U64 slot_idx = hash%d_ctrl_state->module_image_info_cache.slots_count;
-    U64 stripe_idx = slot_idx%d_ctrl_state->module_image_info_cache.stripes_count;
-    D_ModuleImageInfoCacheSlot *slot = &d_ctrl_state->module_image_info_cache.slots[slot_idx];
-    D_ModuleImageInfoCacheStripe *stripe = &d_ctrl_state->module_image_info_cache.stripes[stripe_idx];
-    MutexScopeW(stripe->rw_mutex)
+    U64 slot_idx = hash%cache->slots_count;
+    Stripe *stripe = stripe_from_slot_idx(&cache->stripes, slot_idx);
+    D_ModuleInfoCacheSlot *slot = &cache->slots[slot_idx];
+    MutexScopeW(stripe->rw_mutex) for(;;)
     {
-      D_ModuleImageInfoCacheNode *node = 0;
-      for(D_ModuleImageInfoCacheNode *n = slot->first; n != 0; n = n->next)
+      D_ModuleInfoCacheNode *node = 0;
+      for(D_ModuleInfoCacheNode *n = slot->first; n != 0; n = n->next)
       {
         if(d_handle_match(n->module, module))
         {
@@ -3923,12 +4064,14 @@ d_ctrl_thread__module_close(D_Handle process, D_Handle module, U64 base_vaddr)
           break;
         }
       }
-      if(node)
+      if(node && access_pt_is_expired(&node->access_pt, .time = 0, .update_idxs = 0))
       {
-        raddbg_attached_marker_voff = node->raddbg_attached_marker_voff;
+        raddbg_attached_marker_voff = node->v.raddbg_attached_marker_voff;
         DLLRemove(slot->first, slot->last, node);
         arena_release(node->arena);
+        break;
       }
+      cond_var_wait_rw_w(stripe->cv, stripe->rw_mutex, max_U64);
     }
   }
   
@@ -4314,8 +4457,8 @@ d_ctrl_thread__next_dmn_event(Arena *arena, DMN_CtrlCtx *ctrl_ctx, D_Msg *msg, D
       out_evt->parent     = d_handle_from_dmn(D_MachineID_Local, event->process);
       out_evt->arch       = event->arch;
       out_evt->entity_id  = event->code;
-      out_evt->stack_base = dmn_stack_base_vaddr_from_thread(event->thread);
-      out_evt->tls_root   = dmn_tls_root_vaddr_from_thread(event->thread);
+      out_evt->stack_base = event->stack_pointer;
+      out_evt->tls_root   = event->tls_root_vaddr;
       out_evt->rip_vaddr  = event->instruction_pointer;
       out_evt->string     = event->string;
     }break;
@@ -5902,7 +6045,9 @@ d_ctrl_thread__run(DMN_CtrlCtx *ctrl_ctx, D_Msg *msg)
         //- rjf: add traps for module-baked entry points, if specified
         if(!entries_found)
         {
-          String8 raddbg_data = d_raddbg_data_from_module(scratch.arena, module->handle);
+          Access *access = access_open();
+          D_ModuleInfo *module_info = d_info_from_module(access, module->handle);
+          String8 raddbg_data = module_info->raddbg_data;
           U8 split_char = 0;
           String8List raddbg_data_text_parts = str8_split(scratch.arena, raddbg_data, &split_char, 1, 0);
           for(String8Node *text_n = raddbg_data_text_parts.first; text_n != 0; text_n = text_n->next)
@@ -5932,6 +6077,7 @@ d_ctrl_thread__run(DMN_CtrlCtx *ctrl_ctx, D_Msg *msg)
               }
             }
           }
+          access_close(access);
         }
         
         //- rjf: add traps for PID-correllated entry points
@@ -7092,6 +7238,64 @@ d_process_memory_read(D_Handle process, Rng1U64 range, B32 *is_stale_out, void *
 }
 
 ////////////////////////////////
+//~ rjf: TLS Address Artifact Cache Hooks / Lookups
+
+internal AC_Artifact
+d_tls_vaddr_artifact_create(String8 key, B32 *cancel_signal, B32 *retry_out, U64 *gen_out)
+{
+  // rjf: unpack key
+  D_Handle thread = {0};
+  D_Handle module = {0};
+  {
+    U64 off = 0;
+    off += str8_deserial_read_struct(key, off, &thread);
+    off += str8_deserial_read_struct(key, off, &module);
+  }
+  
+  // rjf: resolve to demon
+  DMN_Handle thread_dmn = d_dmn_from_handle(thread);
+  DMN_Handle module_dmn = d_dmn_from_handle(module);
+  
+  // rjf: compute vaddr
+  U64 tls_vaddr = 0;
+  B32 success = 1;
+  if(!dmn_handle_match(thread_dmn, dmn_handle_zero()) &&
+     !dmn_handle_match(module_dmn, dmn_handle_zero()))
+  {
+    success = dmn_thread_get_module_tls_vaddr(thread_dmn, module_dmn, &tls_vaddr);
+  }
+  
+  // rjf: if not successful -> retry
+  if(!success)
+  {
+    retry_out[0] = 1;
+  }
+  
+  // rjf: package as artifact
+  AC_Artifact artifact = {0};
+  artifact.u64[0] = tls_vaddr;
+  return artifact;
+}
+
+internal void d_tls_vaddr_artifact_destroy(AC_Artifact artifact)
+{
+  // NOTE(rjf): no-op
+}
+
+internal U64
+d_cached_tls_vaddr_from_thread_module(D_Handle thread_handle, D_Handle module_handle, U64 endt_us, B32 *stale_out)
+{
+  U64 result = 0;
+  Access *access = access_open();
+  D_Handle key_data[] = {thread_handle, module_handle};
+  String8 key = str8((U8 *)&key_data[0], sizeof(key_data));
+  AC_Artifact artifact = ac_artifact_from_key(access, key, d_tls_vaddr_artifact_create, d_tls_vaddr_artifact_destroy, endt_us, .stale_out = stale_out);
+  result = artifact.u64[0];
+  access_close(access);
+  return result;
+}
+
+////////////////////////////////
 //~ rjf: Call Stack Artifact Cache Hooks / Lookups
 
 internal AC_Artifact
@@ -7226,7 +7430,7 @@ d_call_stack_artifact_create(String8 key, B32 *cancel_signal, B32 *retry_out, U6
       {
         pre_reg_gen = d_reg_gen();
         pre_mem_gen = d_mem_gen();
-        unwind = d_unwind_from_thread(arena, thread_handle, now_time_us()+5000);
+        unwind = d_unwind_from_thread(arena, thread_handle, 0);
         if(!(unwind.flags & D_UnwindFlag_Stale))
         {
           good = 1;

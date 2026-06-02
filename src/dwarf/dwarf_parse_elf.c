@@ -11,11 +11,7 @@ dw_is_dwarf_present_from_elf_bin(String8 data, ELF_Bin *bin)
     if(shdr->sh_type != ELF_ShType_ProgBits) { continue; }
     String8 name = elf_name_from_shdr64(data, bin, shdr);
     DW_SectionKind s = dw_section_kind_from_string(name);
-    if(s == DW_Section_Null)
-    {
-      s = dw_section_dwo_kind_from_string(name);
-    }
-    is_dwarf_present = (s != DW_Section_Null);
+    is_dwarf_present = (s != DW_SectionKind_Null);
     if(is_dwarf_present)
     {
       break;
@@ -28,7 +24,7 @@ dw_is_dwarf_present_from_elf_bin(String8 data, ELF_Bin *bin)
 #include "third_party/sinfl/sinfl.h"
 
 internal DW_Raw
-dw_input_from_elf_bin(Arena *arena, String8 data, ELF_Bin *bin)
+dw_raw_from_elf_bin(Arena *arena, String8 data, ELF_Bin *bin)
 {
   DW_Raw result = {0};
   B32 is_section_present[ArrayCount(result.sec)] = {0};
@@ -41,14 +37,8 @@ dw_input_from_elf_bin(Arena *arena, String8 data, ELF_Bin *bin)
     String8 section_name = elf_name_from_shdr64(data, bin, shdr);
     DW_SectionKind section_kind = dw_section_kind_from_string(section_name);
     String8 section_data__maybe_compressed = str8_substr(data, r1u64(shdr->sh_offset, shdr->sh_offset + shdr->sh_size));
-    B32 is_dwo = 0;
-    if(section_kind == DW_Section_Null)
-    {
-      section_kind = dw_section_dwo_kind_from_string(section_name);
-      is_dwo = (section_kind != DW_Section_Null);
-    }
     
-    if(section_kind == DW_Section_Null)  { continue; } // skip unknown sections
+    if(section_kind == DW_SectionKind_Null)  { continue; } // skip unknown sections
     if(is_section_present[section_kind]) { continue; } // skip duplicate sections
     
     //- rjf: decompress section data if needed
@@ -108,7 +98,6 @@ dw_input_from_elf_bin(Arena *arena, String8 data, ELF_Bin *bin)
     DW_Section *d = &result.sec[section_kind];
     d->name   = push_str8_copy(arena, section_name);
     d->data   = section_data__uncompressed;
-    d->is_dwo = is_dwo;
   }
   return result;
 }

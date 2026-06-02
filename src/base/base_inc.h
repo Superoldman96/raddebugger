@@ -15,6 +15,7 @@
 #include "base_arena.h"
 #include "base_math.h"
 #include "base_strings.h"
+#include "base_memory_map.h"
 #include "base_hash.h"
 #include "base_system.h"
 #include "base_threads.h"

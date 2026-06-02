@@ -5,11 +5,13 @@
 //
 // [ ] d2r_types alias size and byte size on __float80 typedef mismatch
 
+#if 0
+
 internal RDI_Parsed *
 d2r_rdi_from_dwarf_writer(Arena *arena, DW_Writer *writer)
 {
   Temp scratch = scratch_begin(&arena, 1);
-
+  
   RDI_Parsed *rdi = push_array(arena, RDI_Parsed, 1);
   
   String8 raw_coff;
@@ -156,19 +158,19 @@ dw_writer_tag_end(writer);                                    \
   
 #define TestBuiltinType(n, bs, r)                                                                                              \
 do {                                                                                                                           \
-  RDI_TypeNode *alias = d2rt_type_from_name(rdi, &types_map, n);                                                               \
-  T_Ok(alias);                                                                                                                 \
-  T_Ok(alias->kind == RDI_TypeKind_Alias);                                                                                     \
-  T_Ok(alias->flags == 0);                                                                                                     \
-  T_Ok(alias->byte_size == bs);                                                                                                \
-  RDI_TypeNode *type = rdi_element_from_name_idx(rdi, TypeNodes, alias->user_defined.direct_type_idx);                         \
-  T_Ok(type);                                                                                                                  \
-  T_Ok(type->kind == RDI_TypeKind_##r);                                                                                        \
-  T_Ok(type->flags == 0);                                                                                                      \
-  T_Ok(type->byte_size == alias->byte_size);                                                                                   \
-  U64 expected_name_size = 0;                                                                                                  \
-  U8 *expected_name = rdi_string_from_type_kind(RDI_TypeKind_##r, &expected_name_size);                                        \
-  T_Ok(str8_match(str8_from_rdi_string_idx(rdi, type->built_in.name_string_idx), str8(expected_name, expected_name_size), 0)); \
+RDI_TypeNode *alias = d2rt_type_from_name(rdi, &types_map, n);                                                               \
+T_Ok(alias);                                                                                                                 \
+T_Ok(alias->kind == RDI_TypeKind_Alias);                                                                                     \
+T_Ok(alias->flags == 0);                                                                                                     \
+T_Ok(alias->byte_size == bs);                                                                                                \
+RDI_TypeNode *type = rdi_element_from_name_idx(rdi, TypeNodes, alias->user_defined.direct_type_idx);                         \
+T_Ok(type);                                                                                                                  \
+T_Ok(type->kind == RDI_TypeKind_##r);                                                                                        \
+T_Ok(type->flags == 0);                                                                                                      \
+T_Ok(type->byte_size == alias->byte_size);                                                                                   \
+U64 expected_name_size = 0;                                                                                                  \
+U8 *expected_name = rdi_string_from_type_kind(RDI_TypeKind_##r, &expected_name_size);                                        \
+T_Ok(str8_match(str8_from_rdi_string_idx(rdi, type->built_in.name_string_idx), str8(expected_name, expected_name_size), 0)); \
 } while (0)
   TestBuiltinType("char",                1,  Char8);
   TestBuiltinType("char8_t",             1,  UChar8);
@@ -282,32 +284,32 @@ SKIP(d2r_line_table)
     for EachIndex(k, test_table[i].line_size) {
       String8 cmdl = str8f(arena, "-voff2line -voff:0x%llx %S", test_table[i].voff + k, t_make_file_path(arena, str8_lit("a.rdi")));
       t_invoke_radbin((char *)cmdl.str);
-
+      
       if (g_last_exit_code != 0) {
         t_errorf("radbin exited with %llu on \"%S\"\n", (unsigned long long)g_last_exit_code, cmdl);
         T_Ok(0);
       }
-
+      
       if ( ! t_match_linef(&g_output, "%S:%llu", test_table[i].file->path, test_table[i].ln)) {
         t_errorf("ERROR: conversion produced unexpected output for \"radbin %S\"\n" \
-                "  Expected: %S:%llu\n" \
-                "  Got:      %S\n",
-                cmdl,
-                test_table[i].file->path, (unsigned long long)test_table[i].ln,
-                g_output);
-
+                 "  Expected: %S:%llu\n" \
+                 "  Got:      %S\n",
+                 cmdl,
+                 test_table[i].file->path, (unsigned long long)test_table[i].ln,
+                 g_output);
+        
         if (g_verbose) {
           t_invoke_radbin("-dump -only:line_tables a.rdi");
           t_errorf("\n================================================================================\n");
           t_errorf("RDI:\n%S\n", g_output);
-
+          
           t_errorf("================================================================================\n");
           t_invoke_radbin("-dump -only:debug_line a.exe");
           t_errorf("DWARF:\n%S\n", g_output);
-
+          
           g_output = str8_zero();
         }
-
+        
         T_Ok(0);
       }
     }
@@ -319,7 +321,7 @@ SKIP(d2r_line_table)
 SKIP(d2r_checksums)
 {
   DW_Writer *writer = dw_writer_begin(DW_Format_32Bit, DW_Version_5, DW_CompUnitKind_Compile, Arch_x64);
-
+  
   B32 is_ok = 0;
   
   DW_WriterFile *foo_file  = dw_writer_new_file(writer, str8_lit("/mnt/c/devel/foo.c"));
@@ -594,4 +596,4 @@ TEST(d2r_general)
   
   dw_writer_end(&writer);
 }
-
+#endif

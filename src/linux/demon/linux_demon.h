@@ -176,6 +176,7 @@ typedef struct LNX_DMN_Thread
   B32                     pass_through_signal;
   U64                     pass_through_signo;
   U64                     orig_rax;
+  U64                     dtv_base_vaddr;
   
   struct LNX_DMN_Thread *next;
   struct LNX_DMN_Thread *prev;
@@ -476,6 +477,7 @@ internal void lnx_dmn_thread_write_sp(LNX_DMN_Thread *thread, U64 sp);
 internal B32  lnx_dmn_thread_read_reg_block(LNX_DMN_Thread *thread);
 internal B32  lnx_dmn_thread_write_reg_block(LNX_DMN_Thread *thread);
 internal B32  lnx_dmn_set_single_step_flag(LNX_DMN_Thread *thread, B32 is_on);
+internal U64  lnx_dmn_tls_root_vaddr_from_reg_block(int fd, Arch arch, void *reg_block);
 
 ////////////////////////////////
 //~ List Helpers

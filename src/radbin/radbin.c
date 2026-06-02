@@ -824,7 +824,7 @@ rb_thread_entry_point(void *p)
                 ELF_Bin bin = elf_bin_from_data(scratch.arena, dbg_data);
                 convert_params.arch = arch_from_elf_machine(bin.hdr.e_machine);
                 convert_params.base_vaddr = elf_base_addr_from_bin(&bin);
-                convert_params.raw = dw_input_from_elf_bin(scratch.arena, dbg_data, &bin);
+                convert_params.raw = dw_raw_from_elf_bin(scratch.arena, dbg_data, &bin);
                 convert_params.path_style = PathStyle_UnixAbsolute;
                 convert_params.binary_sections = e2r_rdi_binary_sections_from_elf_section_table(arena, dbg_data, &bin, &bin.shdrs);
                 scratch_end(scratch);
@@ -1442,7 +1442,7 @@ rb_thread_entry_point(void *p)
             else if(f->format == RB_FileFormat_ELF32 ||
                     f->format == RB_FileFormat_ELF64)
             {
-              dw = dw_input_from_elf_bin(arena, f->data, &elf);
+              dw = dw_raw_from_elf_bin(arena, f->data, &elf);
             }
           }
         }
@@ -1526,8 +1526,11 @@ rb_thread_entry_point(void *p)
         {
           if(lane_idx() == 0)
           {
-            str8_list_pushf(arena, &output_blobs, "// %S (%S) (DWARF)\n\n", deterministic ? str8_skip_last_slash(f->path) : f->path, f->format ? rb_file_format_display_name_table[f->format] : str8_lit("Unsupported format"));
-            String8List dump = dw_dump_list_from_sections(arena, &dw, arch, dw_dump_subset_flags, verbose);
+            str8_list_pushf(arena, &output_blobs, "\n// %S (%S) (DWARF)\n\n", deterministic ? str8_skip_last_slash(f->path) : f->path, f->format ? rb_file_format_display_name_table[f->format] : str8_lit("Unsupported format"));
+          }
+          String8List dump = dw_dump_list_from_raw(arena, &dw, arch, dw_dump_subset_flags);
+          if(lane_idx() == 0)
+          {
             str8_list_concat_in_place(&output_blobs, &dump);
           }
           lane_sync();
