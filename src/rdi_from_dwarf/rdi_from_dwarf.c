@@ -5,7 +5,7 @@
 //~ rjf: Helpers
 
 internal int
-d2r2_unique_tag_node_is_less_than(D2R2_UniqueTagNode **l, D2R2_UniqueTagNode **r)
+d2r_unique_tag_node_is_less_than(D2R_UniqueTagNode **l, D2R_UniqueTagNode **r)
 {
   int is_less_than = (l[0]->hash < r[0]->hash);
   return is_less_than;
@@ -15,7 +15,7 @@ d2r2_unique_tag_node_is_less_than(D2R2_UniqueTagNode **l, D2R2_UniqueTagNode **r
 //~ rjf: Main Conversion Entry Point (New)
 
 internal RDIM_BakeParams
-d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
+d2r_convert(Arena *arena, D2R_ConvertParams *params)
 {
   Temp scratch = scratch_begin(&arena, 1);
   DW_Raw *raw = &params->raw;
@@ -232,19 +232,19 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
   //
   // more excellence.
   //
-  typedef struct D2R2_ARangeUnitNode D2R2_ARangeUnitNode;
-  struct D2R2_ARangeUnitNode
+  typedef struct D2R_ARangeUnitNode D2R_ARangeUnitNode;
+  struct D2R_ARangeUnitNode
   {
-    D2R2_ARangeUnitNode *next;
+    D2R_ARangeUnitNode *next;
     U64 info_off;
     RDIM_Rng1U64ChunkList *ranges;
   };
   U64 arange_unit_from_info_off_map_slots_count = unit_arange_ranges->count;
-  D2R2_ARangeUnitNode **arange_unit_from_info_off_map_slots = 0;
+  D2R_ARangeUnitNode **arange_unit_from_info_off_map_slots = 0;
   {
     if(lane_idx() == 0)
     {
-      arange_unit_from_info_off_map_slots = push_array(scratch.arena, D2R2_ARangeUnitNode *, arange_unit_from_info_off_map_slots_count);
+      arange_unit_from_info_off_map_slots = push_array(scratch.arena, D2R_ARangeUnitNode *, arange_unit_from_info_off_map_slots_count);
     }
     lane_sync_u64(&arange_unit_from_info_off_map_slots, 0);
     for EachIndex(arange_unit_idx, unit_arange_ranges->count)
@@ -253,7 +253,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
       RDIM_Rng1U64ChunkList *ranges = &arange_voff_ranges[arange_unit_idx];
       U64 hash = u64_hash_from_str8(str8_struct(&info_off));
       U64 slot_idx = hash%arange_unit_from_info_off_map_slots_count;
-      D2R2_ARangeUnitNode *n = push_array(scratch.arena, D2R2_ARangeUnitNode, 1);
+      D2R_ARangeUnitNode *n = push_array(scratch.arena, D2R_ARangeUnitNode, 1);
       SLLStackPush(arange_unit_from_info_off_map_slots[slot_idx], n);
       n->info_off = info_off;
       n->ranges = ranges;
@@ -940,19 +940,19 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
       unit_info_root_tag_offs = push_array(scratch.arena, U64Array, unit_count);
     }
     lane_sync_u64(&unit_info_root_tag_offs, 0);
-    typedef struct D2R2_UnitTagTreeOffChunkNode D2R2_UnitTagTreeOffChunkNode;
-    struct D2R2_UnitTagTreeOffChunkNode
+    typedef struct D2R_UnitTagTreeOffChunkNode D2R_UnitTagTreeOffChunkNode;
+    struct D2R_UnitTagTreeOffChunkNode
     {
-      D2R2_UnitTagTreeOffChunkNode *next;
+      D2R_UnitTagTreeOffChunkNode *next;
       U64 *v;
       U64 count;
       U64 cap;
     };
-    typedef struct D2R2_UnitTagTreeOffChunkList D2R2_UnitTagTreeOffChunkList;
-    struct D2R2_UnitTagTreeOffChunkList
+    typedef struct D2R_UnitTagTreeOffChunkList D2R_UnitTagTreeOffChunkList;
+    struct D2R_UnitTagTreeOffChunkList
     {
-      D2R2_UnitTagTreeOffChunkNode *first;
-      D2R2_UnitTagTreeOffChunkNode *last;
+      D2R_UnitTagTreeOffChunkNode *first;
+      D2R_UnitTagTreeOffChunkNode *last;
       U64 chunk_count;
       U64 total_count;
     };
@@ -974,7 +974,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
       DW2_ParseCtx *unit_parse_ctx = &unit_parse_ctxs[unit_idx];
       
       //- rjf: gather all offsets of root-level trees
-      D2R2_UnitTagTreeOffChunkList tree_offs = {0};
+      D2R_UnitTagTreeOffChunkList tree_offs = {0};
       S64 depth = 0;
       for(U64 off = unit_info_tag_range.min; contains_1u64(unit_info_tag_range, off);)
       {
@@ -984,10 +984,10 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         //- rjf: if this next tag is root-level, gather
         if(depth == 1)
         {
-          D2R2_UnitTagTreeOffChunkNode *chunk = tree_offs.last;
+          D2R_UnitTagTreeOffChunkNode *chunk = tree_offs.last;
           if(chunk == 0 || chunk->count >= chunk->cap)
           {
-            chunk = push_array(scratch2.arena, D2R2_UnitTagTreeOffChunkNode, 1);
+            chunk = push_array(scratch2.arena, D2R_UnitTagTreeOffChunkNode, 1);
             chunk->cap = 512;
             chunk->v = push_array(scratch2.arena, U64, chunk->cap);
             SLLQueuePush(tree_offs.first, tree_offs.last, chunk);
@@ -1026,7 +1026,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         tree_offs_array.v = push_array(scratch.arena, U64, tree_offs_array.count);
         {
           U64 idx = 0;
-          for EachNode(n, D2R2_UnitTagTreeOffChunkNode, tree_offs.first)
+          for EachNode(n, D2R_UnitTagTreeOffChunkNode, tree_offs.first)
           {
             MemoryCopy(tree_offs_array.v + idx, n->v, sizeof(n->v[0])*n->count);
             idx += n->count;
@@ -1046,14 +1046,14 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
   //- rjf: produce list of (unit * range(root_tag_idx)), so that we can easily
   // subdivide work from all units across all lanes
   //
-  typedef struct D2R2_SubUnitWork D2R2_SubUnitWork;
-  struct D2R2_SubUnitWork
+  typedef struct D2R_SubUnitWork D2R_SubUnitWork;
+  struct D2R_SubUnitWork
   {
     U64 unit_idx;
     Rng1U64 root_tag_idx_range;
   };
   U64 sub_unit_works_count = 0;
-  D2R2_SubUnitWork *sub_unit_works = 0;
+  D2R_SubUnitWork *sub_unit_works = 0;
   ProfScope("produce sub-unit work division") if(lane_idx() == 0)
   {
     U64 root_tags_per_work = 1024;
@@ -1066,7 +1066,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         U64 works_per_this_unit = (root_tags_in_this_unit+root_tags_per_work-1) / root_tags_per_work;
         if(build)
         {
-          D2R2_SubUnitWork *works = sub_unit_works + sub_unit_work_idx;
+          D2R_SubUnitWork *works = sub_unit_works + sub_unit_work_idx;
           U64 works_count = works_per_this_unit;
           U64 root_tag_idx = 0;
           for EachIndex(work_idx, works_count)
@@ -1083,7 +1083,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
       if(!build)
       {
         sub_unit_works_count = sub_unit_work_idx;
-        sub_unit_works = push_array(scratch.arena, D2R2_SubUnitWork, sub_unit_works_count);
+        sub_unit_works = push_array(scratch.arena, D2R_SubUnitWork, sub_unit_works_count);
       }
     }
   }
@@ -1112,7 +1112,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
   }
   lane_sync_u64(&builtin_types, 0);
   lane_sync_u64(&builtin_type_from_kind_map, 0);
-#define d2r2_type_from_builtin_kind(k) ((RDI_TypeKind_FirstBuiltIn <= (k) && (k) <= RDI_TypeKind_LastBuiltIn) ? builtin_type_from_kind_map[k - RDI_TypeKind_FirstBuiltIn] : builtin_type_from_kind_map[RDI_TypeKind_Void])
+#define d2r_type_from_builtin_kind(k) ((RDI_TypeKind_FirstBuiltIn <= (k) && (k) <= RDI_TypeKind_LastBuiltIn) ? builtin_type_from_kind_map[k - RDI_TypeKind_FirstBuiltIn] : builtin_type_from_kind_map[RDI_TypeKind_Void])
   
   ////////////////////////////
   //- rjf: predict the total number of tags in all units
@@ -1129,16 +1129,16 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
   ////////////////////////////
   //- rjf: gather all unique, to-be-deduplicated tags across all units (types, namespaces)
   //
-  D2R2_UniqueTagNode **unique_tag_slots = 0;
+  D2R_UniqueTagNode **unique_tag_slots = 0;
   U64 unique_tag_slots_count = total_tag_count_estimate/8 + 1;
-  D2R2_UnitDedupedTagMap *unit_deduped_tag_maps = 0;
+  D2R_UnitDedupedTagMap *unit_deduped_tag_maps = 0;
   ProfScope("gather all unique, to-be-deduplicated tags across all units (types, namespaces)")
   {
     //- rjf: set up tables
     if(lane_idx() == 0)
     {
-      unique_tag_slots = push_array(scratch.arena, D2R2_UniqueTagNode *, unique_tag_slots_count);
-      unit_deduped_tag_maps = push_array(scratch.arena, D2R2_UnitDedupedTagMap, unit_count);
+      unique_tag_slots = push_array(scratch.arena, D2R_UniqueTagNode *, unique_tag_slots_count);
+      unit_deduped_tag_maps = push_array(scratch.arena, D2R_UnitDedupedTagMap, unit_count);
     }
     lane_sync_u64(&unique_tag_slots, 0);
     lane_sync_u64(&unit_deduped_tag_maps, 0);
@@ -1150,7 +1150,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
       {
         Rng1U64 unit_info_tag_range = unit_info_tag_ranges[unit_idx];
         unit_deduped_tag_maps[unit_idx].slots_count = dim_1u64(unit_info_tag_range) / 256 + 1;
-        unit_deduped_tag_maps[unit_idx].slots = push_array(scratch.arena, D2R2_UnitDedupedTagNode *, unit_deduped_tag_maps[unit_idx].slots_count);
+        unit_deduped_tag_maps[unit_idx].slots = push_array(scratch.arena, D2R_UnitDedupedTagNode *, unit_deduped_tag_maps[unit_idx].slots_count);
       }
       lane_sync();
     }
@@ -1179,32 +1179,32 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         Rng1U64 origin_unit_info_tag_range = unit_info_tag_ranges[origin_unit_idx];
         
         //- rjf: gather all tags which we want to deduplicate
-        typedef struct D2R2_TagNode D2R2_TagNode;
-        struct D2R2_TagNode
+        typedef struct D2R_TagNode D2R_TagNode;
+        struct D2R_TagNode
         {
-          D2R2_TagNode *next;
-          D2R2_UniqueTagKind kind;
+          D2R_TagNode *next;
+          D2R_UniqueTagKind kind;
           U64 info_off;
           U64 container_ancestor_info_off;
           U64 hash_seed;
         };
-        D2R2_TagNode *first_tag_to_dedup = 0;
-        D2R2_TagNode *last_tag_to_dedup = 0;
+        D2R_TagNode *first_tag_to_dedup = 0;
+        D2R_TagNode *last_tag_to_dedup = 0;
         for(U64 root_tag_idx = origin_unit_root_tag_idx_range.min;
             root_tag_idx < origin_unit_root_tag_idx_range.max;
             root_tag_idx += 1)
         {
           U64 root_tag_start_off = unit_info_root_tag_offs[origin_unit_idx].v[root_tag_idx];
-          typedef struct D2R2_ParentTagNode D2R2_ParentTagNode;
-          struct D2R2_ParentTagNode
+          typedef struct D2R_ParentTagNode D2R_ParentTagNode;
+          struct D2R_ParentTagNode
           {
-            D2R2_ParentTagNode *next;
+            D2R_ParentTagNode *next;
             DW_TagKind tag_kind;
             U64 info_off;
             U64 hash_seed;
           };
-          D2R2_ParentTagNode *top_parent = 0;
-          D2R2_ParentTagNode *free_parent = 0;
+          D2R_ParentTagNode *top_parent = 0;
+          D2R_ParentTagNode *free_parent = 0;
           S64 depth = 0;
           for(U64 off = root_tag_start_off; contains_1u64(origin_unit_info_tag_range, off) && (depth > 0 || off == root_tag_start_off);)
           {
@@ -1246,7 +1246,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
                tag.kind == DW_TagKind_Namespace)
             {
               U64 container_ancestor_info_off = 0;
-              for EachNode(n, D2R2_ParentTagNode, top_parent)
+              for EachNode(n, D2R_ParentTagNode, top_parent)
               {
                 if(n->tag_kind == DW_TagKind_StructureType ||
                    n->tag_kind == DW_TagKind_UnionType ||
@@ -1259,8 +1259,8 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
                   break;
                 }
               }
-              D2R2_TagNode *n = push_array(work_scratch.arena, D2R2_TagNode, 1);
-              n->kind = (tag.kind == DW_TagKind_Namespace ? D2R2_UniqueTagKind_Namespace : D2R2_UniqueTagKind_Type);
+              D2R_TagNode *n = push_array(work_scratch.arena, D2R_TagNode, 1);
+              n->kind = (tag.kind == DW_TagKind_Namespace ? D2R_UniqueTagKind_Namespace : D2R_UniqueTagKind_Type);
               n->info_off = start_off;
               n->container_ancestor_info_off = container_ancestor_info_off;
               n->hash_seed = top_parent ? top_parent->hash_seed : 0;
@@ -1286,14 +1286,14 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
             if(tag.has_children)
             {
               depth += 1;
-              D2R2_ParentTagNode *n = free_parent;
+              D2R_ParentTagNode *n = free_parent;
               if(n != 0)
               {
                 SLLStackPop(free_parent);
               }
               else
               {
-                n = push_array(work_scratch.arena, D2R2_ParentTagNode, 1);
+                n = push_array(work_scratch.arena, D2R_ParentTagNode, 1);
               }
               SLLStackPush(top_parent, n);
               n->tag_kind = tag.kind;
@@ -1306,7 +1306,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
               depth = Max(0, depth);
               if(top_parent != 0)
               {
-                D2R2_ParentTagNode *popped = top_parent;
+                D2R_ParentTagNode *popped = top_parent;
                 SLLStackPop(top_parent);
                 SLLStackPush(free_parent, popped);
               }
@@ -1321,11 +1321,11 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         }
         
         //- rjf: hash all tags we need to deduplicate & gather
-        for(D2R2_TagNode *tag_n = first_tag_to_dedup; tag_n != 0; tag_n = tag_n->next)
+        for(D2R_TagNode *tag_n = first_tag_to_dedup; tag_n != 0; tag_n = tag_n->next)
         {
           Temp dedup_root_scratch = scratch_begin(&scratch.arena, 1);
           U64 start_off = tag_n->info_off;
-          D2R2_UniqueTagKind unique_tag_kind = tag_n->kind;
+          D2R_UniqueTagKind unique_tag_kind = tag_n->kind;
           U64 container_ancestor_info_off = tag_n->container_ancestor_info_off;
           U64 hash_seed = tag_n->hash_seed;
           
@@ -1518,8 +1518,8 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
               U64 slot_head_val = (U64)ins_atomic_u64_eval(&unique_tag_slots[slot_idx]);
               
               // rjf: determine if this hash has been gathered
-              D2R2_UniqueTagNode *already_gathered_node = 0;
-              for(D2R2_UniqueTagNode *n = (D2R2_UniqueTagNode *)slot_head_val; n != 0; n = n->next)
+              D2R_UniqueTagNode *already_gathered_node = 0;
+              for(D2R_UniqueTagNode *n = (D2R_UniqueTagNode *)slot_head_val; n != 0; n = n->next)
               {
                 if(n->hash == hash)
                 {
@@ -1584,8 +1584,8 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
               if(!gathered)
               {
                 Temp insert_temp = temp_begin(scratch.arena);
-                D2R2_UniqueTagNode *n = push_array(scratch.arena, D2R2_UniqueTagNode, 1);
-                n->next = (D2R2_UniqueTagNode *)slot_head_val;
+                D2R_UniqueTagNode *n = push_array(scratch.arena, D2R_UniqueTagNode, 1);
+                n->next = (D2R_UniqueTagNode *)slot_head_val;
                 n->kind = unique_tag_kind;
                 n->hash = hash;
                 n->info_off = start_off;
@@ -1609,13 +1609,13 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
           {
             U64 info_off_hash = u64_hash_from_str8(str8_struct(&start_off));
             U64 info_off_slot_idx = info_off_hash%unit_deduped_tag_maps[origin_unit_idx].slots_count;
-            D2R2_UnitDedupedTagNode *n = push_array(scratch.arena, D2R2_UnitDedupedTagNode, 1);
+            D2R_UnitDedupedTagNode *n = push_array(scratch.arena, D2R_UnitDedupedTagNode, 1);
             n->src_info_off = start_off;
             n->dst_hash = hash;
             for(B32 inserted = 0; !inserted;)
             {
               U64 slot_head_val = ins_atomic_u64_eval(&unit_deduped_tag_maps[origin_unit_idx].slots[info_off_slot_idx]);
-              n->next = (D2R2_UnitDedupedTagNode *)slot_head_val;
+              n->next = (D2R_UnitDedupedTagNode *)slot_head_val;
               if(slot_head_val == ins_atomic_u64_eval_cond_assign(&unit_deduped_tag_maps[origin_unit_idx].slots[info_off_slot_idx], (U64)n, slot_head_val))
               {
                 inserted = 1;
@@ -1640,20 +1640,20 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
     for EachInRange(slot_idx, range)
     {
       Temp scratch2 = scratch_begin(&scratch.arena, 1);
-      D2R2_UniqueTagNode **slot = &unique_tag_slots[slot_idx];
+      D2R_UniqueTagNode **slot = &unique_tag_slots[slot_idx];
       
       // rjf: count nodes in this slot
       U64 node_count = 0;
-      for EachNode(n, D2R2_UniqueTagNode, slot[0])
+      for EachNode(n, D2R_UniqueTagNode, slot[0])
       {
         node_count += 1;
       }
       
       // rjf: flatten
-      D2R2_UniqueTagNode **slot_nodes_array = push_array(scratch2.arena, D2R2_UniqueTagNode *, node_count);
+      D2R_UniqueTagNode **slot_nodes_array = push_array(scratch2.arena, D2R_UniqueTagNode *, node_count);
       {
         U64 idx = 0;
-        for EachNode(n, D2R2_UniqueTagNode, slot[0])
+        for EachNode(n, D2R_UniqueTagNode, slot[0])
         {
           slot_nodes_array[idx]  = n;
           idx += 1;
@@ -1661,7 +1661,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
       }
       
       // rjf: sort
-      radsort(slot_nodes_array, node_count, (int (*)(void *, void *))d2r2_unique_tag_node_is_less_than);
+      radsort(slot_nodes_array, node_count, (int (*)(void *, void *))d2r_unique_tag_node_is_less_than);
       
       // rjf: re-order in the slot
       {
@@ -1680,27 +1680,27 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
   ////////////////////////////
   //- rjf: produce [0...n) <-> unique-tag-node mapping for all categories of deduplicated tags
   //
-  U64 *deduped_tag_counts = 0; // [D2R2_UniqueTagKind_COUNT]
-  D2R2_UniqueTagNode ***deduped_tag_nodes = 0; // [D2R2_UniqueTagKind_COUNT]
+  U64 *deduped_tag_counts = 0; // [D2R_UniqueTagKind_COUNT]
+  D2R_UniqueTagNode ***deduped_tag_nodes = 0; // [D2R_UniqueTagKind_COUNT]
   ProfScope("produce [0...n) -> hash mapping for all categories of deduplicated tags") if(lane_idx() == 0)
   {
-    deduped_tag_counts = push_array(scratch.arena, U64, D2R2_UniqueTagKind_COUNT);
-    deduped_tag_nodes = push_array(scratch.arena, D2R2_UniqueTagNode **, D2R2_UniqueTagKind_COUNT);
+    deduped_tag_counts = push_array(scratch.arena, U64, D2R_UniqueTagKind_COUNT);
+    deduped_tag_nodes = push_array(scratch.arena, D2R_UniqueTagNode **, D2R_UniqueTagKind_COUNT);
     for EachIndex(slot_idx, unique_tag_slots_count)
     {
-      for EachNode(n, D2R2_UniqueTagNode, unique_tag_slots[slot_idx])
+      for EachNode(n, D2R_UniqueTagNode, unique_tag_slots[slot_idx])
       {
         deduped_tag_counts[n->kind] += 1;
       }
     }
-    for EachEnumVal(D2R2_UniqueTagKind, k)
+    for EachEnumVal(D2R_UniqueTagKind, k)
     {
-      deduped_tag_nodes[k] = push_array(scratch.arena, D2R2_UniqueTagNode *, deduped_tag_counts[k]);
+      deduped_tag_nodes[k] = push_array(scratch.arena, D2R_UniqueTagNode *, deduped_tag_counts[k]);
     }
-    U64 idxs[D2R2_UniqueTagKind_COUNT] = {0};
+    U64 idxs[D2R_UniqueTagKind_COUNT] = {0};
     for EachIndex(slot_idx, unique_tag_slots_count)
     {
-      for EachNode(n, D2R2_UniqueTagNode, unique_tag_slots[slot_idx])
+      for EachNode(n, D2R_UniqueTagNode, unique_tag_slots[slot_idx])
       {
         deduped_tag_nodes[n->kind][idxs[n->kind]] = n;
         n->order_idx = idxs[n->kind];
@@ -1710,10 +1710,10 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
   }
   lane_sync_u64(&deduped_tag_counts, 0);
   lane_sync_u64(&deduped_tag_nodes, 0);
-  U64 type_count = deduped_tag_counts[D2R2_UniqueTagKind_Type];
-  D2R2_UniqueTagNode **type_tag_nodes = deduped_tag_nodes[D2R2_UniqueTagKind_Type];
-  U64 namespace_count = deduped_tag_counts[D2R2_UniqueTagKind_Namespace];
-  D2R2_UniqueTagNode **namespace_tag_nodes = deduped_tag_nodes[D2R2_UniqueTagKind_Namespace];
+  U64 type_count = deduped_tag_counts[D2R_UniqueTagKind_Type];
+  D2R_UniqueTagNode **type_tag_nodes = deduped_tag_nodes[D2R_UniqueTagKind_Type];
+  U64 namespace_count = deduped_tag_counts[D2R_UniqueTagKind_Namespace];
+  D2R_UniqueTagNode **namespace_tag_nodes = deduped_tag_nodes[D2R_UniqueTagKind_Namespace];
   
   ////////////////////////////
   //- rjf: gather per-type dependency chains
@@ -1759,10 +1759,10 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         U64 hash = t->hash;
         
         // rjf: hash -> unique type tag node
-        D2R2_UniqueTagNode *type_tag_node = 0;
+        D2R_UniqueTagNode *type_tag_node = 0;
         {
           U64 slot_idx = hash%unique_tag_slots_count;
-          for(D2R2_UniqueTagNode *n = unique_tag_slots[slot_idx]; n != 0; n = n->next)
+          for(D2R_UniqueTagNode *n = unique_tag_slots[slot_idx]; n != 0; n = n->next)
           {
             if(n->hash == hash)
             {
@@ -1903,7 +1903,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
           {
             U64 off_hash = u64_hash_from_str8(str8_struct(&direct_type_info_off));
             U64 off_slot_idx = off_hash%unit_deduped_tag_maps[direct_type_unit_idx].slots_count;
-            for(D2R2_UnitDedupedTagNode *n = unit_deduped_tag_maps[direct_type_unit_idx].slots[off_slot_idx]; n != 0; n = n->next)
+            for(D2R_UnitDedupedTagNode *n = unit_deduped_tag_maps[direct_type_unit_idx].slots[off_slot_idx]; n != 0; n = n->next)
             {
               if(n->src_info_off == direct_type_info_off)
               {
@@ -2009,7 +2009,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         Temp temp = temp_begin(scratch2.arena);
         
         // rjf: idx -> type tag node
-        D2R2_UniqueTagNode *type_tag_node = type_tag_nodes[type_idx];
+        D2R_UniqueTagNode *type_tag_node = type_tag_nodes[type_idx];
         U64 info_off = type_tag_node->info_off;
         U64 unit_num = rng1u64_array_num_from_value__binary_search(&unit_info_tag_ranges_array, info_off);
         U64 unit_idx = unit_num > 0 ? unit_num-1 : 0;
@@ -2054,7 +2054,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         // rjf: unpack common attributes
         String8 name = name_attrib->val.string;
         DW_ATE encoding = encoding_attrib->val.u128.u64[0];
-        RDIM_Type *direct_type = d2r2_type_from_builtin_kind(RDI_TypeKind_Void);
+        RDIM_Type *direct_type = d2r_type_from_builtin_kind(RDI_TypeKind_Void);
         U64 bitsize = 0;
         B32 is_decl = (decl_attrib != &dw2_attrib_nil);
         {
@@ -2068,11 +2068,11 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
               U64 new_unit_num = rng1u64_array_num_from_value__binary_search(&unit_info_tag_ranges_array, direct_type_info_off);
               direct_type_unit_idx = (new_unit_num > 0 ? new_unit_num-1 : unit_idx);
             }
-            D2R2_UnitDedupedTagMap *direct_type_unit_type_map = &unit_deduped_tag_maps[direct_type_unit_idx];
+            D2R_UnitDedupedTagMap *direct_type_unit_type_map = &unit_deduped_tag_maps[direct_type_unit_idx];
             U64 info_off_hash = u64_hash_from_str8(str8_struct(&direct_type_info_off));
             U64 info_off_slot_idx = info_off_hash%direct_type_unit_type_map->slots_count;
             U64 direct_type_hash = 0;
-            for(D2R2_UnitDedupedTagNode *n = direct_type_unit_type_map->slots[info_off_slot_idx]; n != 0; n = n->next)
+            for(D2R_UnitDedupedTagNode *n = direct_type_unit_type_map->slots[info_off_slot_idx]; n != 0; n = n->next)
             {
               if(n->src_info_off == direct_type_info_off)
               {
@@ -2081,7 +2081,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
               }
             }
             U64 unique_type_tag_slot_idx = direct_type_hash%unique_tag_slots_count;
-            for(D2R2_UniqueTagNode *n = unique_tag_slots[unique_type_tag_slot_idx]; n != 0; n = n->next)
+            for(D2R_UniqueTagNode *n = unique_tag_slots[unique_type_tag_slot_idx]; n != 0; n = n->next)
             {
               if(n->hash == direct_type_hash)
               {
@@ -2207,10 +2207,10 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
                 // rjf: map info_off/unit_idx -> hash
                 U64 param_type_hash = 0;
                 {
-                  D2R2_UnitDedupedTagMap *direct_type_unit_type_map = &unit_deduped_tag_maps[param_type_unit_idx];
+                  D2R_UnitDedupedTagMap *direct_type_unit_type_map = &unit_deduped_tag_maps[param_type_unit_idx];
                   U64 info_off_hash = u64_hash_from_str8(str8_struct(&param_type_info_off));
                   U64 info_off_slot_idx = info_off_hash%direct_type_unit_type_map->slots_count;
-                  for(D2R2_UnitDedupedTagNode *n = direct_type_unit_type_map->slots[info_off_slot_idx]; n != 0; n = n->next)
+                  for(D2R_UnitDedupedTagNode *n = direct_type_unit_type_map->slots[info_off_slot_idx]; n != 0; n = n->next)
                   {
                     if(n->src_info_off == param_type_info_off)
                     {
@@ -2224,7 +2224,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
                 RDIM_Type *param_type = 0;
                 {
                   U64 unique_type_tag_slot_idx = param_type_hash%unique_tag_slots_count;
-                  for(D2R2_UniqueTagNode *n = unique_tag_slots[unique_type_tag_slot_idx]; n != 0; n = n->next)
+                  for(D2R_UniqueTagNode *n = unique_tag_slots[unique_type_tag_slot_idx]; n != 0; n = n->next)
                   {
                     if(n->hash == param_type_hash)
                     {
@@ -2308,7 +2308,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
             dst_type = rdim_type_chunk_list_push(arena, &lane_types, lane_types_chunk_count);
             dst_type->kind        = RDI_TypeKind_Alias;
             dst_type->name        = name;
-            dst_type->direct_type = d2r2_type_from_builtin_kind(rdi_type_kind);
+            dst_type->direct_type = d2r_type_from_builtin_kind(rdi_type_kind);
             dst_type->byte_size   = bitsize/8; // TODO: byte size on __float80 alias mismatches byte size on direct type now
           }break;
           case DW_TagKind_PointerType:         rdi_type_kind = RDI_TypeKind_Ptr; goto ptr_or_ref_type;
@@ -2538,7 +2538,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
       Temp scratch2 = scratch_begin(&scratch.arena, 1);
       
       // rjf: unpack tag node
-      D2R2_UniqueTagNode *tag_node = namespace_tag_nodes[namespace_idx];
+      D2R_UniqueTagNode *tag_node = namespace_tag_nodes[namespace_idx];
       U64 info_off = tag_node->info_off;
       U64 unit_num = rng1u64_array_num_from_value__binary_search(&unit_info_tag_ranges_array, info_off);
       U64 unit_idx = unit_num > 0 ? unit_num-1 : 0;
@@ -2611,7 +2611,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         udt->self_type = type;
         
         // rjf: idx -> type tag node
-        D2R2_UniqueTagNode *type_tag_node = type_tag_nodes[type_idx];
+        D2R_UniqueTagNode *type_tag_node = type_tag_nodes[type_idx];
         U64 info_off = type_tag_node->info_off;
         U64 unit_num = rng1u64_array_num_from_value__binary_search(&unit_info_tag_ranges_array, info_off);
         U64 unit_idx = unit_num > 0 ? unit_num-1 : 0;
@@ -2678,10 +2678,10 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
             // rjf: (info_off, unit_idx) -> hash
             U64 type_hash = 0;
             {
-              D2R2_UnitDedupedTagMap *unit_deduped_tag_map = &unit_deduped_tag_maps[type_unit_idx];
+              D2R_UnitDedupedTagMap *unit_deduped_tag_map = &unit_deduped_tag_maps[type_unit_idx];
               U64 info_off_hash = u64_hash_from_str8(str8_struct(&type_info_off));
               U64 info_off_slot_idx = info_off_hash%unit_deduped_tag_map->slots_count;
-              for(D2R2_UnitDedupedTagNode *n = unit_deduped_tag_map->slots[info_off_slot_idx]; n != 0; n = n->next)
+              for(D2R_UnitDedupedTagNode *n = unit_deduped_tag_map->slots[info_off_slot_idx]; n != 0; n = n->next)
               {
                 if(n->src_info_off == type_info_off)
                 {
@@ -2694,7 +2694,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
             // rjf: hash -> type
             {
               U64 unique_type_tag_slot_idx = type_hash%unique_tag_slots_count;
-              for(D2R2_UniqueTagNode *n = unique_tag_slots[unique_type_tag_slot_idx]; n != 0; n = n->next)
+              for(D2R_UniqueTagNode *n = unique_tag_slots[unique_type_tag_slot_idx]; n != 0; n = n->next)
               {
                 if(n->hash == type_hash)
                 {
@@ -2867,7 +2867,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         U64 unit_info_off = unit_info_ranges->v[unit_idx].min;
         U64 hash = u64_hash_from_str8(str8_struct(&unit_info_off));
         U64 slot_idx = hash%arange_unit_from_info_off_map_slots_count;
-        for(D2R2_ARangeUnitNode *n = arange_unit_from_info_off_map_slots[slot_idx]; n != 0; n = n->next)
+        for(D2R_ARangeUnitNode *n = arange_unit_from_info_off_map_slots[slot_idx]; n != 0; n = n->next)
         {
           if(n->info_off == unit_info_off)
           {
@@ -2927,21 +2927,21 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
   ////////////////////////////
   //- rjf: convert all symbols
   //
-  typedef struct D2R2_ScopeContainerNode D2R2_ScopeContainerNode;
-  struct D2R2_ScopeContainerNode
+  typedef struct D2R_ScopeContainerNode D2R_ScopeContainerNode;
+  struct D2R_ScopeContainerNode
   {
-    D2R2_ScopeContainerNode *next;
+    D2R_ScopeContainerNode *next;
     U64 info_off;
     RDIM_Scope *scope;
   };
-  typedef struct D2R2_ScopeContainerMap D2R2_ScopeContainerMap;
-  struct D2R2_ScopeContainerMap
+  typedef struct D2R_ScopeContainerMap D2R_ScopeContainerMap;
+  struct D2R_ScopeContainerMap
   {
-    D2R2_ScopeContainerNode **slots;
+    D2R_ScopeContainerNode **slots;
     U64 slots_count;
   };
-  typedef struct D2R2_SubUnitWorkArtifacts D2R2_SubUnitWorkArtifacts;
-  struct D2R2_SubUnitWorkArtifacts
+  typedef struct D2R_SubUnitWorkArtifacts D2R_SubUnitWorkArtifacts;
+  struct D2R_SubUnitWorkArtifacts
   {
     RDIM_SymbolChunkList global_variables;
     RDIM_SymbolChunkList thread_variables;
@@ -2950,16 +2950,16 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
     RDIM_ScopeChunkList scopes;
     RDIM_InlineSiteChunkList inline_sites;
   };
-  D2R2_ScopeContainerMap *scope_container_map = 0;
-  D2R2_SubUnitWorkArtifacts *sub_unit_work_artifacts = 0;
+  D2R_ScopeContainerMap *scope_container_map = 0;
+  D2R_SubUnitWorkArtifacts *sub_unit_work_artifacts = 0;
   ProfScope("convert all symbols")
   {
     if(lane_idx() == 0)
     {
-      scope_container_map = push_array(scratch.arena, D2R2_ScopeContainerMap, 1);
+      scope_container_map = push_array(scratch.arena, D2R_ScopeContainerMap, 1);
       scope_container_map->slots_count = total_tag_count_estimate/8 + 1;
-      scope_container_map->slots = push_array(scratch.arena, D2R2_ScopeContainerNode *, scope_container_map->slots_count);
-      sub_unit_work_artifacts = push_array(scratch.arena, D2R2_SubUnitWorkArtifacts, sub_unit_works_count);
+      scope_container_map->slots = push_array(scratch.arena, D2R_ScopeContainerNode *, scope_container_map->slots_count);
+      sub_unit_work_artifacts = push_array(scratch.arena, D2R_SubUnitWorkArtifacts, sub_unit_works_count);
     }
     lane_sync_u64(&scope_container_map, 0);
     lane_sync_u64(&sub_unit_work_artifacts, 0);
@@ -2977,7 +2977,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
       //- rjf: unpack work
       U64 unit_idx = sub_unit_works[work_idx].unit_idx;
       Rng1U64 root_tag_idx_range = sub_unit_works[work_idx].root_tag_idx_range;
-      D2R2_SubUnitWorkArtifacts *dst_artifacts = &sub_unit_work_artifacts[work_idx];
+      D2R_SubUnitWorkArtifacts *dst_artifacts = &sub_unit_work_artifacts[work_idx];
       
       //- rjf: unpack unit info
       DW2_ParseCtx *unit_parse_ctx = &unit_parse_ctxs[unit_idx];
@@ -2987,10 +2987,10 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
       U64 chunk_count = 256;
       for(U64 root_tag_idx = root_tag_idx_range.min; root_tag_idx < root_tag_idx_range.max; root_tag_idx += 1)
       {
-        typedef struct D2R2_ParentNode D2R2_ParentNode;
-        struct D2R2_ParentNode
+        typedef struct D2R_ParentNode D2R_ParentNode;
+        struct D2R_ParentNode
         {
-          D2R2_ParentNode *next;
+          D2R_ParentNode *next;
           DW_TagKind tag_kind;
           U64 info_off;
           RDIM_Scope *scope;
@@ -2998,8 +2998,8 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
           RDIM_Namespace *container_namespace;
           RDIM_LocationCaseList framebase_location_cases;
         };
-        D2R2_ParentNode *top_parent = 0;
-        D2R2_ParentNode *free_parent = 0;
+        D2R_ParentNode *top_parent = 0;
+        D2R_ParentNode *free_parent = 0;
         U64 root_tag_start_off = unit_info_root_tag_offs[unit_idx].v[root_tag_idx];
         S64 depth = 1;
         for(U64 off = root_tag_start_off; off < unit_info_tag_range.max && (depth > 1 || off == root_tag_start_off);)
@@ -3117,10 +3117,10 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
             // rjf: (info_off, unit_idx) -> hash
             U64 type_hash = 0;
             {
-              D2R2_UnitDedupedTagMap *unit_deduped_tag_map = &unit_deduped_tag_maps[type_unit_idx];
+              D2R_UnitDedupedTagMap *unit_deduped_tag_map = &unit_deduped_tag_maps[type_unit_idx];
               U64 info_off_hash = u64_hash_from_str8(str8_struct(&type_info_off));
               U64 info_off_slot_idx = info_off_hash%unit_deduped_tag_map->slots_count;
-              for(D2R2_UnitDedupedTagNode *n = unit_deduped_tag_map->slots[info_off_slot_idx]; n != 0; n = n->next)
+              for(D2R_UnitDedupedTagNode *n = unit_deduped_tag_map->slots[info_off_slot_idx]; n != 0; n = n->next)
               {
                 if(n->src_info_off == type_info_off)
                 {
@@ -3133,7 +3133,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
             // rjf: hash -> type
             {
               U64 unique_type_tag_slot_idx = type_hash%unique_tag_slots_count;
-              for(D2R2_UniqueTagNode *n = unique_tag_slots[unique_type_tag_slot_idx]; n != 0; n = n->next)
+              for(D2R_UniqueTagNode *n = unique_tag_slots[unique_type_tag_slot_idx]; n != 0; n = n->next)
               {
                 if(n->hash == type_hash)
                 {
@@ -3227,20 +3227,20 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
                   RDIM_Rng1U64 framebase_voff_range = framebase_loc_n->voff_range;
                   
                   //- rjf: set up type stack for type-evaluating bytecode
-                  typedef struct D2R2_ExprVal D2R2_ExprVal;
-                  struct D2R2_ExprVal
+                  typedef struct D2R_ExprVal D2R_ExprVal;
+                  struct D2R_ExprVal
                   {
                     RDI_TypeKind type_kind;
                     B32 is_addr;
                   };
-                  typedef struct D2R2_ExprValNode D2R2_ExprValNode;
-                  struct D2R2_ExprValNode
+                  typedef struct D2R_ExprValNode D2R_ExprValNode;
+                  struct D2R_ExprValNode
                   {
-                    D2R2_ExprValNode *next;
-                    D2R2_ExprVal v;
+                    D2R_ExprValNode *next;
+                    D2R_ExprVal v;
                   };
-                  D2R2_ExprValNode *val_stack_top = 0;
-                  D2R2_ExprValNode *free_val = 0;
+                  D2R_ExprValNode *val_stack_top = 0;
+                  D2R_ExprValNode *free_val = 0;
                   
                   //- rjf: process DWARF bytecode; produce RDI bytecode + mini-type-info for the expression's result
                   typedef struct JumpOpNode JumpOpNode;
@@ -3303,14 +3303,14 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
                     }
                     
                     //- rjf: pop stack values
-                    D2R2_ExprVal popped_vals[2] = {0};
+                    D2R_ExprVal popped_vals[2] = {0};
                     {
                       pop_count = Min(pop_count, ArrayCount(popped_vals));
                       for EachIndex(pop_idx, pop_count)
                       {
                         if(val_stack_top != 0)
                         {
-                          D2R2_ExprValNode *popped = val_stack_top;
+                          D2R_ExprValNode *popped = val_stack_top;
                           popped_vals[pop_idx] = popped->v;
                           SLLStackPop(val_stack_top);
                           SLLStackPush(free_val, popped);
@@ -3319,7 +3319,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
                     }
                     
                     //- rjf: exec op (produce RDI bytecode, + manipulate value stack)
-                    D2R2_ExprVal push_vals[2] = {0};
+                    D2R_ExprVal push_vals[2] = {0};
                     U64 regcode_dw = 0;
                     S64 regval_off = 0;
                     B32 regread_is_addr = 0;
@@ -3544,10 +3544,10 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
                       pick:;
                       {
                         // rjf: pick value from stack
-                        D2R2_ExprVal picked_val = {0};
+                        D2R_ExprVal picked_val = {0};
                         {
                           U64 idx = 0;
-                          for(D2R2_ExprValNode *n = val_stack_top; n != 0; n = n->next)
+                          for(D2R_ExprValNode *n = val_stack_top; n != 0; n = n->next)
                           {
                             if(idx == target_pick_val_idx)
                             {
@@ -3742,14 +3742,14 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
                       push_count = Min(push_count, ArrayCount(push_vals));
                       for EachIndex(push_idx, push_count)
                       {
-                        D2R2_ExprValNode *n = free_val;
+                        D2R_ExprValNode *n = free_val;
                         if(n != 0)
                         {
                           SLLStackPop(free_val);
                         }
                         else
                         {
-                          n = push_array(scratch2.arena, D2R2_ExprValNode, 1);
+                          n = push_array(scratch2.arena, D2R_ExprValNode, 1);
                         }
                         n->v = push_vals[push_idx];
                         SLLStackPush(val_stack_top, n);
@@ -3990,7 +3990,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
           {
             U64 info_off = 0;
             RDIM_Scope *scope = 0;
-            for(D2R2_ParentNode *n = top_parent; n != 0; n = n->next)
+            for(D2R_ParentNode *n = top_parent; n != 0; n = n->next)
             {
               if(n->scope != 0)
               {
@@ -4001,7 +4001,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
             }
             if(scope != 0)
             {
-              D2R2_ScopeContainerNode *n = push_array(scratch.arena, D2R2_ScopeContainerNode, 1);
+              D2R_ScopeContainerNode *n = push_array(scratch.arena, D2R_ScopeContainerNode, 1);
               n->info_off = info_off;
               n->scope = scope;
               U64 hash = u64_hash_from_str8(str8_struct(&info_off));
@@ -4009,7 +4009,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
               for(B32 gathered = 0; !gathered;)
               {
                 U64 expected_head_value = ins_atomic_u64_eval(&scope_container_map->slots[slot_idx]);
-                n->next = (D2R2_ScopeContainerNode *)expected_head_value;
+                n->next = (D2R_ScopeContainerNode *)expected_head_value;
                 if(expected_head_value == ins_atomic_u64_eval_cond_assign(&scope_container_map->slots[slot_idx], (U64)n, expected_head_value))
                 {
                   gathered = 1;
@@ -4061,10 +4061,10 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
             // rjf: info offset -> hash
             U64 hash = 0;
             {
-              D2R2_UnitDedupedTagMap *unit_deduped_tag_map = &unit_deduped_tag_maps[unit_idx];
+              D2R_UnitDedupedTagMap *unit_deduped_tag_map = &unit_deduped_tag_maps[unit_idx];
               U64 info_off_hash = u64_hash_from_str8(str8_struct(&start_off));
               U64 info_off_slot_idx = info_off_hash%unit_deduped_tag_map->slots_count;
-              for EachNode(n, D2R2_UnitDedupedTagNode, unit_deduped_tag_map->slots[info_off_slot_idx])
+              for EachNode(n, D2R_UnitDedupedTagNode, unit_deduped_tag_map->slots[info_off_slot_idx])
               {
                 if(n->src_info_off == start_off)
                 {
@@ -4075,10 +4075,10 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
             }
             
             // rjf: map hash -> unique tag node
-            D2R2_UniqueTagNode *tag_node = 0;
+            D2R_UniqueTagNode *tag_node = 0;
             {
               U64 slot_idx = hash%unique_tag_slots_count;
-              for(D2R2_UniqueTagNode *n = unique_tag_slots[slot_idx]; n != 0; n = n->next)
+              for(D2R_UniqueTagNode *n = unique_tag_slots[slot_idx]; n != 0; n = n->next)
               {
                 if(n->hash == hash)
                 {
@@ -4092,8 +4092,8 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
             if(tag_node != 0) switch(tag_node->kind)
             {
               default:{}break;
-              case D2R2_UniqueTagKind_Type:     {container_type = type_from_idx_map[tag_node->order_idx];}break;
-              case D2R2_UniqueTagKind_Namespace:{container_namespace = namespace_from_idx_map[tag_node->order_idx];}break;
+              case D2R_UniqueTagKind_Type:     {container_type = type_from_idx_map[tag_node->order_idx];}break;
+              case D2R_UniqueTagKind_Namespace:{container_namespace = namespace_from_idx_map[tag_node->order_idx];}break;
             }
           }
           
@@ -4103,14 +4103,14 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
           if(tag.has_children)
           {
             // rjf: push new parent to stack
-            D2R2_ParentNode *n = free_parent;
+            D2R_ParentNode *n = free_parent;
             if(n != 0)
             {
               SLLStackPop(free_parent);
             }
             else
             {
-              n = push_array(scratch.arena, D2R2_ParentNode, 1);
+              n = push_array(scratch.arena, D2R_ParentNode, 1);
             }
             n->tag_kind = tag.kind;
             n->info_off = start_off;
@@ -4133,7 +4133,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
           //
           if(tag.kind == DW_TagKind_Null && top_parent != 0)
           {
-            D2R2_ParentNode *n = top_parent;
+            D2R_ParentNode *n = top_parent;
             SLLStackPop(top_parent);
             SLLStackPush(free_parent, n);
           }
@@ -4201,7 +4201,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
     Rng1U64 range = lane_range(type_count);
     for EachInRange(type_idx, range)
     {
-      D2R2_UniqueTagNode *type_tag_node = type_tag_nodes[type_idx];
+      D2R_UniqueTagNode *type_tag_node = type_tag_nodes[type_idx];
       U64 container_ancestor_info_off = type_tag_node->container_ancestor_info_off;
       RDIM_Type *dst_type = type_from_idx_map[type_idx];
       if(dst_type == 0)
@@ -4220,7 +4220,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         U64 info_off = container_ancestor_info_off;
         U64 hash = u64_hash_from_str8(str8_struct(&info_off));
         U64 slot_idx = hash%scope_container_map->slots_count;
-        for(D2R2_ScopeContainerNode *n = scope_container_map->slots[slot_idx]; n != 0; n = n->next)
+        for(D2R_ScopeContainerNode *n = scope_container_map->slots[slot_idx]; n != 0; n = n->next)
         {
           if(n->info_off == info_off)
           {
@@ -4242,10 +4242,10 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         // rjf: info off -> hash
         U64 hash = 0;
         {
-          D2R2_UnitDedupedTagMap *unit_deduped_tag_map = &unit_deduped_tag_maps[unit_idx];
+          D2R_UnitDedupedTagMap *unit_deduped_tag_map = &unit_deduped_tag_maps[unit_idx];
           U64 info_off_hash = u64_hash_from_str8(str8_struct(&info_off));
           U64 info_off_slot_idx = info_off_hash%unit_deduped_tag_map->slots_count;
-          for(D2R2_UnitDedupedTagNode *n = unit_deduped_tag_map->slots[info_off_slot_idx]; n != 0; n = n->next)
+          for(D2R_UnitDedupedTagNode *n = unit_deduped_tag_map->slots[info_off_slot_idx]; n != 0; n = n->next)
           {
             if(n->src_info_off == info_off)
             {
@@ -4258,15 +4258,15 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         // rjf: hash -> type
         {
           U64 unique_type_tag_slot_idx = hash%unique_tag_slots_count;
-          for(D2R2_UniqueTagNode *n = unique_tag_slots[unique_type_tag_slot_idx]; n != 0; n = n->next)
+          for(D2R_UniqueTagNode *n = unique_tag_slots[unique_type_tag_slot_idx]; n != 0; n = n->next)
           {
             if(n->hash == hash)
             {
-              if(n->kind == D2R2_UniqueTagKind_Type)
+              if(n->kind == D2R_UniqueTagKind_Type)
               {
                 container_type = type_from_idx_map[n->order_idx];
               }
-              else if(n->kind == D2R2_UniqueTagKind_Namespace)
+              else if(n->kind == D2R_UniqueTagKind_Namespace)
               {
                 container_namespace = namespace_from_idx_map[n->order_idx];
               }
@@ -4292,7 +4292,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
     Rng1U64 range = lane_range(namespace_count);
     for EachInRange(namespace_idx, range)
     {
-      D2R2_UniqueTagNode *unique_tag_node = namespace_tag_nodes[namespace_idx];
+      D2R_UniqueTagNode *unique_tag_node = namespace_tag_nodes[namespace_idx];
       U64 container_ancestor_info_off = unique_tag_node->container_ancestor_info_off;
       RDIM_Namespace *dst_namespace = namespace_from_idx_map[namespace_idx];
       if(dst_namespace == 0)
@@ -4306,7 +4306,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         U64 info_off = container_ancestor_info_off;
         U64 hash = u64_hash_from_str8(str8_struct(&info_off));
         U64 slot_idx = hash%scope_container_map->slots_count;
-        for(D2R2_ScopeContainerNode *n = scope_container_map->slots[slot_idx]; n != 0; n = n->next)
+        for(D2R_ScopeContainerNode *n = scope_container_map->slots[slot_idx]; n != 0; n = n->next)
         {
           if(n->info_off == info_off)
           {
@@ -4327,10 +4327,10 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         // rjf: info off -> hash
         U64 hash = 0;
         {
-          D2R2_UnitDedupedTagMap *unit_deduped_tag_map = &unit_deduped_tag_maps[unit_idx];
+          D2R_UnitDedupedTagMap *unit_deduped_tag_map = &unit_deduped_tag_maps[unit_idx];
           U64 info_off_hash = u64_hash_from_str8(str8_struct(&info_off));
           U64 info_off_slot_idx = info_off_hash%unit_deduped_tag_map->slots_count;
-          for(D2R2_UnitDedupedTagNode *n = unit_deduped_tag_map->slots[info_off_slot_idx]; n != 0; n = n->next)
+          for(D2R_UnitDedupedTagNode *n = unit_deduped_tag_map->slots[info_off_slot_idx]; n != 0; n = n->next)
           {
             if(n->src_info_off == info_off)
             {
@@ -4343,15 +4343,15 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
         // rjf: hash -> type
         {
           U64 unique_type_tag_slot_idx = hash%unique_tag_slots_count;
-          for(D2R2_UniqueTagNode *n = unique_tag_slots[unique_type_tag_slot_idx]; n != 0; n = n->next)
+          for(D2R_UniqueTagNode *n = unique_tag_slots[unique_type_tag_slot_idx]; n != 0; n = n->next)
           {
             if(n->hash == hash)
             {
-              if(n->kind == D2R2_UniqueTagKind_Type)
+              if(n->kind == D2R_UniqueTagKind_Type)
               {
                 container_type = type_from_idx_map[n->order_idx];
               }
-              else if(n->kind == D2R2_UniqueTagKind_Namespace)
+              else if(n->kind == D2R_UniqueTagKind_Namespace)
               {
                 container_namespace = namespace_from_idx_map[n->order_idx];
               }
@@ -4385,7 +4385,7 @@ d2r2_convert(Arena *arena, D2R2_ConvertParams *params)
     result.line_tables     = *all_line_tables;
   }
   
-#undef d2r2_type_from_builtin_kind
+#undef d2r_type_from_builtin_kind
   lane_sync();
   scratch_end(scratch);
   return result;

@@ -7,45 +7,45 @@
 ////////////////////////////////
 //~ rjf: Unique Tag Tree Deduplication Types
 
-typedef enum D2R2_UniqueTagKind
+typedef enum D2R_UniqueTagKind
 {
-  D2R2_UniqueTagKind_Type,
-  D2R2_UniqueTagKind_Namespace,
-  D2R2_UniqueTagKind_COUNT
+  D2R_UniqueTagKind_Type,
+  D2R_UniqueTagKind_Namespace,
+  D2R_UniqueTagKind_COUNT
 }
-D2R2_UniqueTagKind;
+D2R_UniqueTagKind;
 
-typedef struct D2R2_UniqueTagNode D2R2_UniqueTagNode;
-struct D2R2_UniqueTagNode
+typedef struct D2R_UniqueTagNode D2R_UniqueTagNode;
+struct D2R_UniqueTagNode
 {
-  D2R2_UniqueTagNode *next;
-  D2R2_UniqueTagKind kind;
+  D2R_UniqueTagNode *next;
+  D2R_UniqueTagKind kind;
   U64 hash;
   U64 info_off;
   U64 container_ancestor_info_off;
   U64 order_idx;
 };
 
-typedef struct D2R2_UnitDedupedTagNode D2R2_UnitDedupedTagNode;
-struct D2R2_UnitDedupedTagNode
+typedef struct D2R_UnitDedupedTagNode D2R_UnitDedupedTagNode;
+struct D2R_UnitDedupedTagNode
 {
-  D2R2_UnitDedupedTagNode *next;
+  D2R_UnitDedupedTagNode *next;
   U64 src_info_off;
   U64 dst_hash;
 };
 
-typedef struct D2R2_UnitDedupedTagMap D2R2_UnitDedupedTagMap;
-struct D2R2_UnitDedupedTagMap
+typedef struct D2R_UnitDedupedTagMap D2R_UnitDedupedTagMap;
+struct D2R_UnitDedupedTagMap
 {
-  D2R2_UnitDedupedTagNode **slots;
+  D2R_UnitDedupedTagNode **slots;
   U64 slots_count;
 };
 
 ////////////////////////////////
 //~ rjf: Conversion Stage Inputs (New)
 
-typedef struct D2R2_ConvertParams D2R2_ConvertParams;
-struct D2R2_ConvertParams
+typedef struct D2R_ConvertParams D2R_ConvertParams;
+struct D2R_ConvertParams
 {
   String8 exe_name;
   String8 exe_data;
@@ -61,11 +61,11 @@ struct D2R2_ConvertParams
 ////////////////////////////////
 //~ rjf: Helpers
 
-internal int d2r2_unique_tag_node_is_less_than(D2R2_UniqueTagNode **l, D2R2_UniqueTagNode **r);
+internal int d2r_unique_tag_node_is_less_than(D2R_UniqueTagNode **l, D2R_UniqueTagNode **r);
 
 ////////////////////////////////
 //~ rjf: Main Conversion Entry Point (New)
 
-internal RDIM_BakeParams d2r2_convert(Arena *arena, D2R2_ConvertParams *params);
+internal RDIM_BakeParams d2r_convert(Arena *arena, D2R_ConvertParams *params);
 
 #endif // RDI_FROM_DWARF_H

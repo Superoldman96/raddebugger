@@ -720,7 +720,7 @@ rb_thread_entry_point(void *p)
           else if(elf_w_dwarf) { log_infof("ELFs specified; converting DWARF data to RDI\n"); }
           
           // rjf: convert
-          D2R2_ConvertParams convert_params = {0};
+          D2R_ConvertParams convert_params = {0};
           {
             B32 got_exe = 0;
             B32 got_dbg = 0;
@@ -835,7 +835,7 @@ rb_thread_entry_point(void *p)
             convert_params.subset_flags  = subset_flags;
             convert_params.deterministic = cmd_line_has_flag(cmdline, str8_lit("deterministic"));
           }
-          ProfScope("convert") dwarf_bake_params = d2r2_convert(arena, &convert_params);
+          ProfScope("convert") dwarf_bake_params = d2r_convert(arena, &convert_params);
         }
         
         //- rjf: PDB inputs => PDB -> RDI conversion
