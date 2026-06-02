@@ -322,7 +322,13 @@ rb_thread_entry_point(void *p)
           if(n->v.path.size != 0)
           {
             log_infof("Found reference to separate debug info file in %S (%S) at %S\n", file_path, rb_file_format_display_name_table[file_format], n->v.path);
-            str8_list_push(arena, &input_file_path_tasks, n->v.path);
+            String8 ext_path_absolute = n->v.path;
+            PathStyle ext_path_style = path_style_from_str8(ext_path_absolute);
+            if(ext_path_style == PathStyle_Relative)
+            {
+              ext_path_absolute = path_absolute_dst_from_relative_dst_src(arena, ext_path_absolute, str8_chop_last_slash(input_file_path));
+            }
+            str8_list_push(arena, &input_file_path_tasks, ext_path_absolute);
           }
         }
         scratch_end(scratch);
@@ -340,7 +346,13 @@ rb_thread_entry_point(void *p)
         if(debug_link.path.size != 0)
         {
           log_infof("Found reference to separate debug info file in %S (%S) at %S\n", n->string, rb_file_format_display_name_table[file_format], debug_link.path);
-          str8_list_push(arena, &input_file_path_tasks, debug_link.path);
+          String8 ext_path_absolute = debug_link.path;
+          PathStyle ext_path_style = path_style_from_str8(ext_path_absolute);
+          if(ext_path_style == PathStyle_Relative)
+          {
+            ext_path_absolute = path_absolute_dst_from_relative_dst_src(arena, ext_path_absolute, str8_chop_last_slash(input_file_path));
+          }
+          str8_list_push(arena, &input_file_path_tasks, ext_path_absolute);
         }
         scratch_end(scratch);
       }

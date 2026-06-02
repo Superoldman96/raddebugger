@@ -6181,6 +6181,12 @@ rd_window_frame(void)
       {
         B32 build_hover_eval = (hover_eval_is_open && !rd_drag_is_active());
         
+        // rjf: reset hover eval timer if it's "open" but we aren't going to build it
+        if(!build_hover_eval && hover_eval_is_open)
+        {
+          ws->hover_eval_firstt_us = rd_state->time_in_us;
+        }
+        
         // rjf: disable hover eval if hovered view is actively scrolling
         if(hover_eval_is_open)
         {
