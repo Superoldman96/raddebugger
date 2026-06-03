@@ -1685,34 +1685,47 @@ rd_view_ui(Rng2F32 rect)
     
     //- rjf: build container
     UI_Box *search_row = &ui_nil_box;
-    UI_PrefHeight(ui_px(search_row_height, 1.f))
+    UI_PrefHeight(ui_px(search_row_height, 1.f)) UI_TagF("focus")
     {
-      search_row = ui_build_box_from_stringf(UI_BoxFlag_DrawSideBottom|UI_BoxFlag_DrawDropShadow, "###search");
+      if(!vs->contents_are_focused) 
+      {
+        ui_set_next_border_color(ui_color_from_name(s("border")));
+      }
+      search_row = ui_build_box_from_stringf(UI_BoxFlag_DrawBorder|UI_BoxFlag_DrawDropShadow, "###search");
     }
     
     //- rjf: build contents
     UI_Parent(search_row) UI_WidthFill UI_HeightFill UI_Focus(vs->query_is_open && !vs->contents_are_focused ? UI_FocusKind_On : UI_FocusKind_Off)
       RD_Font(cmd_kind_info->query.flags & RD_QueryFlag_CodeInput ? RD_FontSlot_Code : RD_FontSlot_Main)
+      UI_Flags(UI_BoxFlag_DisableFocusOverlay|UI_BoxFlag_DisableFocusBorder)
     {
-      if(cmd_name.size != 0)
+      UI_TagF("weak")
       {
-        ui_spacer(ui_em(0.5f, 1.f));
-        UI_TextAlignment(UI_TextAlign_Center)
+        if(cmd_name.size != 0)
+        {
+          ui_spacer(ui_em(0.5f, 1.f));
+          UI_TextAlignment(UI_TextAlign_Center)
+            UI_Transparency(1-search_row_open_t)
+            UI_PrefWidth(ui_em(3.f, 1.f))
+            RD_Font(RD_FontSlot_Icons)
+            ui_label(rd_icon_kind_text_table[icon == RD_IconKind_Null ? RD_IconKind_Find : icon]);
           UI_Transparency(1-search_row_open_t)
-          UI_PrefWidth(ui_em(3.f, 1.f))
-          UI_TagF("weak")
-          RD_Font(RD_FontSlot_Icons)
-          ui_label(rd_icon_kind_text_table[icon == RD_IconKind_Null ? RD_IconKind_Find : icon]);
-        UI_Transparency(1-search_row_open_t)
-          RD_Font(RD_FontSlot_Main) UI_PrefWidth(ui_text_dim(1, 1))
-          ui_label(rd_display_from_code_name(cmd_name));
-        ui_spacer(ui_em(0.5f, 1.f));
+            RD_Font(RD_FontSlot_Main) UI_PrefWidth(ui_text_dim(1, 1))
+            UI_FontSize(ui_top_font_size()*0.85f)
+            ui_label(rd_display_from_code_name(cmd_name));
+        }
+        else
+        {
+          ui_spacer(ui_em(0.5f, 1.f));
+          UI_TextAlignment(UI_TextAlign_Center) RD_Font(RD_FontSlot_Icons) UI_PrefWidth(ui_em(2.f, 1.f))
+            ui_label(rd_icon_kind_text_table[RD_IconKind_Find]);
+        }
       }
       UI_Key line_edit_key = {0};
       RD_CellParams params = {0};
       {
         params.flags |= !!(cmd_kind_info->query.flags & RD_QueryFlag_CodeInput) * RD_CellFlag_CodeContents;
-        params.flags |= RD_CellFlag_Border;
+        params.flags |= RD_CellFlag_NoBackground;
         params.cursor               = &vs->query_cursor;
         params.mark                 = &vs->query_mark;
         params.edit_buffer          = vs->query_buffer;
@@ -1888,7 +1901,7 @@ rd_view_ui(Rng2F32 rect)
           UI_Padding(ui_pct(1, 0))
         {
           ui_labelf("use");
-          UI_TextAlignment(UI_TextAlign_Center) rd_cmd_binding_buttons(rd_cmd_kind_info_table[RD_CmdKind_OpenPalette].string, str8_zero(), 1);
+          UI_TextAlignment(UI_TextAlign_Center) rd_cmd_binding_buttons(rd_cmd_kind_info_table[RD_CmdKind_OpenPalette].string, s(""), 1, 0);
           ui_labelf("to search for commands and options");
         }
       }
@@ -2026,7 +2039,7 @@ rd_view_ui(Rng2F32 rect)
       {
         if(expr_string.size == 0)
         {
-          expr_string = push_str8f(scratch.arena, "query:config.$%I64x.watches", rd_regs()->view);
+          expr_string = str8f(scratch.arena, "query:config.$%I64x.watches", rd_regs()->view);
         }
         E_Eval eval = e_eval_from_string(expr_string);
         RD_WatchViewState *ewv = rd_view_state(RD_WatchViewState);
@@ -5547,7 +5560,7 @@ rd_window_frame(void)
           {
             UI_Box *box = ui_build_box_from_key(UI_BoxFlag_DrawText, ui_key_zero());
             ui_box_equip_display_fstrs(box, &fstrs);
-            rd_cmd_binding_buttons(cmd_name, str8_zero(), 0);
+            rd_cmd_binding_buttons(cmd_name, str8_zero(), 4, RD_CmdBindingButtonFlag_NoEdit);
           }
         }break;
         
@@ -6505,10 +6518,11 @@ rd_window_frame(void)
       for(FloatingViewTask *t = first_floating_view_task; t != 0; t = t->next)
       {
         // rjf: unpack
-        CFG_Node *view      = t->view;    
+        CFG_Node *view    = t->view;    
         Rng2F32 rect      = t->rect;
         B32 is_focused    = t->is_focused;
         B32 is_anchored   = t->is_anchored;
+        B32 is_lister = (cfg_node_child_from_string(view, str8_lit("lister")) != &cfg_nil_node);
         B32 only_secondary_navigation = t->only_secondary_navigation;
         F32 open_t        = ui_anim(ui_key_from_stringf(ui_key_zero(), "floating_view_open_%p", view), 1.f,
                                     .rate = is_anchored ? fast_open_rate : slow_open_rate,
@@ -6602,15 +6616,48 @@ rd_window_frame(void)
           }
           
           // rjf: build contents
+          F32 total_height_px = dim_2f32(rect).y;
+          F32 footer_height_px = 0;
+          if(is_lister && !is_anchored)
+          {
+            footer_height_px = ui_top_font_size()*4.f;
+          }
           UI_Parent(container) UI_Focus(is_focused ? UI_FocusKind_Null : UI_FocusKind_Off)
           {
             ui_set_next_pref_width(ui_pct(1, 0));
-            ui_set_next_pref_height(ui_pct(1, 0));
+            ui_set_next_pref_height(ui_px(total_height_px - footer_height_px, 1));
             ui_set_next_child_layout_axis(Axis2_Y);
-            UI_Box *view_contents_container = ui_build_box_from_stringf(UI_BoxFlag_DrawBorder|UI_BoxFlag_DrawBackground|UI_BoxFlag_Clip, "###view_contents_container");
+            UI_Box *view_contents_container = ui_build_box_from_stringf(UI_BoxFlag_Clip, "###view_contents_container");
             UI_Parent(view_contents_container) UI_WidthFill
             {
               rd_view_ui(rect);
+            }
+          }
+          
+          // rjf: build footer
+          if(is_lister && !is_anchored) UI_Parent(container) UI_WidthFill UI_HeightFill UI_Focus(UI_FocusKind_Off)
+          {
+            ui_set_next_flags(UI_BoxFlag_DrawBackground|UI_BoxFlag_DrawBorder);
+            UI_Column UI_Padding(ui_em(1, 1))
+            {
+              UI_Row UI_Padding(ui_pct(1, 0)) RD_Font(RD_FontSlot_Main) UI_FontSize(ui_top_font_size()*0.8f) UI_TagF("alt")
+                UI_PrefWidth(ui_text_dim(1, 1)) UI_TextAlignment(UI_TextAlign_Center)
+              {
+                rd_cmd_binding_buttons(rd_cmd_kind_info_table[RD_CmdKind_MoveUp].string, s(""), 1, RD_CmdBindingButtonFlag_NoEdit);
+                ui_label(s("/"));
+                rd_cmd_binding_buttons(rd_cmd_kind_info_table[RD_CmdKind_MoveDown].string, s(""), 1, RD_CmdBindingButtonFlag_NoEdit);
+                ui_label(s("to navigate"));
+                
+                ui_spacer(ui_em(1, 1));
+                
+                rd_cmd_binding_buttons(rd_cmd_kind_info_table[RD_CmdKind_Accept].string, s(""), 1, RD_CmdBindingButtonFlag_NoEdit);
+                ui_label(s("to use"));
+                
+                ui_spacer(ui_em(1, 1));
+                
+                rd_cmd_binding_buttons(rd_cmd_kind_info_table[RD_CmdKind_Cancel].string, s(""), 1, RD_CmdBindingButtonFlag_NoEdit);
+                ui_label(s("to cancel"));
+              }
             }
           }
           
@@ -8708,8 +8755,7 @@ rd_window_frame(void)
     F32 border_softness = 1.f;
     B32 do_background_blur = rd_setting_b32_from_name(str8_lit("background_blur"));
     B32 force_opaque_floating_backgrounds = rd_setting_b32_from_name(str8_lit("opaque_backgrounds"));
-    B32 do_drop_shadows = 
-      rd_setting_b32_from_name(str8_lit("drop_shadows"));
+    B32 do_drop_shadows = rd_setting_b32_from_name(str8_lit("drop_shadows"));
     Vec4F32 base_background_color = ui_color_from_name(str8_lit("background"));
     Vec4F32 base_border_color = ui_color_from_name(str8_lit("border"));
     Vec4F32 drop_shadow_color = ui_color_from_name(str8_lit("drop_shadow"));
@@ -9077,6 +9123,45 @@ rd_window_frame(void)
               color.w *= 0.01f;
               R_Rect2DInst *inst = dr_rect(b_border_rect, color, 0, 1.f, 1.f);
               MemoryCopyArray(inst->corner_radii, b_corner_radii);
+            }
+          }
+          
+          // rjf: draw scroll fade
+          if(b->flags & (UI_BoxFlag_DrawFadeTop|UI_BoxFlag_DrawFadeBottom|UI_BoxFlag_DrawFadeLeft|UI_BoxFlag_DrawFadeRight))
+          {
+            Vec2F32 fade_dim = scale_2f32(dim_2f32(b->rect), 0.05f);
+            Vec4F32 fade_color = drop_shadow_color;
+            if(b->flags & UI_BoxFlag_DrawFadeTop)
+            {
+              F32 t = ui_anim(ui_key_from_string(b->key, s("fade_top")), 1.f, .rate = rd_state->catchall_animation_rate);
+              Rng2F32 rect = r2f32p(b->rect.x0, b->rect.y0, b->rect.x1, b->rect.y0 + fade_dim.y*t);
+              R_Rect2DInst *r = dr_rect(rect, fade_color, 0, 0, 0);
+              MemoryCopyArray(r->corner_radii, b_corner_radii);
+              r->colors[Corner_01] = r->colors[Corner_11] = v4f32(0, 0, 0, 0);
+            }
+            if(b->flags & UI_BoxFlag_DrawFadeBottom)
+            {
+              F32 t = ui_anim(ui_key_from_string(b->key, s("fade_bottom")), 1.f, .rate = rd_state->catchall_animation_rate);
+              Rng2F32 rect = r2f32p(b->rect.x0, b->rect.y1 - fade_dim.y*t, b->rect.x1, b->rect.y1);
+              R_Rect2DInst *r = dr_rect(rect, fade_color, 0, 0, 0);
+              MemoryCopyArray(r->corner_radii, b_corner_radii);
+              r->colors[Corner_00] = r->colors[Corner_10] = v4f32(0, 0, 0, 0);
+            }
+            if(b->flags & UI_BoxFlag_DrawFadeLeft)
+            {
+              F32 t = ui_anim(ui_key_from_string(b->key, s("fade_left")), 1.f, .rate = rd_state->catchall_animation_rate);
+              Rng2F32 rect = r2f32p(b->rect.x0, b->rect.y0, b->rect.x1+fade_dim.x*t, b->rect.y1);
+              R_Rect2DInst *r = dr_rect(rect, fade_color, 0, 0, 0);
+              MemoryCopyArray(r->corner_radii, b_corner_radii);
+              r->colors[Corner_11] = r->colors[Corner_10] = v4f32(0, 0, 0, 0);
+            }
+            if(b->flags & UI_BoxFlag_DrawFadeRight)
+            {
+              F32 t = ui_anim(ui_key_from_string(b->key, s("fade_right")), 1.f, .rate = rd_state->catchall_animation_rate);
+              Rng2F32 rect = r2f32p(b->rect.x1 - fade_dim.x*t, b->rect.y0, b->rect.x1, b->rect.y1);
+              R_Rect2DInst *r = dr_rect(rect, fade_color, 0, 0, 0);
+              MemoryCopyArray(r->corner_radii, b_corner_radii);
+              r->colors[Corner_00] = r->colors[Corner_01] = v4f32(0, 0, 0, 0);
             }
           }
           

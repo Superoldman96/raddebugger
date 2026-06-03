@@ -772,14 +772,16 @@ rd_loading_overlay(Rng2F32 rect, F32 loading_t, U64 progress_v, U64 progress_v_t
 //~ rjf: UI Widgets: Fancy Buttons
 
 internal void
-rd_cmd_binding_buttons(String8 name, String8 filter, B32 add_new)
+rd_cmd_binding_buttons(String8 name, String8 filter, U64 limit, RD_CmdBindingButtonFlags flags)
 {
   Temp scratch = scratch_begin(0, 0);
   CFG_KeyMapNodePtrList key_map_nodes = cfg_key_map_node_ptr_list_from_name(scratch.arena, rd_state->key_map, name);
   
   //- rjf: build buttons for each binding
-  UI_CornerRadius(ui_top_font_size()*0.5f) for(CFG_KeyMapNodePtr *n = key_map_nodes.first; n != 0; n = n->next)
+  U64 key_map_idx = 0;
+  UI_CornerRadius(ui_top_font_size()*0.5f) for(CFG_KeyMapNodePtr *n = key_map_nodes.first; n != 0; n = n->next, key_map_idx += 1)
   {
+    if(key_map_idx >= limit) { break; }
     ui_spacer(ui_em(1.f, 1.f));
     CFG_Binding binding = n->v->binding;
     B32 rebinding_active_for_this_binding = (rd_state->bind_change_active &&
@@ -826,7 +828,7 @@ rd_cmd_binding_buttons(String8 name, String8 filter, B32 add_new)
     ui_set_next_group_key(ui_key_zero());
     ui_set_next_pref_width(ui_text_dim(ui_top_font_size()*1.f, 1));
     UI_Box *box = ui_build_box_from_stringf(UI_BoxFlag_DrawText|
-                                            UI_BoxFlag_Clickable|
+                                            (!(flags & RD_CmdBindingButtonFlag_NoEdit) * UI_BoxFlag_Clickable)|
                                             UI_BoxFlag_DrawActiveEffects|
                                             UI_BoxFlag_DrawHotEffects|
                                             UI_BoxFlag_DrawBorder|
@@ -888,7 +890,7 @@ rd_cmd_binding_buttons(String8 name, String8 filter, B32 add_new)
   }
   
   //- rjf: build "add new binding" button
-  if(add_new)
+  if(flags & RD_CmdBindingButtonFlag_AddNew)
   {
     B32 adding_new_binding = (rd_state->bind_change_active &&
                               str8_match(rd_state->bind_change_cmd_name, name, 0) &&
@@ -973,7 +975,7 @@ rd_cmd_spec_button(String8 name)
         UI_TagF("weak")
         UI_FastpathCodepoint(0)
       {
-        rd_cmd_binding_buttons(name, str8_zero(), 1);
+        rd_cmd_binding_buttons(name, str8_zero(), max_U64, RD_CmdBindingButtonFlag_AddNew);
       }
     }
   }
@@ -3935,7 +3937,7 @@ rd_cell(RD_CellParams *params, String8 string)
     {
       UI_PrefWidth(ui_children_sum(1)) UI_Row UI_Padding(ui_em(1.f, 1.f))
       {
-        rd_cmd_binding_buttons(params->bindings_name, params->search_needle, 1);
+        rd_cmd_binding_buttons(params->bindings_name, params->search_needle, max_U64, RD_CmdBindingButtonFlag_AddNew);
       }
     }
   }

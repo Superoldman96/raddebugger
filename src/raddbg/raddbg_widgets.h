@@ -152,7 +152,13 @@ internal void rd_loading_overlay(Rng2F32 rect, F32 loading_t, U64 progress_v, U6
 ////////////////////////////////
 //~ rjf: UI Widgets: Fancy Buttons
 
-internal void rd_cmd_binding_buttons(String8 name, String8 filter, B32 add_new);
+typedef U32 RD_CmdBindingButtonFlags;
+enum
+{
+  RD_CmdBindingButtonFlag_AddNew = (1<<0),
+  RD_CmdBindingButtonFlag_NoEdit = (1<<1),
+};
+internal void rd_cmd_binding_buttons(String8 name, String8 filter, U64 limit, RD_CmdBindingButtonFlags flags);
 internal UI_Signal rd_menu_bar_button(String8 string);
 internal UI_Signal rd_cmd_spec_button(String8 name);
 internal void rd_cmd_list_menu_buttons(U64 count, String8 *cmd_names, U32 *fastpath_codepoints);

@@ -1526,7 +1526,16 @@ ui_scroll_list_begin(UI_ScrollListParams *params, UI_ScrollPt *scroll_pt, Vec2S6
   UI_Box *scrollable_container_box = &ui_nil_box;
   UI_Parent(container_box) UI_ChildLayoutAxis(Axis2_Y) UI_FixedWidth(params->dim_px.x-ui_scroll_list_scroll_bar_dim_px) UI_FixedHeight(params->dim_px.y)
   {
-    scrollable_container_box = ui_build_box_from_stringf(UI_BoxFlag_Clip|UI_BoxFlag_AllowOverflowY|UI_BoxFlag_Scroll, "###sp");
+    UI_BoxFlags fade_flags = 0;
+    if(scroll_pt->idx > params->item_range.min)
+    {
+      fade_flags |= UI_BoxFlag_DrawFadeTop;
+    }
+    if(scroll_pt->idx + num_possible_visible_rows < params->item_range.max)
+    {
+      fade_flags |= UI_BoxFlag_DrawFadeBottom;
+    }
+    scrollable_container_box = ui_build_box_from_stringf(fade_flags|UI_BoxFlag_Clip|UI_BoxFlag_AllowOverflowY|UI_BoxFlag_Scroll, "###sp");
     scrollable_container_box->view_off.y = scrollable_container_box->view_off_target.y = params->row_height_px*mod_f32(scroll_pt->off, 1.f) + params->row_height_px*(scroll_pt->off < 0) - params->row_height_px*(scroll_pt->off == -1.f && scroll_pt->idx == 1);
   }
   
