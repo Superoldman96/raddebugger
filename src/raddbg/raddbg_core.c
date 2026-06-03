@@ -4129,8 +4129,13 @@ rd_view_ui(Rng2F32 rect)
                             // rjf: apply bindings
                             if(cell->px == 0 && cell->eval.space.kind == RD_EvalSpaceKind_MetaCmd)
                             {
-                              cell_params.flags |= RD_CellFlag_Bindings;
-                              cell_params.bindings_name = rd_cmd_name_from_eval(cell->eval);
+                              String8 cmd_name = rd_cmd_name_from_eval(cell->eval);
+                              RD_CmdKindInfo *info = rd_cmd_kind_info_from_string(cmd_name);
+                              if(info->flags & RD_CmdKindFlag_ListInUI)
+                              {
+                                cell_params.flags |= RD_CellFlag_Bindings;
+                                cell_params.bindings_name = cmd_name;
+                              }
                             }
                             
                             // rjf: apply background override
@@ -15620,6 +15625,28 @@ rd_frame(void)
               rd_cmd(RD_CmdKind_FocusTab, .tab = memory_view->id);
               rd_cmd(RD_CmdKind_CenterCursor, .view = memory_view->id);
             }
+          }break;
+          
+          //- rjf: break-when-value-changes
+          case RD_CmdKind_BreakWhenValueChanges:
+          {
+            E_Eval eval = e_eval_from_string(rd_regs()->expr);
+            U64 size = e_type_byte_size_from_key(eval.irtree.type_key);
+            U64 bp_range_size = 1;
+            if(size > bp_range_size) {bp_range_size = 2;}
+            if(size > bp_range_size) {bp_range_size = 4;}
+            if(size > bp_range_size) {bp_range_size = 8;}
+            CFG_Node *user = cfg_node_child_from_string(cfg_node_root(), s("user"));
+            CFG_Node *bp = cfg_node_new(rd_state->cfg, user, s("breakpoint"));
+            CFG_Node *project = cfg_node_new(rd_state->cfg, bp, s("project"));
+            cfg_node_new(rd_state->cfg, project, rd_state->project_path);
+            CFG_Node *addr_loc = cfg_node_new(rd_state->cfg, bp, s("address_location"));
+            cfg_node_new(rd_state->cfg, addr_loc, rd_regs()->expr);
+            CFG_Node *rng = cfg_node_new(rd_state->cfg, bp, s("address_range_size"));
+            cfg_node_newf(rd_state->cfg, rng, "%I64u", bp_range_size);
+            CFG_Node *brk = cfg_node_new(rd_state->cfg, bp, s("break_on_write"));
+            cfg_node_new(rd_state->cfg, brk, s("1"));
+            str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "$%I64x", bp->id);
           }break;
           
           //- rjf: queries

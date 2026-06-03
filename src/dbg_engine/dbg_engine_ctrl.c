@@ -2533,10 +2533,15 @@ d_ctrl_thread__append_resolved_module_user_bp_traps(Arena *arena, D_EvalScope *e
     else if(bp->vaddr_expr.size != 0)
     {
       String8 expr = bp->vaddr_expr;
-      E_Value value = e_value_from_string(expr);
-      if(value.u64 != 0 || bp->flags != 0)
+      E_Eval eval = e_eval_from_string(expr);
+      U64 vaddr = eval.value.u64;
+      if(eval.irtree.mode == E_Mode_Value)
       {
-        DMN_Trap trap = {process_dmn, value.u64, (U64)bp};
+        vaddr = e_value_eval_from_eval(eval).value.u64;
+      }
+      if(vaddr != 0 || bp->flags != 0)
+      {
+        DMN_Trap trap = {process_dmn, vaddr, (U64)bp};
         trap.flags = d_dmn_trap_flags_from_breakpoint_flags(bp->flags);
         trap.size = bp->size;
         dmn_trap_chunk_list_push(arena, traps_out, 256, &trap);

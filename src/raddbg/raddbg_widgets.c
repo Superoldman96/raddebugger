@@ -1430,7 +1430,6 @@ rd_code_slice(RD_CodeSliceParams *params, TxtPt *cursor, TxtPt *mark, S64 *prefe
           line_num += 1, line_idx += 1)
       {
         D_EntityList line_ips  = params->line_ips[line_idx];
-        ui_set_next_hover_cursor(WM_Cursor_HandPoint);
         UI_Box *line_margin_box = ui_build_box_from_stringf(UI_BoxFlag_Clickable*!!(params->flags & RD_CodeSliceFlag_Clickable)|UI_BoxFlag_DrawActiveEffects, "line_margin_%I64x", line_num);
         UI_Parent(line_margin_box)
         {
@@ -1585,9 +1584,9 @@ rd_code_slice(RD_CodeSliceParams *params, TxtPt *cursor, TxtPt *mark, S64 *prefe
         D_EntityList line_ips = params->line_ips[line_idx];
         CFG_NodePtrList line_bps = params->line_bps[line_idx];
         CFG_NodePtrList line_pins = params->line_pins[line_idx];
-        ui_set_next_hover_cursor(WM_Cursor_HandPoint);
         ui_set_next_background_color(v4f32(0, 0, 0, 0));
-        UI_Box *line_margin_box = ui_build_box_from_stringf(UI_BoxFlag_Clickable*!!(params->flags & RD_CodeSliceFlag_Clickable)|UI_BoxFlag_DrawBackground|UI_BoxFlag_DrawActiveEffects, "line_margin_%I64x", line_num);
+        ui_set_next_text_alignment(UI_TextAlign_Center);
+        UI_Box *line_margin_box = ui_build_box_from_stringf(UI_BoxFlag_Clickable*!!(params->flags & RD_CodeSliceFlag_Clickable)|UI_BoxFlag_DrawBackground|UI_BoxFlag_DrawText|UI_BoxFlag_DrawActiveEffects, "###line_margin_%I64x", line_num);
         UI_Parent(line_margin_box)
         {
           //- rjf: build margin thread ip ui
@@ -1856,6 +1855,15 @@ rd_code_slice(RD_CodeSliceParams *params, TxtPt *cursor, TxtPt *mark, S64 *prefe
         
         // rjf: empty margin interaction
         UI_Signal line_margin_sig = ui_signal_from_box(line_margin_box);
+        if(ui_hovering(line_margin_sig))
+        {
+          DR_FStrList fstrs = {0};
+          Vec4F32 color = ui_color_from_name(s("breakpoint"));
+          color.w *= 0.2f;
+          DR_FStrParams p = {rd_font_from_slot(RD_FontSlot_Icons), rd_raster_flags_from_slot(RD_FontSlot_Icons), color, ui_top_font_size()};
+          dr_fstrs_push_new(scratch.arena, &fstrs, &p, rd_icon_kind_text_table[RD_IconKind_CircleFilled]);
+          ui_box_equip_display_fstrs(line_margin_box, &fstrs);
+        }
         if(ui_clicked(line_margin_sig))
         {
           rd_cmd(RD_CmdKind_AddBreakpoint,
