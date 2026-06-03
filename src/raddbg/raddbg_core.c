@@ -6424,6 +6424,7 @@ rd_window_frame(void)
         CFG_Node *view = cfg_node_child_from_string_or_alloc(rd_state->cfg, root, str8_lit("watch"));
         CFG_Node *query = cfg_node_child_from_string_or_alloc(rd_state->cfg, view, str8_lit("query"));
         B32 is_lister = (cfg_node_child_from_string(view, str8_lit("lister")) != &cfg_nil_node);
+        B32 is_small = (cfg_node_child_from_string(view, str8_lit("small")) != &cfg_nil_node);
         B32 root_is_explicit = (cfg_node_child_from_string(view, str8_lit("explicit_root")) != &cfg_nil_node);
         RD_ViewState *vs = rd_view_state_from_cfg(view);
         
@@ -6494,6 +6495,16 @@ rd_window_frame(void)
           EV_BlockTree predicted_block_tree = ev_block_tree_from_eval(scratch.arena, rd_view_eval_view(), rd_view_query_input(), query_eval);
           F32 query_width_px = floor_f32(content_rect_dim.x * 0.35f);
           F32 max_query_height_px = content_rect_dim.y*0.8f;
+          if(is_small)
+          {
+            query_width_px = floor_f32(content_rect_dim.x * 0.15f);
+            max_query_height_px = content_rect_dim.y*0.3f;
+          }
+          if(!ui_key_match(ui_key_zero(), ws->query_regs->ui_key))
+          {
+            query_width_px = is_small ? (ui_top_font_size()*25.f) : (ui_top_font_size()*60.f);
+            max_query_height_px = is_small ? (ui_top_font_size()*40.f) : (ui_top_font_size()*80.f);
+          }
           F32 query_height_px = max_query_height_px;
           if(size_query_by_expr_eval)
           {
@@ -6516,7 +6527,7 @@ rd_window_frame(void)
             {
               rect.x0 = anchor_box->rect.x0 + ws->query_regs->off_px.x;
               rect.y0 = anchor_box->rect.y1 + ws->query_regs->off_px.y;
-              rect.x1 = rect.x0 + ui_top_font_size()*60.f;
+              rect.x1 = rect.x0 + query_width_px;
               rect.y1 = rect.y0 + query_height_px;
             }
           }
@@ -8640,7 +8651,9 @@ rd_window_frame(void)
                              .expr = str8_lit("query:tab_commands"),
                              .panel = panel->cfg->id,
                              .do_implicit_root = 1,
+                             .small_size = 1,
                              .do_lister = 1,
+                             .activate_with_single_click = 1,
                              .ui_key = add_new_box->key);
                     }
                   }
@@ -15716,6 +15729,14 @@ rd_frame(void)
                 else
                 {
                   cfg_node_child_from_string_or_alloc(rd_state->cfg, view, str8_lit("lister"));
+                }
+                if(!rd_regs()->small_size)
+                {
+                  cfg_node_release(rd_state->cfg, cfg_node_child_from_string(view, str8_lit("small")));
+                }
+                else
+                {
+                  cfg_node_child_from_string_or_alloc(rd_state->cfg, view, str8_lit("small"));
                 }
                 if(!rd_regs()->activate_with_single_click)
                 {
