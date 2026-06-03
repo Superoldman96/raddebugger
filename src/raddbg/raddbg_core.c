@@ -2447,30 +2447,46 @@ rd_view_ui(Rng2F32 rect)
                     {
                       default:
                       {
-                        String8 name = {0};
+                        // rjf: unpack voff / dbgi key from evaluation
+                        U64 voff = 0;
+                        DI_Key dbgi_key = {0};
+                        if(eval.space.kind == D_EvalSpaceKind_Entity)
                         {
                           U64 vaddr = eval.value.u64;
-                          D_Entity *process = d_entity_from_handle(rd_regs()->process);
+                          D_Entity *process = rd_ctrl_entity_from_eval_space(eval.space);
                           D_Entity *module = d_module_from_process_vaddr(process, vaddr);
-                          DI_Key dbgi_key = d_dbgi_key_from_module(module);
-                          U64 voff = d_voff_from_vaddr(module, vaddr);
-                          {
-                            Access *access = access_open();
-                            RDI_Parsed *rdi = di_rdi_from_key(access, dbgi_key, 1, 0);
-                            if(name.size == 0)
-                            {
-                              RDI_Symbol *procedure = rdi_procedure_from_voff(rdi, voff);
-                              name.str = rdi_name_from_procedure(rdi, procedure, &name.size);
-                            }
-                            if(name.size == 0)
-                            {
-                              RDI_Symbol *gvar = rdi_global_variable_from_voff(rdi, voff);
-                              name.str = rdi_string_from_idx(rdi, gvar->name_string_idx, &name.size);
-                            }
-                            access_close(access);
-                          }
+                          dbgi_key = d_dbgi_key_from_module(module);
+                          voff = d_voff_from_vaddr(module, vaddr);
                         }
-                        if(name.size != 0)
+                        else
+                        {
+                          voff = eval.value.u64;
+                          E_DbgInfo *dbg_info = e_dbg_info_from_type_key(eval.irtree.type_key);
+                          dbgi_key = dbg_info->dbgi_key;
+                        }
+                        
+                        // rjf: map voff / dbgi key to name
+                        String8 name = {0};
+                        B32 nav_to_name = 0;
+                        {
+                          Access *access = access_open();
+                          RDI_Parsed *rdi = di_rdi_from_key(access, dbgi_key, 1, 0);
+                          if(name.size == 0)
+                          {
+                            RDI_Symbol *procedure = rdi_procedure_from_voff(rdi, voff);
+                            name = fully_qualified_str8_from_rdi_symbol(scratch.arena, rdi, procedure);
+                            nav_to_name = (name.size != 0);
+                          }
+                          if(name.size == 0)
+                          {
+                            RDI_Symbol *gvar = rdi_global_variable_from_voff(rdi, voff);
+                            name = fully_qualified_str8_from_rdi_symbol(scratch.arena, rdi, gvar);
+                          }
+                          access_close(access);
+                        }
+                        
+                        // rjf: go to name if we can, otherwise just evaluate it in a sub-query
+                        if(name.size != 0 && nav_to_name)
                         {
                           rd_cmd(RD_CmdKind_GoToName, .string = name);
                         }
