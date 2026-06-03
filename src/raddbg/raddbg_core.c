@@ -3173,6 +3173,7 @@ rd_view_ui(Rng2F32 rect)
         //////////////////////////////
         //- rjf: build ui
         //
+        E_Eval selected_eval = {0};
         B32 pressed = 0;
         ProfScope("build ui")
         {
@@ -3701,6 +3702,14 @@ rd_view_ui(Rng2F32 rect)
                       E_Eval cell_value_eval = e_value_eval_from_eval(cell->eval);
                       B32 cell_toggled = (cell_value_eval.value.u64 != 0);
                       B32 next_cell_toggled = cell_toggled;
+                      
+                      ////////////////////////
+                      //- rjf: get selected eval from selected cell
+                      //
+                      if(cell_selected)
+                      {
+                        selected_eval = cell->eval;
+                      }
                       
                       ////////////////////////
                       //- rjf: determine if cell evaluation's data is fresh and/or bad
@@ -4282,6 +4291,20 @@ rd_view_ui(Rng2F32 rect)
                           pressed = 1;
                         }
                         
+                        // rjf: right-click -> move selection here, open query
+                        if(ui_right_clicked(sig))
+                        {
+                          selected_eval = cell->eval;
+                          ewv->next_cursor = ewv->next_mark = cell_pt;
+                          pressed = 1;
+                          rd_cmd(RD_CmdKind_PushQuery,
+                                 .expr = s("query:eval_commands"),
+                                 .do_implicit_root = 1,
+                                 .do_lister = 1,
+                                 .activate_with_single_click = 1,
+                                 .ui_key = cell_box->key);
+                        }
+                        
                         // rjf: reversion
                         if(revert_cell && cell->eval.space.kind == RD_EvalSpaceKind_MetaCfg)
                         {
@@ -4580,6 +4603,14 @@ rd_view_ui(Rng2F32 rect)
           }
         }
         
+        ////////////////////////
+        //- rjf: fill registers
+        //
+        if(cfg_node_child_from_string(view, str8_lit("lister")) == &cfg_nil_node)
+        {
+          rd_regs()->expr = e_full_expr_string_from_key(rd_frame_arena(), selected_eval.key);
+        }
+        
         //////////////////////////////
         //- rjf: general table-wide press logic
         //
@@ -4791,10 +4822,7 @@ rd_view_setting_addr_from_name(String8 name)
   E_Eval eval = e_eval_from_string(string);
   E_TypeKey type_key = e_type_key_unwrap(eval.irtree.type_key, E_TypeUnwrapFlag_AllDecorative);
   E_TypeKind type_kind = e_type_kind_from_key(type_key);
-  if(eval.irtree.mode == E_Mode_Offset &&
-     (type_kind == E_TypeKind_Struct ||
-      type_kind == E_TypeKind_Union ||
-      type_kind == E_TypeKind_Class))
+  if(eval.irtree.mode == E_Mode_Offset && !e_type_kind_is_pointer_or_ref(type_kind))
   {
     result = eval.value.u64;
   }
@@ -5833,6 +5861,7 @@ rd_window_frame(void)
           Handle(thread);
 #undef Handle
           ui_labelf("file_path: \"%S\"", regs->file_path);
+          ui_labelf("expr: \"%S\"", regs->expr);
           ui_labelf("cursor: (L:%I64d, C:%I64d)", regs->cursor.line, regs->cursor.column);
           ui_labelf("mark: (L:%I64d, C:%I64d)", regs->mark.line, regs->mark.column);
           ui_labelf("unwind_count: %I64u", regs->unwind_count);
@@ -8219,7 +8248,7 @@ rd_window_frame(void)
             
             //- rjf: pop interaction registers; commit if this is the selected view
             RD_Regs *view_regs = rd_pop_regs();
-            if(panel_is_focused)
+            if(panel_tree.focused == panel)
             {
               MemoryCopyStruct(rd_regs(), view_regs);
             }
@@ -11748,10 +11777,11 @@ rd_frame(void)
       {
         String8 names[] =
         {
-          str8_lit("commands"),
-          str8_lit("tab_commands"),
-          str8_lit("text_pt_commands"),
-          str8_lit("text_range_commands"),
+          s("commands"),
+          s("tab_commands"),
+          s("text_pt_commands"),
+          s("text_range_commands"),
+          s("eval_commands"),
         };
         for EachElement(idx, names)
         {
@@ -15503,6 +15533,92 @@ rd_frame(void)
                   rd_cmd(cursor_snap_kind);
                 }
               }
+            }
+          }break;
+          
+          //- rjf: snap-to-memory-location
+          case RD_CmdKind_GoToMemory:
+          {
+            // rjf: unpack expr
+            String8 expr = rd_regs()->expr;
+            E_Eval eval = e_eval_from_string(expr);
+            String8 memory_view_expr = {0}; // TODO(rjf): qualify by process when possible
+            String8 memory_view_cursor_expr = expr;
+            
+            // rjf: find existing memory view
+            CFG_Node *memory_view = &cfg_nil_node;
+            for(RD_WindowState *ws = rd_state->first_window_state; ws != &rd_nil_window_state; ws = ws->order_next)
+            {
+              CFG_Node *window = cfg_node_from_id(ws->cfg_id);
+              CFG_PanelTree panel_tree = cfg_panel_tree_from_cfg(scratch.arena, window);
+              for(CFG_PanelNode *panel = panel_tree.root;
+                  panel != &cfg_nil_panel_node;
+                  panel = cfg_panel_node_rec__depth_first_pre(panel_tree.root, panel).next)
+              {
+                if(panel->first != &cfg_nil_panel_node) { continue; }
+                for(CFG_NodePtrNode *tab_n = panel->tabs.first; tab_n != 0; tab_n = tab_n->next)
+                {
+                  CFG_Node *tab = tab_n->v;
+                  if(str8_match(tab->string, s("memory"), 0))
+                  {
+                    memory_view = tab;
+                  }
+                }
+              }
+              if(memory_view != &cfg_nil_node && window->id == rd_regs()->window)
+              {
+                break;
+              }
+            }
+            
+            // rjf: create memory view if it didn't exist
+            if(memory_view == &cfg_nil_node)
+            {
+              // rjf: find biggest panel in active window
+              CFG_Node *window = cfg_node_from_id(rd_regs()->window);
+              CFG_PanelTree panel_tree = cfg_panel_tree_from_cfg(scratch.arena, window);
+              CFG_PanelNode *biggest_panel = &cfg_nil_panel_node;
+              {
+                Rng2F32 root_rect = r2f32(v2f32(0, 0), v2f32(1000, 1000));
+                F32 best_panel_area = 0;
+                for(CFG_PanelNode *panel = panel_tree.root;
+                    panel != &cfg_nil_panel_node;
+                    panel = cfg_panel_node_rec__depth_first_pre(panel_tree.root, panel).next)
+                {
+                  if(panel->first != &cfg_nil_panel_node)
+                  {
+                    continue;
+                  }
+                  Rng2F32 panel_rect = cfg_target_rect_from_panel_node(root_rect, panel_tree.root, panel);
+                  Vec2F32 panel_rect_dim = dim_2f32(panel_rect);
+                  F32 panel_area = panel_rect_dim.x*panel_rect_dim.y;
+                  if((best_panel_area == 0 || panel_area > best_panel_area))
+                  {
+                    best_panel_area = panel_area;
+                    biggest_panel = panel;
+                  }
+                }
+              }
+              
+              // rjf: open new tab on that panel
+              if(biggest_panel != &cfg_nil_panel_node)
+              {
+                memory_view = cfg_node_new(rd_state->cfg, biggest_panel->cfg, s("memory"));
+              }
+            }
+            
+            // rjf: parameterize memory view, select memory view, snap to cursor
+            if(memory_view != &cfg_nil_node)
+            {
+              CFG_Node *expr_root = cfg_node_child_from_string_or_alloc(rd_state->cfg, memory_view, s("expression"));
+              cfg_node_new_replace(rd_state->cfg, expr_root, memory_view_expr);
+              CFG_Node *cursor_root = cfg_node_child_from_string_or_alloc(rd_state->cfg, memory_view, s("cursor"));
+              cfg_node_new_replace(rd_state->cfg, cursor_root, memory_view_cursor_expr);
+              CFG_Node *mark_root = cfg_node_child_from_string_or_alloc(rd_state->cfg, memory_view, s("mark"));
+              cfg_node_new_replace(rd_state->cfg, mark_root, memory_view_cursor_expr);
+              rd_cmd(RD_CmdKind_FocusPanel, .panel = memory_view->parent->id);
+              rd_cmd(RD_CmdKind_FocusTab, .tab = memory_view->id);
+              rd_cmd(RD_CmdKind_CenterCursor, .view = memory_view->id);
             }
           }break;
           
