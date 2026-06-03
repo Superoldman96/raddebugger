@@ -5143,6 +5143,7 @@ rd_window_frame(void)
   if(!window_is_focused || popup_is_open)
   {
     ws->menu_bar_key_held = 0;
+    ws->menu_bar_focus_press_started = 0;
   }
   ws->window_temporarily_focused_ipc = 0;
   ui_select_state(ws->ui);
@@ -11358,7 +11359,7 @@ rd_frame(void)
       }
       
       //- rjf: try menu bar operations
-      if(rd_state->alt_menu_bar_enabled)
+      if(rd_state->alt_menu_bar_enabled && wm_window_is_focused(ws->os))
       {
         if(!take && event->kind == WM_EventKind_Press && event->key == WM_Key_Alt && event->modifiers == 0 && event->is_repeat == 0)
         {
@@ -13283,7 +13284,7 @@ rd_frame(void)
             }
             
             //- rjf: if just opened user -> load last project, if enabled
-            if(kind == RD_CmdKind_OpenUser && rd_setting_b32_from_name(s("auto_load_last_project")))
+            if(kind == RD_CmdKind_OpenUser && rd_setting_b32_from_name(s("auto_load_last_project")) && rd_state->project_path.size == 0)
             {
               CFG_Node *user = cfg_node_child_from_string(cfg_node_root(), s("user"));
               CFG_NodePtrList recent_projects = cfg_node_child_list_from_string(scratch.arena, user, s("recent_project"));
