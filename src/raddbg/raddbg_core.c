@@ -6644,6 +6644,7 @@ rd_window_frame(void)
                 UI_PrefWidth(ui_text_dim(1, 1)) UI_TextAlignment(UI_TextAlign_Center)
               {
                 rd_cmd_binding_buttons(rd_cmd_kind_info_table[RD_CmdKind_MoveUp].string, s(""), 1, RD_CmdBindingButtonFlag_NoEdit);
+                ui_spacer(ui_em(1.f, 1.f));
                 ui_label(s("/"));
                 rd_cmd_binding_buttons(rd_cmd_kind_info_table[RD_CmdKind_MoveDown].string, s(""), 1, RD_CmdBindingButtonFlag_NoEdit);
                 ui_label(s("to navigate"));
