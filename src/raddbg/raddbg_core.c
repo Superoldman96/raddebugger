@@ -560,6 +560,21 @@ rd_possible_overrides_from_file_path(Arena *arena, String8 file_path)
   Temp scratch = scratch_begin(&arena, 1);
   PathStyle pth_style = PathStyle_Relative;
   String8List pth_parts = path_normalized_list_from_string(scratch.arena, file_path, &pth_style);
+  
+  //- rjf: push possible overrides for relativized-according-to-debug-info-and-module path
+  {
+    String8 module_folder = str8_chop_last_slash(e_base_ctx->primary_module->name);
+    String8 path_relative_to_module = path_relative_dst_from_absolute_dst_src(arena, file_path, module_folder);
+    String8 debug_info_folder = str8_chop_last_slash(e_base_ctx->primary_dbg_info->name);
+    str8_list_push(arena, &result, path_relative_to_module);
+    if(!path_match_normalized(debug_info_folder, module_folder))
+    {
+      String8 path_relative_to_debug_info = path_relative_dst_from_absolute_dst_src(arena, file_path, debug_info_folder);
+      str8_list_push(arena, &result, path_relative_to_debug_info);
+    }
+  }
+  
+  //- rjf: push possible overrides from file path map rules
   {
     CFG_NodePtrList links = cfg_node_top_level_list_from_string(scratch.arena, str8_lit("file_path_map"));
     for(CFG_NodePtrNode *n = links.first; n != 0; n = n->next)
@@ -1405,11 +1420,11 @@ rd_file_path_from_eval(Arena *arena, E_Eval eval)
     default:{}break;
     case E_SpaceKind_File:
     {
-      result = push_str8_copy(arena, e_string_from_id(eval.space.u64_0));
+      result = str8_copy(arena, e_string_from_id(eval.space.u64_0));
     }break;
     case E_SpaceKind_FileSystem:
     {
-      result = push_str8_copy(arena, e_string_from_id(eval.value.u64));
+      result = str8_copy(arena, e_string_from_id(eval.value.u64));
     }break;
   }
   return result;
@@ -4385,30 +4400,46 @@ rd_view_ui(Rng2F32 rect)
                             next_row_expanded = !row_expanded;
                           }
                           
-                          // rjf: can't edit, but has address info? -> go to address
-                          else if(cell->eval.space.kind == D_EvalSpaceKind_Entity)
+                          // rjf: can't edit, but evaluates w/ a type in debug info? -> go to voff
+                          else if(e_type_key_unwrap(cell->eval.irtree.type_key, E_TypeUnwrapFlag_All).kind == E_TypeKeyKind_Ext ||
+                                  cell->eval.space.kind == D_EvalSpaceKind_Entity)
                           {
-                            D_Entity *entity = rd_ctrl_entity_from_eval_space(cell->eval.space);
-                            D_Entity *process = d_process_from_entity(entity);
-                            if(process != &d_entity_nil)
+                            // rjf: try to unpack debug info from type
+                            E_TypeKey type_key = e_type_key_unwrap(cell->eval.irtree.type_key, E_TypeUnwrapFlag_All);
+                            DI_Key dbgi_key = {0};
+                            String8 base_folder = {0};
                             {
-                              U64 vaddr = cell->eval.value.u64;
-                              D_Entity *module = d_module_from_process_vaddr(process, vaddr);
-                              DI_Key dbgi_key = d_dbgi_key_from_module(module);
-                              U64 voff = d_voff_from_vaddr(module, vaddr);
-                              D_LineList lines = d_lines_from_dbgi_key_voff(scratch.arena, dbgi_key, voff);
-                              String8 file_path = {0};
-                              TxtPt pt = {0};
-                              if(lines.first != 0)
-                              {
-                                file_path = lines.first->v.file_path;
-                                pt        = lines.first->v.pt;
-                                rd_cmd(RD_CmdKind_FindCodeLocation,
-                                       .process    = process->handle,
-                                       .vaddr      = vaddr,
-                                       .file_path  = file_path,
-                                       .cursor     = pt);
-                              }
+                              E_DbgInfo *dbg_info = e_dbg_info_from_type_key(type_key);
+                              dbgi_key = dbg_info->dbgi_key;
+                              base_folder = str8_chop_last_slash(dbg_info->name);
+                            }
+                            
+                            // rjf: if this is a vaddr evaluation, then unpack voff/vaddr & switch to module's debug info
+                            U64 vaddr = 0;
+                            U64 voff = cell->eval.value.u64;
+                            D_Entity *process = rd_ctrl_entity_from_eval_space(cell->eval.space);
+                            D_Entity *module = &d_entity_nil;
+                            if(process->kind == D_EntityKind_Process)
+                            {
+                              vaddr = cell->eval.value.u64;
+                              module = d_module_from_process_vaddr(process, vaddr);
+                              voff = d_voff_from_vaddr(module, vaddr);
+                              dbgi_key = d_dbgi_key_from_module(module);
+                              base_folder = str8_chop_last_slash(module->string);
+                            }
+                            
+                            // rjf: voff * debug info -> lines
+                            D_LineList lines = d_lines_from_dbgi_key_voff(scratch.arena, dbgi_key, voff);
+                            
+                            // rjf: snap to line
+                            if(lines.first != 0)
+                            {
+                              String8 file_path = lines.first->v.file_path;
+                              TxtPt pt = lines.first->v.pt;
+                              rd_cmd(RD_CmdKind_FindCodeLocation, .file_path = file_path, .cursor = pt, .vaddr = vaddr,
+                                     .process = process->handle,
+                                     .module = module->handle,
+                                     .dbgi_key = dbgi_key);
                             }
                           }
                           
@@ -9806,6 +9837,122 @@ rd_stop_explanation_fstrs_from_ctrl_event(Arena *arena, D_Event *event)
 }
 
 ////////////////////////////////
+//~ rjf: Source File Checksum Calculations
+
+internal AC_Artifact
+rd_md5_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_out)
+{
+  AC_Artifact result = {0};
+  {
+    Access *access = access_open();
+    U128 hash = {0};
+    str8_deserial_read_struct(key, 0, &hash);
+    String8 data = c_data_from_hash(access, hash);
+    MD5 md5 = md5_from_data(data);
+    StaticAssert(sizeof(result) >= sizeof(md5), artifact_size_check);
+    MemoryCopy(&result, &md5, Min(sizeof(result), sizeof(md5)));
+    access_close(access);
+  }
+  return result;
+}
+
+internal AC_Artifact
+rd_sha1_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_out)
+{
+  AC_Artifact result = {0};
+  {
+    Access *access = access_open();
+    U128 hash = {0};
+    str8_deserial_read_struct(key, 0, &hash);
+    String8 data = c_data_from_hash(access, hash);
+    SHA1 sha1 = sha1_from_data(data);
+    StaticAssert(sizeof(result) >= sizeof(sha1), artifact_size_check);
+    MemoryCopy(&result, &sha1, Min(sizeof(result), sizeof(sha1)));
+    access_close(access);
+  }
+  return result;
+}
+
+internal AC_Artifact
+rd_sha256_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_out)
+{
+  AC_Artifact result = {0};
+  {
+    Access *access = access_open();
+    U128 hash = {0};
+    str8_deserial_read_struct(key, 0, &hash);
+    String8 data = c_data_from_hash(access, hash);
+    SHA256 sha256 = sha256_from_data(data);
+    StaticAssert(sizeof(result) >= sizeof(sha256), artifact_size_check);
+    MemoryCopy(&result, &sha256, Min(sizeof(result), sizeof(sha256)));
+    access_close(access);
+  }
+  return result;
+}
+
+internal MD5
+rd_md5_from_hash(U128 hash)
+{
+  Access *access = access_open();
+  AC_Artifact artifact = ac_artifact_from_key(access, str8_struct(&hash), rd_md5_artifact_create, 0, 0);
+  MD5 md5 = {0};
+  MemoryCopy(&md5, &artifact, Min(sizeof(md5), sizeof(artifact)));
+  access_close(access);
+  return md5;
+}
+
+internal SHA1
+rd_sha1_from_hash(U128 hash)
+{
+  Access *access = access_open();
+  AC_Artifact artifact = ac_artifact_from_key(access, str8_struct(&hash), rd_sha1_artifact_create, 0, 0);
+  SHA1 sha1 = {0};
+  MemoryCopy(&sha1, &artifact, Min(sizeof(sha1), sizeof(artifact)));
+  access_close(access);
+  return sha1;
+}
+
+internal SHA256
+rd_sha256_from_hash(U128 hash)
+{
+  Access *access = access_open();
+  AC_Artifact artifact = ac_artifact_from_key(access, str8_struct(&hash), rd_sha256_artifact_create, 0, 0);
+  SHA256 sha256 = {0};
+  MemoryCopy(&sha256, &artifact, Min(sizeof(sha256), sizeof(artifact)));
+  access_close(access);
+  return sha256;
+}
+
+internal String8
+rd_checksum_value_from_hash_kind(Arena *arena, U128 hash, RDI_ChecksumKind k)
+{
+  String8 result = {0};
+  switch(k)
+  {
+    default:{}break;
+    case RDI_ChecksumKind_MD5:
+    {
+      MD5 md5 = rd_md5_from_hash(hash);
+      String8 md5_string = str8_struct(&md5);
+      result = str8_copy(arena, md5_string);
+    }break;
+    case RDI_ChecksumKind_SHA1:
+    {
+      SHA1 sha1 = rd_sha1_from_hash(hash);
+      String8 sha1_string = str8_struct(&sha1);
+      result = str8_copy(arena, sha1_string);
+    }break;
+    case RDI_ChecksumKind_SHA256:
+    {
+      SHA256 sha256 = rd_sha256_from_hash(hash);
+      String8 sha256_string = str8_struct(&sha256);
+      result = str8_copy(arena, sha256_string);
+    }break;
+  }
+  return result;
+}
+
+////////////////////////////////
 //~ rjf: Vocab Info Lookups
 
 internal RD_VocabInfo *
@@ -12334,16 +12481,16 @@ rd_frame(void)
     E_InterpretCtx *interpret_ctx = push_array(scratch.arena, E_InterpretCtx, 1);
     {
       E_InterpretCtx *ctx = interpret_ctx;
-      ctx->primary_space     = primary_space;
-      ctx->reg_arch          = arch;
-      ctx->reg_space         = rd_eval_space_from_ctrl_entity(thread, D_EvalSpaceKind_Entity);
-      ctx->reg_unwind_count  = unwind_count;
-      ctx->module_base       = push_array(scratch.arena, U64, 1);
-      ctx->module_base[0]    = module->vaddr_range.min;
-      ctx->frame_base        = push_array(scratch.arena, U64, 1);
-      ctx->tls_base          = push_array(scratch.arena, U64, 1);
-      ctx->tls_base[0]       = d_cached_tls_vaddr_from_thread_module(thread->handle, module->handle, rd_state->frame_eval_memread_endt_us, 0);
-      ctx->cfa               = d_query_cached_cfa_from_thread_unwind(thread, unwind_count);
+      ctx->primary_space               = primary_space;
+      ctx->reg_arch                    = arch;
+      ctx->reg_space                   = rd_eval_space_from_ctrl_entity(thread, D_EvalSpaceKind_Entity);
+      ctx->reg_unwind_count            = unwind_count;
+      ctx->module_base                 = push_array(scratch.arena, U64, 1);
+      ctx->module_base[0]              = module->vaddr_range.min;
+      ctx->frame_base                  = push_array(scratch.arena, U64, 1);
+      ctx->tls_base                    = push_array(scratch.arena, U64, 1);
+      ctx->tls_base[0]                 = d_cached_tls_vaddr_from_thread_module(thread->handle, module->handle, rd_state->frame_eval_memread_endt_us, 0);
+      ctx->cfa                         = d_query_cached_cfa_from_thread_unwind(thread, unwind_count);
     }
     e_select_interpret_ctx(interpret_ctx, eval_dbg_infos_primary->rdi, rip_voff);
     
@@ -14705,6 +14852,14 @@ rd_frame(void)
               {
                 require_disasm_snap = 1;
               }
+            }
+            
+            //- rjf: absolutify file path
+            {
+              String8 base_folder = {0};
+              if(base_folder.size == 0) { base_folder = str8_chop_last_slash(e_base_ctx->primary_dbg_info->name); }
+              if(base_folder.size == 0) { base_folder = str8_chop_last_slash(e_base_ctx->primary_module->name); }
+              file_path = path_absolute_dst_from_relative_dst_src(scratch.arena, file_path, base_folder);
             }
             
             //- rjf: if transient tabs are turned off, always prefer new tab

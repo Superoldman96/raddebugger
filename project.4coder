@@ -55,7 +55,8 @@ commands =
   // .f1 = { .win = "wsl ./build.sh raddbg", .linux = "", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
   
   //- rjf: [scratch]
-  .f2 = { .win = "pushd build && for /l %i in (1, 1, 3) do (radbin --capture --rdi mule_main.pdb --async_thread_count=1 --thread_count=8)", .linux = "", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
+  // .f2 = { .win = "pushd build && for /l %i in (1, 1, 3) do (radbin --rdi raddbg.exe --out:raddbg_%i.rdi && radbin --dump raddbg_%i.rdi --out:raddbg_%i.dump)", .linux = "", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
+  .f2 = { .win = "pushd build && radbin --rdi raddbg.exe --thread_count=1 --out:1.rdi && radbin --rdi raddbg.exe --thread_count=8 --out:8.rdi && radbin --dump 1.rdi --out:1.dump && radbin --dump 8.rdi --out:8.dump)", .linux = "", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },
   
   //- rjf: [textperf]
   // .f1 = { .win = "raddbg_stable --ipc kill_all && build no_meta telemetry textperf && raddbg_stable --ipc bring_to_front && raddbg_stable --ipc run", .linux = "", .out = "*compilation*", .footer_panel = true, .save_dirty_files = true, .cursor_at_end = false, },

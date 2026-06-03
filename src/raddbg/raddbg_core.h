@@ -785,6 +785,17 @@ internal String8 rd_string_from_exception_code(U32 code);
 internal DR_FStrList rd_stop_explanation_fstrs_from_ctrl_event(Arena *arena, D_Event *event);
 
 ////////////////////////////////
+//~ rjf: Source File Checksum Calculations
+
+internal AC_Artifact rd_md5_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_out);
+internal AC_Artifact rd_sha1_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_out);
+internal AC_Artifact rd_sha256_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_out);
+internal MD5 rd_md5_from_hash(U128 hash);
+internal SHA1 rd_sha1_from_hash(U128 hash);
+internal SHA256 rd_sha256_from_hash(U128 hash);
+internal String8 rd_checksum_value_from_hash_kind(Arena *arena, U128 hash, RDI_ChecksumKind k);
+
+////////////////////////////////
 //~ rjf: Vocab Info Lookups
 
 internal RD_VocabInfo *rd_vocab_info_from_code_name(String8 code_name);

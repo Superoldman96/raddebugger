@@ -13,6 +13,8 @@ struct D_Line
   String8 file_path;
   TxtPt pt;
   Rng1U64 voff_range;
+  RDI_ChecksumKind checksum_kind;
+  String8 checksum_value;
   DI_Key dbgi_key;
 };
 
@@ -402,7 +404,7 @@ internal D_BreakpointArray d_breakpoint_array_copy(Arena *arena, D_BreakpointArr
 ////////////////////////////////
 //~ rjf: Path Map Application
 
-internal String8List d_possible_path_overrides_from_maps_path(Arena *arena, D_PathMapArray *path_maps, String8 file_path);
+internal String8List d_possible_path_overrides_from_maps_path(Arena *arena, D_Entity *primary_module, D_PathMapArray *path_maps, String8 file_path);
 
 ////////////////////////////////
 //~ rjf: Debug Info Extraction Type Pure Functions

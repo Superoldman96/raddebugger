@@ -19,8 +19,8 @@ rd_code_view_init(RD_CodeViewState *cv)
   ProfEnd();
 }
 
-internal RD_CodeViewBuildResult
-rd_code_view_build(Arena *arena, RD_CodeViewState *cv, RD_CodeViewBuildFlags flags, Rng2F32 rect, String8 text_data, TXT_TextInfo *text_info, DASM_LineArray *dasm_lines, Rng1U64 dasm_vaddr_range, DI_Key dasm_dbgi_key)
+internal void
+rd_code_view_build(Arena *arena, RD_CodeViewState *cv, RD_CodeViewBuildFlags flags, Rng2F32 rect, U128 text_hash, String8 text_data, TXT_TextInfo *text_info, DASM_LineArray *dasm_lines, Rng1U64 dasm_vaddr_range, DI_Key dasm_dbgi_key)
 {
   ProfBeginFunction();
   Temp scratch = scratch_begin(&arena, 1);
@@ -292,20 +292,36 @@ rd_code_view_build(Arena *arena, RD_CodeViewState *cv, RD_CodeViewBuildFlags fla
         U64 rip_voff = d_voff_from_vaddr(module, last_inst_on_unwound_rip_vaddr);
         DI_Key dbgi_key = d_dbgi_key_from_module(module);
         D_LineList lines = d_lines_from_dbgi_key_voff(scratch.arena, dbgi_key, rip_voff);
+        String8 file_checksums[RDI_ChecksumKind_COUNT] = {0};
         for(D_LineNode *n = lines.first; n != 0; n = n->next)
         {
           if(visible_line_num_range.min <= n->v.pt.line && n->v.pt.line <= visible_line_num_range.max)
           {
-            for(String8Node *override_n = file_path_possible_overrides.first;
-                override_n != 0;
-                override_n = override_n->next)
+            B32 matches_file = 0;
+            if(!matches_file)
+            {
+              if(file_checksums[n->v.checksum_kind].size == 0)
+              {
+                file_checksums[n->v.checksum_kind] = rd_checksum_value_from_hash_kind(scratch.arena, text_hash, n->v.checksum_kind);
+              }
+              String8 file_checksum = file_checksums[n->v.checksum_kind];
+              String8 file_checksum_expected = n->v.checksum_value;
+              matches_file = str8_match(file_checksum, file_checksum_expected, 0);
+            }
+            if(!matches_file) for(String8Node *override_n = file_path_possible_overrides.first;
+                                  override_n != 0;
+                                  override_n = override_n->next)
             {
               if(path_match_normalized(n->v.file_path, override_n->string))
               {
-                U64 slice_line_idx = n->v.pt.line-visible_line_num_range.min;
-                d_entity_list_push(scratch.arena, &code_slice_params.line_ips[slice_line_idx], thread);
+                matches_file = 1;
                 break;
               }
+            }
+            if(matches_file)
+            {
+              U64 slice_line_idx = n->v.pt.line-visible_line_num_range.min;
+              d_entity_list_push(scratch.arena, &code_slice_params.line_ips[slice_line_idx], thread);
             }
           }
         }
@@ -811,17 +827,6 @@ rd_code_view_build(Arena *arena, RD_CodeViewState *cv, RD_CodeViewBuildFlags fla
   }
   
   //////////////////////////////
-  //- rjf: build result
-  //
-  RD_CodeViewBuildResult result = {0};
-  {
-    for(DI_KeyNode *n = code_slice_params.relevant_dbgi_keys.first; n != 0; n = n->next)
-    {
-      di_key_list_push(arena, &result.dbgi_keys, n->v);
-    }
-  }
-  
-  //////////////////////////////
   //- rjf: store state
   //
   rd_store_view_scroll_pos(scroll_pos);
@@ -829,7 +834,6 @@ rd_code_view_build(Arena *arena, RD_CodeViewState *cv, RD_CodeViewBuildFlags fla
   
   scratch_end(scratch);
   ProfEnd();
-  return result;
 }
 
 ////////////////////////////////
@@ -1998,90 +2002,6 @@ RD_VIEW_UI_FUNCTION_DEF(null) {}
 ////////////////////////////////
 //~ rjf: text @view_hook_impl
 
-internal AC_Artifact
-rd_md5_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_out)
-{
-  AC_Artifact result = {0};
-  {
-    Access *access = access_open();
-    U128 hash = {0};
-    str8_deserial_read_struct(key, 0, &hash);
-    String8 data = c_data_from_hash(access, hash);
-    MD5 md5 = md5_from_data(data);
-    StaticAssert(sizeof(result) >= sizeof(md5), artifact_size_check);
-    MemoryCopy(&result, &md5, Min(sizeof(result), sizeof(md5)));
-    access_close(access);
-  }
-  return result;
-}
-
-internal AC_Artifact
-rd_sha1_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_out)
-{
-  AC_Artifact result = {0};
-  {
-    Access *access = access_open();
-    U128 hash = {0};
-    str8_deserial_read_struct(key, 0, &hash);
-    String8 data = c_data_from_hash(access, hash);
-    SHA1 sha1 = sha1_from_data(data);
-    StaticAssert(sizeof(result) >= sizeof(sha1), artifact_size_check);
-    MemoryCopy(&result, &sha1, Min(sizeof(result), sizeof(sha1)));
-    access_close(access);
-  }
-  return result;
-}
-
-internal AC_Artifact
-rd_sha256_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_out)
-{
-  AC_Artifact result = {0};
-  {
-    Access *access = access_open();
-    U128 hash = {0};
-    str8_deserial_read_struct(key, 0, &hash);
-    String8 data = c_data_from_hash(access, hash);
-    SHA256 sha256 = sha256_from_data(data);
-    StaticAssert(sizeof(result) >= sizeof(sha256), artifact_size_check);
-    MemoryCopy(&result, &sha256, Min(sizeof(result), sizeof(sha256)));
-    access_close(access);
-  }
-  return result;
-}
-
-internal MD5
-rd_md5_from_hash(U128 hash)
-{
-  Access *access = access_open();
-  AC_Artifact artifact = ac_artifact_from_key(access, str8_struct(&hash), rd_md5_artifact_create, 0, 0);
-  MD5 md5 = {0};
-  MemoryCopy(&md5, &artifact, Min(sizeof(md5), sizeof(artifact)));
-  access_close(access);
-  return md5;
-}
-
-internal SHA1
-rd_sha1_from_hash(U128 hash)
-{
-  Access *access = access_open();
-  AC_Artifact artifact = ac_artifact_from_key(access, str8_struct(&hash), rd_sha1_artifact_create, 0, 0);
-  SHA1 sha1 = {0};
-  MemoryCopy(&sha1, &artifact, Min(sizeof(sha1), sizeof(artifact)));
-  access_close(access);
-  return sha1;
-}
-
-internal SHA256
-rd_sha256_from_hash(U128 hash)
-{
-  Access *access = access_open();
-  AC_Artifact artifact = ac_artifact_from_key(access, str8_struct(&hash), rd_sha256_artifact_create, 0, 0);
-  SHA256 sha256 = {0};
-  MemoryCopy(&sha256, &artifact, Min(sizeof(sha256), sizeof(artifact)));
-  access_close(access);
-  return sha256;
-}
-
 EV_EXPAND_RULE_INFO_FUNCTION_DEF(text)
 {
   EV_ExpandInfo info = {0};
@@ -2269,7 +2189,6 @@ RD_VIEW_UI_FUNCTION_DEF(text)
   //////////////////////////////
   //- rjf: build code contents
   //
-  DI_KeyList dbgi_keys = {0};
   if(!file_is_missing)
   {
     RD_CodeViewBuildFlags flags = RD_CodeViewBuildFlag_All;
@@ -2277,8 +2196,7 @@ RD_VIEW_UI_FUNCTION_DEF(text)
     {
       flags &= ~RD_CodeViewBuildFlag_Margins;
     }
-    RD_CodeViewBuildResult result = rd_code_view_build(scratch.arena, cv, flags, code_area_rect, data, &info, 0, r1u64(0, 0), di_key_zero());
-    dbgi_keys = result.dbgi_keys;
+    rd_code_view_build(scratch.arena, cv, flags, code_area_rect, hash, data, &info, 0, r1u64(0, 0), di_key_zero());
   }
   
   //////////////////////////////
@@ -2298,16 +2216,16 @@ RD_VIEW_UI_FUNCTION_DEF(text)
   {
     Temp scratch = scratch_begin(0, 0);
     
-    // rjf: determine checksum in relevant debug infos
+    // rjf: determine checksum in selected debug info
+    E_DbgInfo *dbg_info = e_base_ctx->primary_dbg_info;
+    DI_Key dbgi_key = dbg_info->dbgi_key;
     RDI_ChecksumKind checksum_kind = RDI_ChecksumKind_NULL;
     String8 checksum_expected = {0};
-    for(DI_KeyNode *n = dbgi_keys.first; n != 0 && checksum_kind == RDI_ChecksumKind_NULL; n = n->next)
     {
       Access *access = access_open();
       
       // rjf: unpack RDI
-      DI_Key key = n->v;
-      RDI_Parsed *rdi = di_rdi_from_key(access, key, 0, 0);
+      RDI_Parsed *rdi = di_rdi_from_key(access, dbgi_key, 0, 0);
       
       // rjf: file_path_normalized * rdi -> src_id
       for EachNode(override_n, String8Node, overrides.first)
@@ -2347,24 +2265,10 @@ RD_VIEW_UI_FUNCTION_DEF(text)
     // rjf: if we got a checksum, compute it locally - check if they match.
     switch(checksum_kind)
     {
-      default:{}break;
-      case RDI_ChecksumKind_MD5:
+      default:
       {
-        MD5 md5 = rd_md5_from_hash(hash);
-        String8 md5_string = str8_struct(&md5);
-        file_is_out_of_date = !MemoryIsZeroStruct(&md5) && !str8_match(md5_string, checksum_expected, 0);
-      }break;
-      case RDI_ChecksumKind_SHA1:
-      {
-        SHA1 sha1 = rd_sha1_from_hash(hash);
-        String8 sha1_string = str8_struct(&sha1);
-        file_is_out_of_date = !MemoryIsZeroStruct(&sha1) && !str8_match(sha1_string, checksum_expected, 0);
-      }break;
-      case RDI_ChecksumKind_SHA256:
-      {
-        SHA256 sha256 = rd_sha256_from_hash(hash);
-        String8 sha256_string = str8_struct(&sha256);
-        file_is_out_of_date = !MemoryIsZeroStruct(&sha256) && !str8_match(sha256_string, checksum_expected, 0);
+        String8 checksum_value = rd_checksum_value_from_hash_kind(scratch.arena, hash, checksum_kind);
+        file_is_out_of_date = !memory_is_zero(checksum_value.str, checksum_value.size) && !str8_match(checksum_value, checksum_expected, 0);
       }break;
       case RDI_ChecksumKind_Timestamp:
       {
@@ -2635,7 +2539,7 @@ RD_VIEW_UI_FUNCTION_DEF(disasm)
   //
   if(!is_loading && has_disasm)
   {
-    rd_code_view_build(scratch.arena, cv, RD_CodeViewBuildFlag_All, code_area_rect, dasm_text_data, &dasm_text_info, &dasm_info.lines, range, dbgi_key);
+    rd_code_view_build(scratch.arena, cv, RD_CodeViewBuildFlag_All, code_area_rect, dasm_text_hash, dasm_text_data, &dasm_text_info, &dasm_info.lines, range, dbgi_key);
   }
   
   //////////////////////////////

@@ -77,6 +77,7 @@ e_space_read(E_Space space, void *out, E_SpaceRangeInfo *out_range_info, Rng1U64
       //- rjf: file reads
       case E_SpaceKind_File:
       {
+        Temp scratch = scratch_begin(0, 0);
         Access *access = access_open();
         
         // rjf: unpack space/path
@@ -155,6 +156,7 @@ e_space_read(E_Space space, void *out, E_SpaceRangeInfo *out_range_info, Rng1U64
         }
         
         access_close(access);
+        scratch_end(scratch);
       }break;
       
       //- rjf: debug info constant data

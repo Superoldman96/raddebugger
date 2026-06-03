@@ -66,7 +66,7 @@ d_breakpoint_array_copy(Arena *arena, D_BreakpointArray *src)
 //~ rjf: Path Map Application
 
 internal String8List
-d_possible_path_overrides_from_maps_path(Arena *arena, D_PathMapArray *path_maps, String8 file_path)
+d_possible_path_overrides_from_maps_path(Arena *arena, D_Entity *primary_module, D_PathMapArray *path_maps, String8 file_path)
 {
   // NOTE(rjf): This path, given some target file path, scans all file path map
   // overrides, and collects the set of file paths which could've redirected
@@ -85,6 +85,22 @@ d_possible_path_overrides_from_maps_path(Arena *arena, D_PathMapArray *path_maps
   Temp scratch = scratch_begin(&arena, 1);
   PathStyle pth_style = PathStyle_Relative;
   String8List pth_parts = path_normalized_list_from_string(scratch.arena, file_path, &pth_style);
+  
+  //- rjf: push possible overrides by relativizing according to module / debug info
+  {
+    String8 module_folder = str8_chop_last_slash(primary_module->string);
+    String8 path_relative_to_module = path_relative_dst_from_absolute_dst_src(arena, file_path, module_folder);
+    String8 debug_info_path = d_entity_child_from_kind(primary_module, D_EntityKind_DebugInfoPath)->string;
+    String8 debug_info_folder = str8_chop_last_slash(debug_info_path);
+    str8_list_push(arena, &result, path_relative_to_module);
+    if(!path_match_normalized(debug_info_folder, module_folder))
+    {
+      String8 path_relative_to_debug_info = path_relative_dst_from_absolute_dst_src(arena, file_path, debug_info_folder);
+      str8_list_push(arena, &result, path_relative_to_debug_info);
+    }
+  }
+  
+  //- rjf: push possible overrides based on path map rules
   {
     for(U64 idx = 0; idx < path_maps->count; idx += 1)
     {
@@ -1033,6 +1049,14 @@ d_lines_from_dbgi_key_voff(Arena *arena, DI_Key dbgi_key, U64 voff)
         RDI_Line *line = &parsed_line_table.lines[line_info_idx];
         RDI_Column *column = (line_info_idx < parsed_line_table.col_count) ? &parsed_line_table.cols[line_info_idx] : 0;
         RDI_SourceFile *file = rdi_element_from_name_idx(rdi, SourceFiles, line->file_idx);
+        RDI_SectionKind checksum_section_kind = rdi_section_kind_from_checksum_kind(file->checksum_kind);
+        U64 checksum_size = rdi_section_element_size_table[checksum_section_kind];
+        U8 *checksum_data = (U8 *)rdi_section_raw_element_from_kind_idx(rdi, checksum_section_kind, file->checksum_idx);
+        String8 checksum_value = {0};
+        if(file->checksum_idx != 0)
+        {
+          checksum_value = str8(checksum_data, checksum_size);
+        }
         String8List path_parts = {0};
         for(RDI_FilePathNode *fpn = rdi_element_from_name_idx(rdi, FilePathNodes, file->file_path_node_idx);
             fpn != rdi_element_from_name_idx(rdi, FilePathNodes, 0);
@@ -1054,6 +1078,8 @@ d_lines_from_dbgi_key_voff(Arena *arena, DI_Key dbgi_key, U64 voff)
         }
         n->v.pt = txt_pt(line->line_num, column ? column->col_first : 1);
         n->v.voff_range = r1u64(parsed_line_table.voffs[line_info_idx], parsed_line_table.voffs[line_info_idx+1]);
+        n->v.checksum_kind = file->checksum_kind;
+        n->v.checksum_value = str8_copy(arena, checksum_value);
         n->v.dbgi_key = dbgi_key;
         if(line_table_n == top_line_table)
         {
@@ -2258,6 +2284,12 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
           d_user_state->ctrl_last_run_param_state_hash = ctrl_param_state_hash;
         }
         
+        // rjf: unpack target thread/module
+        D_Entity *thread = d_entity_from_handle(params->thread);
+        D_Entity *process = d_process_from_entity(thread);
+        U64 thread_ip_vaddr = d_cached_ip_from_thread(thread->handle);
+        D_Entity *module = d_module_from_process_vaddr(process, thread_ip_vaddr);
+        
         // rjf: push & fill run message
         D_Msg *msg = d_msg_list_push(scratch.arena, &ctrl_msgs);
         {
@@ -2284,7 +2316,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
               // rjf: textual location -> add breakpoints for all possible override locations
               if(bp->file_path.size != 0 && bp->pt.line != 0)
               {
-                String8List overrides = d_possible_path_overrides_from_maps_path(scratch.arena, path_maps, bp->file_path);
+                String8List overrides = d_possible_path_overrides_from_maps_path(scratch.arena, module, path_maps, bp->file_path);
                 for(String8Node *n = overrides.first; n != 0; n = n->next)
                 {
                   D_Breakpoint dst_bp = {0};

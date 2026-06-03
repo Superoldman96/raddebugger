@@ -1666,6 +1666,8 @@ e_type_lhs_string_from_key(Arena *arena, E_TypeKey key, String8List *out, U32 pr
       str8_list_pushf(arena, out, "%S ", type->name);
     }break;
     
+    case E_TypeKind_Null:{}break;
+    
     case E_TypeKind_Bitfield:
     {
       E_Type *type = e_type_from_key(key);
