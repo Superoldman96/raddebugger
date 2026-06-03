@@ -92,6 +92,7 @@ enum
   RD_CmdKindFlag_ListInTextPt  = (1<<3),
   RD_CmdKindFlag_ListInTextRng = (1<<4),
   RD_CmdKindFlag_ListInEval    = (1<<5),
+  RD_CmdKindFlag_ListInMemory  = (1<<6),
 };
 
 ////////////////////////////////

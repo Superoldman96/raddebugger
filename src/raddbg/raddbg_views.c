@@ -4054,7 +4054,7 @@ RD_VIEW_UI_FUNCTION_DEF(memory)
     }
     
     // rjf: click & drag -> select
-    if(ui_dragging(sig) && mouse_hover_byte_num != 0)
+    if((ui_dragging(sig) || ui_right_clicked(sig)) && mouse_hover_byte_num != 0)
     {
       if(!contains_2f32(sig.box->rect, ui_mouse()))
       {
@@ -4065,6 +4065,17 @@ RD_VIEW_UI_FUNCTION_DEF(memory)
       {
         mark_base_vaddr = cursor_base_vaddr;
       }
+    }
+    
+    // rjf: right-click -> push query
+    if(ui_right_clicked(sig))
+    {
+      rd_cmd(RD_CmdKind_PushQuery,
+             .expr = s("query:memory_commands"),
+             .do_implicit_root = 1,
+             .do_lister = 1,
+             .activate_with_single_click = 1,
+             .ui_key = sig.box->key);
     }
     
     // rjf: ctrl+scroll -> change font size
@@ -4405,6 +4416,12 @@ RD_VIEW_UI_FUNCTION_DEF(memory)
   {
     mark_base_vaddr = clamp_1u64(cursor_valid_rng, mark_base_vaddr);
   }
+  
+  //////////////////////////////
+  //- rjf: fill registers
+  //
+  rd_regs()->eval_space = eval.space;
+  rd_regs()->vaddr_range = selection;
   
   //////////////////////////////
   //- rjf: save parameters
