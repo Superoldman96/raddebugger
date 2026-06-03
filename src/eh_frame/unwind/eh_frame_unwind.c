@@ -641,7 +641,7 @@ eh_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info, U64
               arch_reg_block_write_range(arch_info, new_regs, reg_rng, reg_value_buffer);
             }
           }
-          temp_end(scratch);
+          temp_end(temp);
         }break;
         case DW_UnwindRuleCode_ValExpr:
         {
@@ -660,7 +660,7 @@ eh_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info, U64
             U512 reg_val = eval.val.u512;
             arch_reg_block_write_range(arch_info, new_regs, reg_rng, &reg_val);
           }
-          temp_end(scratch);
+          temp_end(temp);
         }break;
         case DW_UnwindRuleCode_Architectural:
         {
