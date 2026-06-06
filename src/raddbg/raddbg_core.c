@@ -5891,6 +5891,7 @@ rd_window_frame(void)
           ui_labelf("lang_kind: '%S'", txt_extension_from_lang_kind(regs->lang_kind));
           ui_labelf("vaddr_range: [0x%I64x, 0x%I64x)", regs->vaddr_range.min, regs->vaddr_range.max);
           ui_labelf("voff_range: [0x%I64x, 0x%I64x)", regs->voff_range.min, regs->voff_range.max);
+          ui_labelf("prefer_disasm: %i", regs->prefer_disasm);
         }
         
         ui_divider(ui_em(1.f, 1.f));
@@ -15295,6 +15296,8 @@ rd_frame(void)
             };
             FindCodeLocTask *first_task = 0;
             FindCodeLocTask *last_task = 0;
+            CFG_PanelNode *did_src_code_panel = &cfg_nil_panel_node;
+            CFG_PanelNode *did_disasm_panel = &cfg_nil_panel_node;
             B32 did_src_code_snap = 0;
             B32 did_disasm_snap = 0;
             for(WindowInfo *info = first_window_info; info != 0; info = info->next)
@@ -15327,8 +15330,8 @@ rd_frame(void)
                 t->view_w_auto          = info->view_w_auto;
                 t->panel_w_disasm       = info->panel_w_disasm;
                 t->view_w_disasm        = info->view_w_disasm;
-                if(src_code_dst_panel != &cfg_nil_panel_node) { did_src_code_snap = 1; }
-                if(disasm_dst_panel != &cfg_nil_panel_node) { did_disasm_snap = 1; }
+                if(src_code_dst_panel != &cfg_nil_panel_node) { did_src_code_snap = 1; did_src_code_panel = src_code_dst_panel; }
+                if(disasm_dst_panel != &cfg_nil_panel_node) { did_disasm_snap = 1; did_disasm_panel = disasm_dst_panel; }
               }
             }
             
@@ -15365,8 +15368,8 @@ rd_frame(void)
                 t->view_w_auto          = info->view_w_auto;
                 t->panel_w_disasm       = info->panel_w_disasm;
                 t->view_w_disasm        = info->view_w_disasm;
-                if(src_code_dst_panel != &cfg_nil_panel_node) { did_src_code_snap = 1; }
-                if(disasm_dst_panel != &cfg_nil_panel_node) { did_disasm_snap = 1; }
+                if(src_code_dst_panel != &cfg_nil_panel_node) { did_src_code_snap = 1; did_src_code_panel = src_code_dst_panel; }
+                if(disasm_dst_panel != &cfg_nil_panel_node) { did_disasm_snap = 1; did_disasm_panel = disasm_dst_panel; }
               }
             }
             
@@ -15394,7 +15397,7 @@ rd_frame(void)
                 t->view_w_auto          = info->view_w_auto;
                 t->panel_w_disasm       = info->panel_w_disasm;
                 t->view_w_disasm        = info->view_w_disasm;
-                if(src_code_dst_panel != &cfg_nil_panel_node) { did_src_code_snap = 1; }
+                if(src_code_dst_panel != &cfg_nil_panel_node) { did_src_code_snap = 1; did_src_code_panel = src_code_dst_panel; }
               }
             }
             
@@ -15437,6 +15440,8 @@ rd_frame(void)
                 t->view_w_auto          = info->view_w_auto;
                 t->panel_w_disasm       = info->panel_w_disasm;
                 t->view_w_disasm        = info->view_w_disasm;
+                if(src_code_dst_panel != &cfg_nil_panel_node) { did_src_code_snap = 1; did_src_code_panel = src_code_dst_panel; }
+                if(disasm_dst_panel != &cfg_nil_panel_node) { did_disasm_snap = 1; did_disasm_panel = disasm_dst_panel; }
               }
             }
             
@@ -15449,16 +15454,13 @@ rd_frame(void)
               // rjf: if disasm and source code match:
               //        if disasm preferred, cancel source
               //        if source preferred, cancel disasm
-              if(disasm_dst_panel == src_code_dst_panel)
+              if(disasm_dst_panel == did_src_code_panel && !rd_regs()->prefer_disasm)
               {
-                if(rd_regs()->prefer_disasm)
-                {
-                  src_code_dst_panel = &cfg_nil_panel_node;
-                }
-                else
-                {
-                  disasm_dst_panel = &cfg_nil_panel_node;
-                }
+                disasm_dst_panel = &cfg_nil_panel_node;
+              }
+              if(src_code_dst_panel == did_disasm_panel && rd_regs()->prefer_disasm)
+              {
+                src_code_dst_panel = &cfg_nil_panel_node;
               }
               
               // rjf: if disasm is not preferred, and we have no disassembly view
