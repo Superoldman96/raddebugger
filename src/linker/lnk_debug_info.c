@@ -65,9 +65,9 @@ THREAD_POOL_TASK_FUNC(lnk_parse_debug_h_task)
 
   LNK_Obj *obj = task->obj_arr[obj_idx];
   if (obj->debug_h_sect_idx < obj->header.section_count_no_null) {
-    COFF_SectionHeader *sect_header = lnk_coff_section_header_from_section_number(obj, obj->debug_h_sect_idx + 1);
+    LNK_ObjSection section = lnk_obj_section_from_sect_idx(obj, obj->debug_h_sect_idx);
 
-    String8    raw_debug_h     = str8_substr(obj->data, r1u64(sect_header->foff, sect_header->foff + sect_header->fsize));
+    String8    raw_debug_h     = str8_substr(obj->data, section.frange);
     CV_DebugH *debug_h         = &task->debug_h_arr[obj_idx];
     LLVM_GHash ghash           = {0};
     U64        ghash_read_size = str8_deserial_read_struct(raw_debug_h, 0, &ghash);
@@ -706,17 +706,14 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
       for EachNode(n, String8Node, input.debug_s_list_arr[obj_idx].first) { total_debug_s_size += n->string.size; }
 
       if (obj->debug_t_sect_idx < obj->header.section_count_no_null) {
-        COFF_SectionHeader *section_table = lnk_coff_section_table_from_obj(obj);
-        total_debug_t_size += section_table[obj->debug_t_sect_idx].fsize;
+        total_debug_t_size += lnk_obj_section_from_sect_idx(obj, obj->debug_t_sect_idx).header->fsize;
       }
       if (obj->debug_p_sect_idx < obj->header.section_count_no_null) {
-        COFF_SectionHeader *section_table = lnk_coff_section_table_from_obj(obj);
-        total_debug_p_size += section_table[obj->debug_p_sect_idx].fsize;
+        total_debug_p_size += lnk_obj_section_from_sect_idx(obj, obj->debug_p_sect_idx).header->fsize;
       }
       if (config->ghash) {
         if (obj->debug_h_sect_idx < obj->header.section_count_no_null) {
-          COFF_SectionHeader *section_table = lnk_coff_section_table_from_obj(obj);
-          total_debug_h_size += section_table[obj->debug_h_sect_idx].fsize;
+          total_debug_h_size += lnk_obj_section_from_sect_idx(obj, obj->debug_h_sect_idx).header->fsize;
         }
       }
     }
@@ -757,16 +754,16 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
       LNK_Obj *obj = obj_arr[obj_idx];
 
       if (obj->debug_t_sect_idx < obj->header.section_count_no_null) {
-        COFF_SectionHeader *debug_t_hdr = &lnk_coff_section_table_from_obj(obj)[obj->debug_t_sect_idx];
+        LNK_ObjSection section = lnk_obj_section_from_sect_idx(obj, obj->debug_t_sect_idx);
         raw_debug_t_arr[obj_idx].count = 1;
         raw_debug_t_arr[obj_idx].v     = push_array(scratch.arena, String8, 1);
-        raw_debug_t_arr[obj_idx].v[0]  = str8_substr(obj->data, r1u64(debug_t_hdr->foff, debug_t_hdr->foff + debug_t_hdr->fsize));
+        raw_debug_t_arr[obj_idx].v[0]  = str8_substr(obj->data, section.frange);
       }
       if (obj->debug_p_sect_idx < obj->header.section_count_no_null) {
-        COFF_SectionHeader *debug_p_hdr = &lnk_coff_section_table_from_obj(obj)[obj->debug_p_sect_idx];
+        LNK_ObjSection section = lnk_obj_section_from_sect_idx(obj, obj->debug_p_sect_idx);
         raw_debug_p_arr[obj_idx].count = 1;
         raw_debug_p_arr[obj_idx].v     = push_array(scratch.arena, String8, 1);
-        raw_debug_p_arr[obj_idx].v[0] = str8_substr(obj->data, r1u64(debug_p_hdr->foff, debug_p_hdr->foff + debug_p_hdr->fsize));
+        raw_debug_p_arr[obj_idx].v[0]  = str8_substr(obj->data, section.frange);
       }
     }
 
@@ -3044,42 +3041,41 @@ THREAD_POOL_TASK_FUNC(lnk_push_dbi_sec_contrib_task)
   PDB_DbiModule *mod     = task->mod_arr    [obj_idx];
   LNK_Obj       *obj     = task->cv->obj_arr[obj_idx];
 
-  COFF_SectionHeader        *obj_section_table = (COFF_SectionHeader *)str8_substr(obj->data, obj->header.section_table_range).str;
-  PDB_DbiSectionContribNode *sc_arr            = push_array_no_zero(arena, PDB_DbiSectionContribNode, obj->header.section_count_no_null);
-  U64                        sc_count          = 0;
+  PDB_DbiSectionContribNode *sc_arr   = push_array_no_zero(arena, PDB_DbiSectionContribNode, obj->header.section_count_no_null);
+  U64                        sc_count = 0;
   
   for (U64 sect_idx = 0; sect_idx < obj->header.section_count_no_null; sect_idx += 1) {
-    COFF_SectionHeader *obj_sect_header = &obj_section_table[sect_idx];
-    COFF_SectionFlags   obj_sect_flags  = obj->section_flags[sect_idx];
+    LNK_ObjSection section = lnk_obj_section_from_sect_idx(obj, sect_idx);
 
-    if (obj_sect_flags & COFF_SectionFlag_LnkInfo)   { continue; }
-    if (obj_sect_flags & COFF_SectionFlag_LnkRemove) { continue; }
-    if (obj_sect_flags & LNK_SECTION_FLAG_DEBUG)     { continue; }
+    if (*section.flags & COFF_SectionFlag_LnkInfo)   { continue; }
+    if (*section.flags & COFF_SectionFlag_LnkRemove) { continue; }
+    if (*section.flags & LNK_SECTION_FLAG_DEBUG)     { continue; }
 
-    String8 header_name = str8_cstring_capped(obj_sect_header->name, obj_sect_header->name + sizeof(obj_sect_header->name));
-    if (str8_match(header_name, str8_lit(".pdata"), 0)) { continue; }
+    if (str8_match(section.name, str8_lit(".pdata"), 0)) { continue; }
 
     U64     sect_number;
     String8 sect_data;
     U32     sect_off;
     U32     data_crc;
-    if (obj_sect_flags & COFF_SectionFlag_CntUninitializedData) {
-      if (obj_sect_header->vsize == 0) { continue; }
+    if (*section.flags & COFF_SectionFlag_CntUninitializedData) {
+      if (dim_1u64(section.vrange) == 0) { continue; }
 
-      U64 sect_num = rng1u64_array_num_from_value__binary_search(&task->image_section_virt_ranges, obj_sect_header->voff);
-      sect_number = sect_num-1;
+      U64 search_result = rng1u64_array_num_from_value__binary_search(&task->image_section_virt_ranges, section.vrange.min);
+      sect_number = search_result-1;
       Assert(sect_number < task->image_section_virt_ranges.count);
+      
       sect_data   = str8_zero();
-      sect_off    = obj_sect_header->voff - task->image_section_virt_ranges.v[sect_number].min;
+      sect_off    = section.vrange.min - task->image_section_virt_ranges.v[sect_number].min;
       data_crc    = 0;
     } else {
-      if (obj_sect_header->fsize == 0) { continue; }
+      if (dim_1u64(section.frange) == 0) { continue; }
 
-      U64 sect_num = rng1u64_array_num_from_value__binary_search(&task->image_section_file_ranges, obj_sect_header->foff);
-      sect_number = sect_num-1;
+      U64 search_result = rng1u64_array_num_from_value__binary_search(&task->image_section_file_ranges, section.frange.min);
+      sect_number = search_result-1;
       Assert(sect_number < task->image_section_file_ranges.count);
-      sect_data   = str8_substr(task->image_data, rng_1u64(obj_sect_header->foff, obj_sect_header->foff + obj_sect_header->fsize));
-      sect_off    = obj_sect_header->foff - task->image_section_file_ranges.v[sect_number].min;
+
+      sect_data   = str8_substr(task->image_data, section.frange);
+      sect_off    = section.frange.min - task->image_section_file_ranges.v[sect_number].min;
       data_crc    = update_crc32(0, sect_data.str, sect_data.size);
     }
 
@@ -3088,8 +3084,8 @@ THREAD_POOL_TASK_FUNC(lnk_push_dbi_sec_contrib_task)
     sc->data.base.sec             = (U16)sect_number;
     sc->data.base.pad0            = 0;
     sc->data.base.sec_off         = sect_off;
-    sc->data.base.size            = obj_sect_header->vsize;
-    sc->data.base.flags           = obj_sect_flags;
+    sc->data.base.size            = dim_1u64(section.vrange);
+    sc->data.base.flags           = *section.flags;
     sc->data.base.mod             = mod->imod;
     sc->data.base.pad1            = 0;
     sc->data.data_crc             = 0;

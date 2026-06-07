@@ -286,11 +286,12 @@ lnk_can_replace_symbol(LNK_Symbol *dst, LNK_Symbol *src)
           }
         } break;
         case COFF_ComdatSelect_ExactMatch: {
-          COFF_SectionHeader *dst_sect_header = lnk_coff_section_header_from_section_number(dst_obj, dst_parsed.section_number);
-          COFF_SectionHeader *src_sect_header = lnk_coff_section_header_from_section_number(src_obj, src_parsed.section_number);
-          String8             dst_data        = str8_substr(dst_obj->data, rng_1u64(dst_sect_header->foff, dst_sect_header->foff + dst_sect_header->fsize));
-          String8             src_data        = str8_substr(src_obj->data, rng_1u64(src_sect_header->foff, src_sect_header->foff + src_sect_header->fsize));
-          B32                 is_exact_match  = 0;
+          LNK_ObjSection dst_section = lnk_obj_section_from_section_number(dst_obj, dst_parsed.section_number);
+          LNK_ObjSection src_section = lnk_obj_section_from_section_number(src_obj, src_parsed.section_number);
+          String8        dst_data    = str8_substr(dst_obj->data, dst_section.frange);
+          String8        src_data    = str8_substr(src_obj->data, src_section.frange);
+
+          B32 is_exact_match = 0;
           if (dst_check_sum != 0 && src_check_sum != 0) {
             is_exact_match = dst_check_sum == src_check_sum && str8_match(dst_data, src_data, 0);
           } else {
@@ -337,13 +338,15 @@ lnk_on_symbol_replace(LNK_Symbol *dst, LNK_Symbol *src)
 
   if (dst_interp == COFF_SymbolValueInterp_Regular) {
     // remove replaced section from the output
-    dst_ref.obj->section_flags[dst_parsed.section_number-1] |= COFF_SectionFlag_LnkRemove;
+    LNK_ObjSection dst_section = lnk_obj_section_from_section_number(dst_ref.obj, dst_parsed.section_number);
+    *dst_section.flags |= COFF_SectionFlag_LnkRemove;
 
     // remove associated sections from the output
     for (U32Node *associated_section = dst_ref.obj->associated_sections[dst_parsed.section_number];
         associated_section != 0;
         associated_section = associated_section->next) {
-      dst_ref.obj->section_flags[associated_section->data-1] |= COFF_SectionFlag_LnkRemove;
+      LNK_ObjSection section = lnk_obj_section_from_section_number(dst_ref.obj, associated_section->data);
+      *section.flags |= COFF_SectionFlag_LnkRemove;
     }
   }
 
@@ -360,7 +363,9 @@ lnk_on_symbol_replace(LNK_Symbol *dst, LNK_Symbol *src)
     LNK_ObjSymbolRef           src_ref    = lnk_ref_from_symbol(src);
 
     if (src_interp == COFF_SymbolValueInterp_Regular) {
-      AssertAlways(~src_ref.obj->section_flags[src_parsed.section_number-1] & COFF_SectionFlag_LnkRemove);
+      LNK_ObjSection    src_section = lnk_obj_section_from_section_number(src_ref.obj, src_parsed.section_number);
+      COFF_SectionFlags src_flags   = *src_section.flags;
+      AssertAlways(~src_flags & COFF_SectionFlag_LnkRemove);
     }
   }
 #endif
