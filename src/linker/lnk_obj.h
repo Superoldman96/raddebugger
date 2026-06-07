@@ -11,6 +11,7 @@ typedef struct LNK_Obj
   String8 data;
 
   COFF_FileHeaderInfo header;
+  COFF_SectionFlags  *section_flags;
 
   // flags
   B8 hotpatch;
@@ -153,4 +154,3 @@ internal LNK_DirectiveInfo lnk_directive_info_from_raw_directives(Arena *arena, 
 // --- Debug Info --------------------------------------------------------------
 
 internal CV_DebugS lnk_debug_s_from_obj(Arena *arena, LNK_Obj *obj);
-

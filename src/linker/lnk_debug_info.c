@@ -3050,10 +3050,11 @@ THREAD_POOL_TASK_FUNC(lnk_push_dbi_sec_contrib_task)
   
   for (U64 sect_idx = 0; sect_idx < obj->header.section_count_no_null; sect_idx += 1) {
     COFF_SectionHeader *obj_sect_header = &obj_section_table[sect_idx];
+    COFF_SectionFlags   obj_sect_flags  = obj->section_flags[sect_idx];
 
-    if (obj_sect_header->flags & COFF_SectionFlag_LnkInfo)   { continue; }
-    if (obj_sect_header->flags & COFF_SectionFlag_LnkRemove) { continue; }
-    if (obj_sect_header->flags & LNK_SECTION_FLAG_DEBUG)     { continue; }
+    if (obj_sect_flags & COFF_SectionFlag_LnkInfo)   { continue; }
+    if (obj_sect_flags & COFF_SectionFlag_LnkRemove) { continue; }
+    if (obj_sect_flags & LNK_SECTION_FLAG_DEBUG)     { continue; }
 
     String8 header_name = str8_cstring_capped(obj_sect_header->name, obj_sect_header->name + sizeof(obj_sect_header->name));
     if (str8_match(header_name, str8_lit(".pdata"), 0)) { continue; }
@@ -3062,7 +3063,7 @@ THREAD_POOL_TASK_FUNC(lnk_push_dbi_sec_contrib_task)
     String8 sect_data;
     U32     sect_off;
     U32     data_crc;
-    if (obj_sect_header->flags & COFF_SectionFlag_CntUninitializedData) {
+    if (obj_sect_flags & COFF_SectionFlag_CntUninitializedData) {
       if (obj_sect_header->vsize == 0) { continue; }
 
       U64 sect_num = rng1u64_array_num_from_value__binary_search(&task->image_section_virt_ranges, obj_sect_header->voff);
@@ -3088,7 +3089,7 @@ THREAD_POOL_TASK_FUNC(lnk_push_dbi_sec_contrib_task)
     sc->data.base.pad0            = 0;
     sc->data.base.sec_off         = sect_off;
     sc->data.base.size            = obj_sect_header->vsize;
-    sc->data.base.flags           = obj_sect_header->flags;
+    sc->data.base.flags           = obj_sect_flags;
     sc->data.base.mod             = mod->imod;
     sc->data.base.pad1            = 0;
     sc->data.data_crc             = 0;

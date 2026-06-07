@@ -337,15 +337,13 @@ lnk_on_symbol_replace(LNK_Symbol *dst, LNK_Symbol *src)
 
   if (dst_interp == COFF_SymbolValueInterp_Regular) {
     // remove replaced section from the output
-    COFF_SectionHeader *dst_sect = lnk_coff_section_header_from_section_number(dst_ref.obj, dst_parsed.section_number);
-    dst_sect->flags |= COFF_SectionFlag_LnkRemove;
+    dst_ref.obj->section_flags[dst_parsed.section_number-1] |= COFF_SectionFlag_LnkRemove;
 
     // remove associated sections from the output
     for (U32Node *associated_section = dst_ref.obj->associated_sections[dst_parsed.section_number];
         associated_section != 0;
         associated_section = associated_section->next) {
-      COFF_SectionHeader *section_header = lnk_coff_section_header_from_section_number(dst_ref.obj, associated_section->data);
-      section_header->flags |= COFF_SectionFlag_LnkRemove;
+      dst_ref.obj->section_flags[associated_section->data-1] |= COFF_SectionFlag_LnkRemove;
     }
   }
 
@@ -362,8 +360,7 @@ lnk_on_symbol_replace(LNK_Symbol *dst, LNK_Symbol *src)
     LNK_ObjSymbolRef           src_ref    = lnk_ref_from_symbol(src);
 
     if (src_interp == COFF_SymbolValueInterp_Regular) {
-      COFF_SectionHeader *src_sect = lnk_coff_section_header_from_section_number(src_ref.obj, src_parsed.section_number);
-      AssertAlways(~src_sect->flags & COFF_SectionFlag_LnkRemove);
+      AssertAlways(~src_ref.obj->section_flags[src_parsed.section_number-1] & COFF_SectionFlag_LnkRemove);
     }
   }
 #endif
@@ -804,4 +801,3 @@ lnk_replace_weak_with_default_symbols(TP_Context *tp, LNK_SymbolTable *symtab)
 
   ProfEnd();
 }
-

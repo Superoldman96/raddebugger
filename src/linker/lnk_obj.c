@@ -97,10 +97,12 @@ THREAD_POOL_TASK_FUNC(lnk_obj_initer)
   // error check section headers
   //
   COFF_SectionHeader *coff_section_table = (COFF_SectionHeader *)raw_coff_section_table.str;
+  COFF_SectionFlags  *section_flags      = push_array_no_zero(arena, COFF_SectionFlags, header.section_count_no_null);
   for (U64 sect_idx = 0; sect_idx < header.section_count_no_null; sect_idx += 1) {
     COFF_SectionHeader *coff_sect_header = &coff_section_table[sect_idx];
+    section_flags[sect_idx]              = coff_sect_header->flags;
     String8             sect_name        = coff_name_from_section_header(raw_coff_string_table, coff_sect_header);
-    if (~coff_sect_header->flags & COFF_SectionFlag_CntUninitializedData) {
+    if (~section_flags[sect_idx] & COFF_SectionFlag_CntUninitializedData) {
       if (coff_sect_header->fsize > 0) {
         Rng1U64 sect_range = rng_1u64(coff_sect_header->foff, coff_sect_header->foff + coff_sect_header->fsize);
         if (contains_1u64(header.header_range, coff_sect_header->foff) ||
@@ -166,7 +168,7 @@ THREAD_POOL_TASK_FUNC(lnk_obj_initer)
         if (symbol.storage_class == COFF_SymStorageClass_Static) {
           if (symbol.section_number > 0 && symbol.section_number <= header.section_count_no_null) {
             COFF_SectionHeader *sect_header = &coff_section_table[symbol.section_number-1];
-            if (sect_header->flags & COFF_SectionFlag_LnkCOMDAT) {
+            if (section_flags[symbol.section_number-1] & COFF_SectionFlag_LnkCOMDAT) {
               if (symbol.aux_symbol_count) {
                 U32 section_length = 0;
                 coff_parse_secdef(symbol, header.is_big_obj, 0, 0, &section_length, 0);
@@ -270,14 +272,14 @@ THREAD_POOL_TASK_FUNC(lnk_obj_initer)
 
       // debug info
       if (str8_starts_with(sect_name, str8_lit(".debug$"))) {
-        sect_header->flags |= LNK_SECTION_FLAG_DEBUG;
+        section_flags[sect_idx] |= LNK_SECTION_FLAG_DEBUG;
       }
 
       // function overrides
       if (str8_ends_with(sect_name, str8_lit("$fo$"), 0) ||
           str8_ends_with(sect_name, str8_lit("$fo_rvas$"), 0) ||
           str8_ends_with(sect_name, str8_lit("$fo_bdd$"), 0)) {
-        sect_header->flags |= COFF_SectionFlag_LnkInfo;
+        section_flags[sect_idx] |= COFF_SectionFlag_LnkInfo;
       }
     }
   }
@@ -295,7 +297,7 @@ THREAD_POOL_TASK_FUNC(lnk_obj_initer)
     CV_Symbol comp_symbol = {0};
     for EachIndex(sect_idx, header.section_count_no_null) {
       COFF_SectionHeader *sect_header = &coff_section_table[sect_idx];
-      if (sect_header->flags & LNK_SECTION_FLAG_DEBUG) {
+      if (section_flags[sect_idx] & LNK_SECTION_FLAG_DEBUG) {
         String8 name = str8_cstring_capped(sect_header->name, sect_header->name+sizeof(sect_header->name));
         if (str8_match(name, str8_lit(".debug$S"), 0)) {
           Temp temp = temp_begin(scratch.arena);
@@ -332,6 +334,7 @@ THREAD_POOL_TASK_FUNC(lnk_obj_initer)
   obj->data                    = input->data;
   obj->path                    = push_str8_copy(arena, input->path);
   obj->header                  = header;
+  obj->section_flags           = section_flags;
   obj->comdats                 = comdats;
   obj->exclude_from_debug_info = input->exclude_from_debug_info;
   obj->hotpatch                = hotpatch;
@@ -414,8 +417,7 @@ THREAD_POOL_TASK_FUNC(lnk_input_coff_symbol_table)
     switch (interp) {
     case COFF_SymbolValueInterp_Regular: {
       if (symbol.storage_class == COFF_SymStorageClass_External) {
-        COFF_SectionHeader *sect_header = lnk_coff_section_header_from_section_number(obj, symbol.section_number);
-        if (sect_header->flags & COFF_SectionFlag_LnkRemove) {
+        if (obj->section_flags[symbol.section_number-1] & COFF_SectionFlag_LnkRemove) {
           break;
         }
         LNK_Symbol *defn = lnk_make_symbol(arena, symbol.name, obj, symbol_idx);
@@ -459,8 +461,7 @@ lnk_symlinks_from_obj(Arena *arena, LNK_SymbolTable *symtab, LNK_Obj *obj)
     symbol = lnk_parsed_symbol_from_coff_symbol_idx(obj, symbol_idx);
     COFF_SymbolValueInterpType interp = coff_interp_symbol(symbol.section_number, symbol.value, symbol.storage_class);
     if (interp == COFF_SymbolValueInterp_Regular && symbol.aux_symbol_count == 0 && symbol.storage_class == COFF_SymStorageClass_External) {
-      COFF_SectionHeader *sect_header = lnk_coff_section_header_from_section_number(obj, symbol.section_number);
-      if (sect_header->flags & COFF_SectionFlag_LnkCOMDAT) {
+      if (obj->section_flags[symbol.section_number-1] & COFF_SectionFlag_LnkCOMDAT) {
         if (symlinks[symbol.section_number] == 0 || symbol.value == 0) {
           symlinks[symbol.section_number] = lnk_symbol_table_search_(symtab, symbol.name);
         }
@@ -634,7 +635,7 @@ THREAD_POOL_TASK_FUNC(lnk_collect_obj_chunks_task)
   for (U32 sect_idx = 0; sect_idx < obj->header.section_count_no_null; sect_idx += 1) {
     COFF_SectionHeader *section_header = &section_table[sect_idx];
 
-    if (section_header->flags & COFF_SectionFlag_LnkRemove) {
+    if (obj->section_flags[sect_idx] & COFF_SectionFlag_LnkRemove) {
       if (!task->collect_discarded) {
         continue;
       }
@@ -721,10 +722,11 @@ lnk_raw_directives_from_obj(Arena *arena, LNK_Obj *obj)
   String8List drectve_data = {0};
   for (U64 sect_idx = 0; sect_idx < obj->header.section_count_no_null; sect_idx += 1) {
     COFF_SectionHeader *sect_header = &section_table[sect_idx];
-    if (sect_header->flags & COFF_SectionFlag_LnkInfo) {
+    COFF_SectionFlags sect_flags = obj->section_flags[sect_idx];
+    if (sect_flags & COFF_SectionFlag_LnkInfo) {
       String8 sect_name = str8_cstring_capped(sect_header->name, sect_header->name + sizeof(sect_header->name));
       if (str8_match(sect_name, str8_lit(".drectve"), 0)) {
-        if (sect_header->flags & COFF_SectionFlag_CntUninitializedData) {
+        if (sect_flags & COFF_SectionFlag_CntUninitializedData) {
           lnk_error_obj(LNK_Error_IllData, obj, ".drectve section header has flag COFF_SectionFlag_CntUninitializedData");
           break;
         }
@@ -797,4 +799,3 @@ lnk_debug_s_from_obj(Arena *arena, LNK_Obj *obj)
   scratch_end(scratch);
   return debug_s;
 }
-
