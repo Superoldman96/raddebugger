@@ -2110,6 +2110,14 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
             U8 *name_ptr = (U8 *)(lf_enum+1);
             name = str8_cstring_capped(name_ptr, itype_leaf_opl);
           }break;
+          
+          //- rjf: ALIAS
+          case CV_LeafKind_ALIAS:
+          {
+            CV_LeafAlias *lf = (CV_LeafAlias *)itype_leaf_first;
+            U8 *name_ptr = (U8 *)(lf+1);
+            name = str8_cstring_capped(name_ptr, itype_leaf_opl);
+          }break;
         }
       }
       
@@ -2705,6 +2713,25 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
                     dst_type->kind      = (kind == CV_LeafKind_CLASS2 ? RDI_TypeKind_Class : RDI_TypeKind_Struct);
                     dst_type->byte_size = (U32)size_u64;
                     dst_type->name      = name;
+                  }
+                }break;
+                
+                //- rjf: alias
+                case CV_LeafKind_ALIAS:
+                {
+                  // rjf: unpack leaf
+                  CV_LeafAlias *lf = (CV_LeafAlias *)itype_leaf_first;
+                  U8 *name_ptr = (U8 *)(lf+1);
+                  String8 name = str8_cstring_capped(name_ptr, itype_leaf_opl);
+                  
+                  // rjf: fill type
+                  dst_type = rdim_type_chunk_list_push(arena, all_types__pre_typedefs_ptr, (U64)itype_opl);
+                  dst_type->kind = RDI_TypeKind_Alias;
+                  dst_type->name = name;
+                  dst_type->direct_type = p2r_type_ptr_from_itype(lf->itype);
+                  if(dst_type->direct_type != 0)
+                  {
+                    dst_type->byte_size = dst_type->direct_type->byte_size;
                   }
                 }break;
                 
