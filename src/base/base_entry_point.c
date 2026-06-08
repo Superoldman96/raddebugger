@@ -58,6 +58,12 @@ main_thread_base_entry_point(int arguments_count, char **arguments)
   }
   
   //- rjf: initialize all included layers
+#if defined(HTTP_H) && !defined(HTTP_INIT_MANUAL)
+  http_init();
+#endif
+#if defined(SYMBOL_SERVER_H) && !defined(SMSV_INIT_MANUAL)
+  smsv_init();
+#endif
 #if defined(ARTIFACT_CACHE_H) && !defined(AC_INIT_MANUAL)
   ac_init();
 #endif
@@ -214,6 +220,9 @@ async_thread_entry_point(void *params)
 #endif
 #if defined(FILE_STREAM_H)
       fs_async_tick();
+#endif
+#if defined(HTTP_H)
+      http_async_tick();
 #endif
 #if defined(DBG_INFO_H)
       di_async_tick();

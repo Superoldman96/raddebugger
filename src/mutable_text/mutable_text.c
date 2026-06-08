@@ -59,10 +59,10 @@ mtx_enqueue_op(MTX_MutThread *thread, C_Key buffer_key, MTX_Op op)
     U64 needed_size = sizeof(buffer_key) + sizeof(op.range) + sizeof(op.replace.size) + op.replace.size;
     if(available_size >= needed_size)
     {
-      thread->ring_write_pos += ring_write_struct(thread->ring_base, thread->ring_size, thread->ring_write_pos, &buffer_key);
-      thread->ring_write_pos += ring_write_struct(thread->ring_base, thread->ring_size, thread->ring_write_pos, &op.range);
-      thread->ring_write_pos += ring_write_struct(thread->ring_base, thread->ring_size, thread->ring_write_pos, &op.replace.size);
-      thread->ring_write_pos += ring_write(thread->ring_base, thread->ring_size, thread->ring_write_pos, op.replace.str, op.replace.size);
+      thread->ring_write_pos += wrapped_write_struct(thread->ring_base, thread->ring_size, thread->ring_write_pos, &buffer_key);
+      thread->ring_write_pos += wrapped_write_struct(thread->ring_base, thread->ring_size, thread->ring_write_pos, &op.range);
+      thread->ring_write_pos += wrapped_write_struct(thread->ring_base, thread->ring_size, thread->ring_write_pos, &op.replace.size);
+      thread->ring_write_pos += wrapped_write(thread->ring_base, thread->ring_size, thread->ring_write_pos, op.replace.str, op.replace.size);
       break;
     }
     cond_var_wait(thread->cv, thread->mutex, max_U64);
@@ -78,11 +78,11 @@ mtx_dequeue_op(Arena *arena, MTX_MutThread *thread, C_Key *buffer_key_out, MTX_O
     U64 unconsumed_size = thread->ring_write_pos - thread->ring_read_pos;
     if(unconsumed_size >= sizeof(*buffer_key_out) + sizeof(op_out->range) + sizeof(op_out->replace.size))
     {
-      thread->ring_read_pos += ring_read_struct(thread->ring_base, thread->ring_size, thread->ring_read_pos, buffer_key_out);
-      thread->ring_read_pos += ring_read_struct(thread->ring_base, thread->ring_size, thread->ring_read_pos, &op_out->range);
-      thread->ring_read_pos += ring_read_struct(thread->ring_base, thread->ring_size, thread->ring_read_pos, &op_out->replace.size);
+      thread->ring_read_pos += wrapped_read_struct(thread->ring_base, thread->ring_size, thread->ring_read_pos, buffer_key_out);
+      thread->ring_read_pos += wrapped_read_struct(thread->ring_base, thread->ring_size, thread->ring_read_pos, &op_out->range);
+      thread->ring_read_pos += wrapped_read_struct(thread->ring_base, thread->ring_size, thread->ring_read_pos, &op_out->replace.size);
       op_out->replace.str = push_array_no_zero(arena, U8, op_out->replace.size);
-      thread->ring_read_pos += ring_read(thread->ring_base, thread->ring_size, thread->ring_read_pos, op_out->replace.str, op_out->replace.size);
+      thread->ring_read_pos += wrapped_read(thread->ring_base, thread->ring_size, thread->ring_read_pos, op_out->replace.str, op_out->replace.size);
       break;
     }
     cond_var_wait(thread->cv, thread->mutex, max_U64);

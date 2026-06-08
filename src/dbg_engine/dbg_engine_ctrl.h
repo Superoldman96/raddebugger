@@ -169,8 +169,6 @@ struct D_ModuleInfo
   UWND_Unwinder unwinder;
   void *unwind_info;
   String8 local_debug_info_path;
-  String8 local_server_cache_debug_info_path;
-  String8 debug_info_unique_identifier;
   U64 raddbg_attached_marker_voff;
   String8 raddbg_data;
 };

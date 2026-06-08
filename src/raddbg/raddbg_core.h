@@ -394,6 +394,11 @@ struct RD_State
   S32 frame_depth;
   U64 frame_eval_memread_endt_us;
   
+  // rjf: update checker
+  B32 got_update_check;
+  B32 newer_update_available;
+  GuardedRing *update_check_http_ring;
+  
   // rjf: config bucket paths
   Arena *user_path_arena;
   String8 user_path;

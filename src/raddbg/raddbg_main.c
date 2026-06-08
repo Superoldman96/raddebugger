@@ -4,6 +4,7 @@
 ////////////////////////////////
 //~ rjf: post-0.9.26 TODO notes
 //
+// [ ] unwinding crash - f5 on bp in w32_http_status_callback to repro
 // [ ] jeff stepping bug
 // [ ] wassim memory bug
 // [ ] switch off spoofs for step-over
@@ -309,6 +310,8 @@
 #include "minidump/minidump_parse.h"
 #include "mdesk/mdesk.h"
 #include "window_manager/window_manager_inc.h"
+#include "http/http_inc.h"
+#include "symbol_server/symbol_server_inc.h"
 #include "config/config_inc.h"
 #include "content/content.h"
 #include "file_stream/file_stream.h"
@@ -366,6 +369,8 @@
 #include "minidump/minidump_parse.c"
 #include "mdesk/mdesk.c"
 #include "window_manager/window_manager_inc.c"
+#include "http/http_inc.c"
+#include "symbol_server/symbol_server_inc.c"
 #include "config/config_inc.c"
 #include "content/content.c"
 #include "file_stream/file_stream.c"
@@ -468,8 +473,8 @@ ipc_signaler_thread__entry_point(void *p)
           U64 available_size = (sizeof(ipc_s2m_ring_buffer) - unconsumed_size);
           if(available_size >= sizeof(U64)+sizeof(msg.size))
           {
-            ipc_s2m_ring_write_pos += ring_write_struct(ipc_s2m_ring_buffer, sizeof(ipc_s2m_ring_buffer), ipc_s2m_ring_write_pos, &msg.size);
-            ipc_s2m_ring_write_pos += ring_write(ipc_s2m_ring_buffer, sizeof(ipc_s2m_ring_buffer), ipc_s2m_ring_write_pos, msg.str, msg.size);
+            ipc_s2m_ring_write_pos += wrapped_write_struct(ipc_s2m_ring_buffer, sizeof(ipc_s2m_ring_buffer), ipc_s2m_ring_write_pos, &msg.size);
+            ipc_s2m_ring_write_pos += wrapped_write(ipc_s2m_ring_buffer, sizeof(ipc_s2m_ring_buffer), ipc_s2m_ring_write_pos, msg.str, msg.size);
             break;
           }
           cond_var_wait(ipc_s2m_ring_cv, ipc_s2m_ring_mutex, max_U64);
@@ -659,10 +664,10 @@ entry_point(CmdLine *cmd_line)
               {
                 consumed = 1;
                 ipc_command_frame = 1;
-                ipc_s2m_ring_read_pos += ring_read_struct(ipc_s2m_ring_buffer, sizeof(ipc_s2m_ring_buffer), ipc_s2m_ring_read_pos, &msg.size);
+                ipc_s2m_ring_read_pos += wrapped_read_struct(ipc_s2m_ring_buffer, sizeof(ipc_s2m_ring_buffer), ipc_s2m_ring_read_pos, &msg.size);
                 msg.size = Min(msg.size, unconsumed_size);
                 msg.str = push_array(scratch.arena, U8, msg.size);
-                ipc_s2m_ring_read_pos += ring_read(ipc_s2m_ring_buffer, sizeof(ipc_s2m_ring_buffer), ipc_s2m_ring_read_pos, msg.str, msg.size);
+                ipc_s2m_ring_read_pos += wrapped_read(ipc_s2m_ring_buffer, sizeof(ipc_s2m_ring_buffer), ipc_s2m_ring_read_pos, msg.str, msg.size);
               }
             }
             if(consumed)

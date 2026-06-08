@@ -2543,12 +2543,12 @@ RD_VIEW_UI_FUNCTION_DEF(disasm)
   }
   
   //////////////////////////////
-  //- rjf: unpack cursor info
+  //- rjf: unpack cursor info / fill regs
   //
+  rd_regs()->prefer_disasm = 1;
   if(!is_loading && has_disasm)
   {
     U64 off = dasm_line_array_code_off_from_idx(&dasm_info.lines, rd_regs()->cursor.line-1);
-    rd_regs()->prefer_disasm = 1;
     rd_regs()->vaddr = range.min+off;
     rd_regs()->vaddr_range = r1u64(range.min+off, range.min+off);
     rd_regs()->voff_range = d_voff_range_from_vaddr_range(dasm_module, rd_regs()->vaddr_range);

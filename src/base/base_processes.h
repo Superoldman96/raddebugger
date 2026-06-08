@@ -15,7 +15,6 @@ struct ProcessInfo
   String8 user_program_config_data_path;
   String8 user_program_cache_data_path;
   String8 user_program_logs_data_path;
-  String8 symbol_cache_path;
   String8List module_load_paths;
   String8List environment;
 };

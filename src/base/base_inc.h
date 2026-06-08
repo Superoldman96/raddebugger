@@ -19,6 +19,7 @@
 #include "base_hash.h"
 #include "base_system.h"
 #include "base_threads.h"
+#include "base_ring.h"
 #include "base_thread_context.h"
 #include "base_files.h"
 #include "base_shared_memory.h"

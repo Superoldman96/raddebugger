@@ -78,7 +78,7 @@ write_data_list_to_file_path(String8 path, String8List list)
           else
           {
             U64 bytes_to_copy = Min(write_buffer_available_size, n->string.size - n_off);
-            write_buffer_write_pos += ring_write(write_buffer, write_buffer_size, write_buffer_write_pos, n->string.str + n_off, bytes_to_copy);
+            write_buffer_write_pos += wrapped_write(write_buffer, write_buffer_size, write_buffer_write_pos, n->string.str + n_off, bytes_to_copy);
             n_off += bytes_to_copy;
           }
         }

@@ -1685,7 +1685,7 @@ rd_view_ui(Rng2F32 rect)
     
     //- rjf: build container
     UI_Box *search_row = &ui_nil_box;
-    UI_PrefHeight(ui_px(search_row_height, 1.f)) UI_TagF("focus")
+    UI_PrefHeight(ui_px(search_row_height, 1.f)) // UI_TagF("focus")
     {
       if(!vs->contents_are_focused) 
       {
@@ -6633,12 +6633,19 @@ rd_window_frame(void)
                              UI_PermissionFlag_KeyboardSecondary|UI_PermissionFlag_Clicks|UI_PermissionFlag_ScrollX|UI_PermissionFlag_ScrollY :
                              UI_PermissionFlag_All)
         {
+          B32 has_footer = (is_lister && !is_anchored);
+          F32 container_corner_top_radius_px = is_lister ? ui_top_font_size()*1.f : ui_top_font_size()*0.15f;
+          F32 container_corner_bottom_radius_px = has_footer ? ui_top_font_size()*1.f : ui_top_font_size()*0.15f;
+          
           // rjf: build top-level container box
           UI_Box *container = &ui_nil_box;
           UI_Rect(rect) UI_ChildLayoutAxis(Axis2_Y)
             UI_Squish(0.1f-0.1f*open_t)
             UI_Transparency(1.f-open_t)
-            UI_CornerRadius(ui_top_font_size()*0.25f)
+            UI_CornerRadius00(container_corner_top_radius_px)
+            UI_CornerRadius10(container_corner_top_radius_px)
+            UI_CornerRadius01(container_corner_bottom_radius_px)
+            UI_CornerRadius11(container_corner_bottom_radius_px)
           {
             container = ui_build_box_from_stringf(UI_BoxFlag_Clickable|
                                                   UI_BoxFlag_DrawBorder|
@@ -6680,7 +6687,7 @@ rd_window_frame(void)
           // rjf: build contents
           F32 total_height_px = dim_2f32(rect).y;
           F32 footer_height_px = 0;
-          if(is_lister && !is_anchored)
+          if(has_footer)
           {
             footer_height_px = ui_top_font_size()*4.f;
           }
@@ -7573,6 +7580,29 @@ rd_window_frame(void)
           ui_label(str8_lit(BUILD_TITLE_STRING_LITERAL));
         }
         
+        // rjf: update available?
+        if(rd_state->newer_update_available)
+          UI_FontSize(ui_top_font_size()*0.85f)
+          UI_PrefWidth(ui_text_dim(10, 1))
+          UI_TextAlignment(UI_TextAlign_Center)
+        {
+          DR_FStrList fstrs = {0};
+          ui_set_next_hover_cursor(WM_Cursor_HandPoint);
+          UI_Box *label = ui_build_box_from_stringf(UI_BoxFlag_Clickable|UI_BoxFlag_DrawText, "##update");
+          UI_Signal sig = ui_signal_from_box(label);
+          DR_FStrParams p = {ui_top_font(), ui_top_text_raster_flags(), ui_color_from_name(s("text")), ui_top_font_size()};
+          if(ui_key_match(ui_hot_key(), label->key))
+          {
+            p.underline_thickness = ui_top_font_size()*0.2f;
+          }
+          dr_fstrs_push_new(scratch.arena, &fstrs, &p, s("Update Available"));
+          ui_box_equip_display_fstrs(label, &fstrs);
+          if(ui_clicked(sig))
+          {
+            wm_open_in_browser(s("https://github.com/EpicGamesExt/raddebugger/releases/latest"));
+          }
+        }
+        
         scratch_end(scratch);
       }
     }
@@ -7910,6 +7940,7 @@ rd_window_frame(void)
     //
     if(content_rect.x1 > content_rect.x0 && content_rect.y1 > content_rect.y0)
     {
+      B32 any_disasm_open = 0;
       ProfScope("leaf panel UI")
         for(CFG_PanelNode *panel = panel_tree.root;
             panel != &cfg_nil_panel_node;
@@ -7924,6 +7955,10 @@ rd_window_frame(void)
                                 panel_tree.focused == panel);
         CFG_Node *selected_tab = panel->selected_tab;
         RD_ViewState *selected_tab_view_state = rd_view_state_from_cfg(selected_tab);
+        if(str8_match(selected_tab->string, s("disasm"), 0))
+        {
+          any_disasm_open = 1;
+        }
         ProfScope("leaf panel UI work - %.*s: %.*s", str8_varg(selected_tab->string), str8_varg(rd_expr_from_cfg(selected_tab)))
           UI_Focus(panel_is_focused ? UI_FocusKind_Null : UI_FocusKind_Off)
         {
@@ -8752,6 +8787,10 @@ rd_window_frame(void)
           }
         }
       }
+      if(!any_disasm_open && rd_regs()->prefer_disasm)
+      {
+        rd_regs()->prefer_disasm = 0;
+      }
     }
     
     ////////////////////////////
@@ -9342,6 +9381,8 @@ rd_window_frame(void)
       FNT_Tag font = rd_font_from_slot(RD_FontSlot_Code);
       Vec2F32 p = ui_mouse();
       dr_rect(hover_debug_box->rect, v4f32(1, 1, 1, 0.2f), 0, 0, 0);
+      R_Rect2DInst *border = dr_rect(hover_debug_box->rect, v4f32(1, 0, 0, 1.f), 0, 0, 0);
+      MemoryCopyArray(border->corner_radii, hover_debug_box->corner_radii);
       dr_text(font, 12.f, 0, 0, FNT_RasterFlag_Hinted, p, v4f32(1, 1, 1, 1), push_str8f(scratch.arena, "key: 0x%I64x", hover_debug_box->key.u64[0]));
       p.y += 20.f;
       dr_text(font, 12.f, 0, 0, FNT_RasterFlag_Hinted, p, v4f32(1, 1, 1, 1), push_str8f(scratch.arena, "string: '%S'", hover_debug_box->string));
@@ -10641,6 +10682,19 @@ rd_init(CmdLine *cmdln)
   rd_state->drag_drop_regs = push_array(rd_state->drag_drop_arena, RD_Regs, 1);
   rd_state->top_regs = &rd_state->base_regs;
   
+  // rjf: set up update check http ring & send request
+  {
+    rd_state->update_check_http_ring = guarded_ring_alloc(arena, KB(8));
+    HTTP_RequestParams p =
+    {
+      .id = 1,
+      .method = HTTP_Method_Get,
+      .url = s("https://api.github.com/repos/EpicGamesExt/raddebugger/releases/latest"),
+      .user_agent = s("raddebugger"),
+    };
+    http_push_request(rd_state->update_check_http_ring, &p, 0);
+  }
+  
   // rjf: set up schemas
   {
     rd_state->cfg_schema_table = push_array(rd_state->arena, CFG_SchemaTable, 1);
@@ -11044,6 +11098,33 @@ rd_frame(void)
   }
   
   //////////////////////////////
+  //- rjf: check for updates
+  //
+  if(!rd_state->got_update_check)
+  {
+    Temp scratch = scratch_begin(0, 0);
+    HTTP_Response response = {0};
+    if(http_pop_response(scratch.arena, rd_state->update_check_http_ring, &response, 0))
+    {
+      rd_state->got_update_check = 1;
+      MD_Node *root = md_tree_from_string(scratch.arena, response.body)->first;
+      MD_Node *html_url = md_child_from_string(root, s("html_url"), 0);
+      String8 newest_release_url = html_url->first->string;
+      U64 tag_pos = str8_find_needle(newest_release_url, 0, s("tag/v"), 0);
+      String8 tag_name = str8_skip(newest_release_url, tag_pos);
+      U64 suffix_pos = str8_find_needle(tag_name, 0, s("-"), 0);
+      String8 version_name = str8_prefix(tag_name, suffix_pos);
+      U64 release_version = version_from_str8(version_name);
+      U64 current_version = Version(BUILD_VERSION_MAJOR, BUILD_VERSION_MINOR, BUILD_VERSION_PATCH);
+      if(current_version < release_version)
+      {
+        rd_state->newer_update_available = 1;
+      }
+    }
+    scratch_end(scratch);
+  }
+  
+  //////////////////////////////
   //- rjf: iterate all tabs, touch their view-states
   //
   if(rd_state->frame_depth == 1)
@@ -11082,6 +11163,7 @@ rd_frame(void)
   //////////////////////////////
   //- rjf: apply debug info config trees -> loaded debug info cache
   //
+  ProfScope("apply debug info config trees -> loaded debug info cache")
   {
     U64 current_update_tick_idx = update_tick_idx();
     
@@ -12883,7 +12965,8 @@ rd_frame(void)
             {
               rd_cmd(RD_CmdKind_PushQuery,
                      .do_implicit_root = 1,
-                     .do_lister = info->query.expr.size != 0);
+                     .do_lister = (info->query.expr.size != 0),
+                     .expr = info->query.expr);
             }
           }break;
           

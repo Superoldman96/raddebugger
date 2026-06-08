@@ -623,10 +623,10 @@ date_time_from_unix_time(U64 unix_time)
 }
 
 ////////////////////////////////
-//~ rjf: Non-Fancy Ring Buffer Reads/Writes
+//~ rjf: Wrapped Ring Buffer Reads/Writes
 
 internal U64
-ring_write(U8 *ring_base, U64 ring_size, U64 ring_pos, void *src_data, U64 src_data_size)
+wrapped_write(U8 *ring_base, U64 ring_size, U64 ring_pos, void *src_data, U64 src_data_size)
 {
   Assert(src_data_size <= ring_size);
   {
@@ -643,7 +643,7 @@ ring_write(U8 *ring_base, U64 ring_size, U64 ring_pos, void *src_data, U64 src_d
 }
 
 internal U64
-ring_read(U8 *ring_base, U64 ring_size, U64 ring_pos, void *dst_data, U64 read_size)
+wrapped_read(U8 *ring_base, U64 ring_size, U64 ring_pos, void *dst_data, U64 read_size)
 {
   Assert(read_size <= ring_size);
   {

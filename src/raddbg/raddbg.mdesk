@@ -949,7 +949,7 @@ RD_CmdTable:    //               |        |              |                |     
   {OpenPalette                    1        1              0                0               0            0               ""                                               Null               null              Nil                     Null       0  0  0  0  0  0  0                                                                                 List                  "open_palette"                                              "Open Palette"                                "Opens the palette."                                                                                               "help,cmd,lister"                ""                                                               }
   
   //- rjf: command fast-path
-  {RunCommand                     1        1              0                0               0            0               "query:commands"                                 CmdName            commands          Nil                     Null       0  0  0  0  0  1  1                                                                                 Null                  "run_command"                                               "Run Command"                                 "Runs a command from the command palette."                                                                         "help,cmd"                       ""                                                               }
+  {RunCommand                     0        0              0                0               0            0               "query:commands"                                 CmdName            commands          Nil                     Null       0  0  0  0  0  1  1                                                                                 Null                  "run_command"                                               "Run Command"                                 "Runs a command from the command palette."                                                                         "help,cmd"                       ""                                                               }
   
   //- rjf: external drivers
   {RunExternalDriverTextCommand   0        0              0                0               0            0               ""                                               Null               null              Nil                     Null       0  0  0  0  0  0  0                                                                                 Null                  "run_ext_driver_text_command"                               "Run External Driver Text Command"            ""                                                                                                                 ""                               ""                                                               }
@@ -1415,7 +1415,9 @@ RD_DefaultBindingTable:
   { "goto_line"                                        G         ctrl     0         0          }
   { "goto_address"                                     G         0        0         alt        }
   { "search"                                           F         ctrl     0         0          }
+  { "search"                                           Slash     0        0         0          }
   { "search_backwards"                                 R         ctrl     0         0          }
+  { "search_backwards"                                 Slash     ctrl     0         0          }
   { "find_next"                                        F3        0        0         0          }
   { "find_prev"                                        F3        shift    0         0          }
   

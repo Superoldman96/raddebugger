@@ -2144,8 +2144,8 @@ d_u2c_push_msgs(D_MsgList *msgs, U64 endt_us)
     U64 needed_size = sizeof(msgs_srlzed_baked.size) + msgs_srlzed_baked.size;
     if(available_size >= needed_size)
     {
-      d_ctrl_state->u2c_ring_write_pos += ring_write_struct(d_ctrl_state->u2c_ring_base, d_ctrl_state->u2c_ring_size, d_ctrl_state->u2c_ring_write_pos, &msgs_srlzed_baked.size);
-      d_ctrl_state->u2c_ring_write_pos += ring_write(d_ctrl_state->u2c_ring_base, d_ctrl_state->u2c_ring_size, d_ctrl_state->u2c_ring_write_pos, msgs_srlzed_baked.str, msgs_srlzed_baked.size);
+      d_ctrl_state->u2c_ring_write_pos += wrapped_write_struct(d_ctrl_state->u2c_ring_base, d_ctrl_state->u2c_ring_size, d_ctrl_state->u2c_ring_write_pos, &msgs_srlzed_baked.size);
+      d_ctrl_state->u2c_ring_write_pos += wrapped_write(d_ctrl_state->u2c_ring_base, d_ctrl_state->u2c_ring_size, d_ctrl_state->u2c_ring_write_pos, msgs_srlzed_baked.str, msgs_srlzed_baked.size);
       good = 1;
       break;
     }
@@ -2174,10 +2174,10 @@ d_u2c_pop_msgs(Arena *arena)
     if(unconsumed_size >= sizeof(U64))
     {
       U64 size_to_decode = 0;
-      d_ctrl_state->u2c_ring_read_pos += ring_read_struct(d_ctrl_state->u2c_ring_base, d_ctrl_state->u2c_ring_size, d_ctrl_state->u2c_ring_read_pos, &size_to_decode);
+      d_ctrl_state->u2c_ring_read_pos += wrapped_read_struct(d_ctrl_state->u2c_ring_base, d_ctrl_state->u2c_ring_size, d_ctrl_state->u2c_ring_read_pos, &size_to_decode);
       msgs_srlzed_baked.size = size_to_decode;
       msgs_srlzed_baked.str = push_array_no_zero(scratch.arena, U8, msgs_srlzed_baked.size);
-      d_ctrl_state->u2c_ring_read_pos += ring_read(d_ctrl_state->u2c_ring_base, d_ctrl_state->u2c_ring_size, d_ctrl_state->u2c_ring_read_pos, msgs_srlzed_baked.str, size_to_decode);
+      d_ctrl_state->u2c_ring_read_pos += wrapped_read(d_ctrl_state->u2c_ring_base, d_ctrl_state->u2c_ring_size, d_ctrl_state->u2c_ring_read_pos, msgs_srlzed_baked.str, size_to_decode);
       break;
     }
     cond_var_wait(d_ctrl_state->u2c_ring_cv, d_ctrl_state->u2c_ring_mutex, max_U64);
@@ -2210,8 +2210,8 @@ d_c2u_push_events(D_EventList *events)
         U64 needed_size = sizeof(event_srlzed.size) + event_srlzed.size;
         if(available_size >= needed_size)
         {
-          d_ctrl_state->c2u_ring_write_pos += ring_write_struct(d_ctrl_state->c2u_ring_base, d_ctrl_state->c2u_ring_size, d_ctrl_state->c2u_ring_write_pos, &event_srlzed.size);
-          d_ctrl_state->c2u_ring_write_pos += ring_write(d_ctrl_state->c2u_ring_base, d_ctrl_state->c2u_ring_size, d_ctrl_state->c2u_ring_write_pos, event_srlzed.str, event_srlzed.size);
+          d_ctrl_state->c2u_ring_write_pos += wrapped_write_struct(d_ctrl_state->c2u_ring_base, d_ctrl_state->c2u_ring_size, d_ctrl_state->c2u_ring_write_pos, &event_srlzed.size);
+          d_ctrl_state->c2u_ring_write_pos += wrapped_write(d_ctrl_state->c2u_ring_base, d_ctrl_state->c2u_ring_size, d_ctrl_state->c2u_ring_write_pos, event_srlzed.str, event_srlzed.size);
           break;
         }
         cond_var_wait(d_ctrl_state->c2u_ring_cv, d_ctrl_state->c2u_ring_mutex, now_time_us()+100);
@@ -2238,11 +2238,11 @@ d_c2u_pop_events(Arena *arena)
     if(unconsumed_size >= sizeof(U64))
     {
       U64 size_to_decode = 0;
-      d_ctrl_state->c2u_ring_read_pos += ring_read_struct(d_ctrl_state->c2u_ring_base, d_ctrl_state->c2u_ring_size, d_ctrl_state->c2u_ring_read_pos, &size_to_decode);
+      d_ctrl_state->c2u_ring_read_pos += wrapped_read_struct(d_ctrl_state->c2u_ring_base, d_ctrl_state->c2u_ring_size, d_ctrl_state->c2u_ring_read_pos, &size_to_decode);
       String8 event_srlzed = {0};
       event_srlzed.size = size_to_decode;
       event_srlzed.str = push_array_no_zero(scratch.arena, U8, event_srlzed.size);
-      d_ctrl_state->c2u_ring_read_pos += ring_read(d_ctrl_state->c2u_ring_base, d_ctrl_state->c2u_ring_size, d_ctrl_state->c2u_ring_read_pos, event_srlzed.str, event_srlzed.size);
+      d_ctrl_state->c2u_ring_read_pos += wrapped_read(d_ctrl_state->c2u_ring_base, d_ctrl_state->c2u_ring_size, d_ctrl_state->c2u_ring_read_pos, event_srlzed.str, event_srlzed.size);
       D_Event *new_event = d_event_list_push(arena, &events);
       *new_event = d_event_from_serialized_string(arena, event_srlzed);
     }
@@ -2683,28 +2683,11 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
   }
   
   //////////////////////////////
-  //- rjf: determine debug info unique identifier
+  //- rjf: no found debug info path -> try to fall back on symbol server
   //
-  String8 debug_info_unique_identifier = {0};
-  if(module_info->debug_info_path.size != 0)
+  if(initial_debug_info_path.size == 0)
   {
-    Guid guid = module_info->debug_info_guid;
-    debug_info_unique_identifier = str8f(scratch.arena, "%08X%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X%x",
-                                         guid.data1, guid.data2, guid.data3, guid.data4[0], guid.data4[1], guid.data4[2], guid.data4[3], guid.data4[4], guid.data4[5], guid.data4[6], guid.data4[7], module_info->debug_info_age);
-  }
-  
-  //////////////////////////////
-  //- rjf: build local server cache debug info path
-  //
-  String8 local_server_cache_debug_info_path = {0};
-  if(debug_info_unique_identifier.size != 0 && module_info->debug_info_path.size != 0)
-  {
-    // TODO(rjf): this is not complete - assuming stripped etc. - just following pattern from ntdll.dll for now
-    String8 symbol_cache_path = get_process_info()->symbol_cache_path;
-    String8 module_name = str8_skip_last_slash(module_info->module_path);
-    String8 dbg_name = str8_skip_last_slash(module_info->debug_info_path);
-    String8 path = str8f(scratch.arena, "%S/%S/%S/stripped/%S", symbol_cache_path, module_name, debug_info_unique_identifier, dbg_name);
-    local_server_cache_debug_info_path = path_normalized_from_string(arena, path);
+    initial_debug_info_path = smsv_local_path_from_key(arena, str8_skip_last_slash(module_info->module_path), str8_skip_last_slash(module_info->debug_info_path), module_info->debug_info_guid, module_info->debug_info_age);
   }
   
   //////////////////////////////
@@ -2725,7 +2708,6 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
     info.unwinder                     = unwinder;
     info.unwind_info                  = unwind_info_opaque;
     info.local_debug_info_path        = initial_debug_info_path;
-    info.debug_info_unique_identifier = debug_info_unique_identifier;
     info.raddbg_attached_marker_voff  = module_info->raddbg_is_attached_marker_voff;
     info.raddbg_data                  = raddbg_data;
   }
