@@ -1797,6 +1797,7 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
   //
   void *regs_block = d_cached_reg_block_from_thread(scratch.arena, thread);
   B32 regs_block_good = (arch != Arch_Null && regs_block != 0);
+  void *regs_block_restore = push_array(scratch.arena, U8, arch_reg_block_size);
   
   //////////////////////////////
   //- rjf: grab initial memory
@@ -1858,9 +1859,18 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
       B32 step_is_good = 0;
       for(;!unwind.flags;)
       {
+        // rjf: remember registers pre-step
+        MemoryCopy(regs_block_restore, regs_block, arch_reg_block_size);
+        
         // rjf: try step
         U64 cfa = 0;
         UWND_StepResult step = uwnd_step(unwinder, arch, &memory_map, &unwinder_module_info, tls_vaddr, regs_block, &cfa);
+        
+        // rjf: if the step failed -> restore original register values
+        if(step.status != UWND_StepStatus_Good)
+        {
+          MemoryCopy(regs_block, regs_block_restore, arch_reg_block_size);
+        }
         
         // rjf: if we failed to read memory, try to read that memory, equip to memory map.
         // if it is stale and we run out of time, we will need to mark the whole unwind as

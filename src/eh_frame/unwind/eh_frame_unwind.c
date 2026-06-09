@@ -16,10 +16,6 @@ eh_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info, U64
     ARCH_Info *arch_info = arch_info_from_arch(arch);
     U64 pc = arch_ip_from_reg_block(arch_info, regs);
     
-    //- rjf: set up new register values
-    void *new_regs = push_array(scratch.arena, U8, arch_info->reg_block_size);
-    MemoryCopy(new_regs, regs, arch_info->reg_block_size);
-    
     //- rjf: find nearest FDE entry to the IP
     U64 fde_vaddr = 0;
     if(header->version == 1 && header->fde_count != 0)
@@ -590,7 +586,7 @@ eh_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info, U64
           }
           if(!done)
           {
-            arch_reg_block_write_range(arch_info, new_regs, reg_rng, reg_value_buffer);
+            arch_reg_block_write_range(arch_info, regs, reg_rng, reg_value_buffer);
           }
           temp_end(temp);
         }break;
@@ -598,7 +594,7 @@ eh_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info, U64
         {
           U64 reg_value = cfa + rule->s64;
           Rng1U16 write_range = r1u16(reg_rng.min, Min(reg_rng.max, reg_rng.min + sizeof(reg_value)));
-          arch_reg_block_write_range(arch_info, new_regs, write_range, &reg_value);
+          arch_reg_block_write_range(arch_info, regs, write_range, &reg_value);
         }break;
         case DW_UnwindRuleCode_Reg:
         {
@@ -610,7 +606,7 @@ eh_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info, U64
           U64 read_size = Min(src_reg_size, reg_size);
           U8 *src_reg_val_buffer = push_array(temp.arena, U8, read_size);
           arch_reg_block_read_range(arch_info, regs, src_reg_rng, src_reg_val_buffer);
-          arch_reg_block_write_range(arch_info, new_regs, reg_rng, src_reg_val_buffer);
+          arch_reg_block_write_range(arch_info, regs, reg_rng, src_reg_val_buffer);
           temp_end(temp);
         }break;
         case DW_UnwindRuleCode_Expr:
@@ -638,7 +634,7 @@ eh_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info, U64
             }
             else
             {
-              arch_reg_block_write_range(arch_info, new_regs, reg_rng, reg_value_buffer);
+              arch_reg_block_write_range(arch_info, regs, reg_rng, reg_value_buffer);
             }
           }
           temp_end(temp);
@@ -658,7 +654,7 @@ eh_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info, U64
           if(!done)
           {
             U512 reg_val = eval.val.u512;
-            arch_reg_block_write_range(arch_info, new_regs, reg_rng, &reg_val);
+            arch_reg_block_write_range(arch_info, regs, reg_rng, &reg_val);
           }
           temp_end(temp);
         }break;
@@ -681,14 +677,13 @@ eh_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info, U64
     //
     if(!done)
     {
-      arch_reg_block_write_sp(arch_info, new_regs, cfa);
+      arch_reg_block_write_sp(arch_info, regs, cfa);
     }
     
     //- rjf: commit new register values, if we succeeded
     if(!done)
     {
       result.status = UWND_StepStatus_Good;
-      MemoryCopy(regs, new_regs, arch_info->reg_block_size);
     }
   }
   scratch_end(scratch);

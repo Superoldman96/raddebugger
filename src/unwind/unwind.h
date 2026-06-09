@@ -38,6 +38,11 @@ struct UWND_ModuleInfo
 };
 
 ////////////////////////////////
+//~ rjf: Moduleless Unwinder
+
+internal UWND_StepResult uwnd_step_moduleless(Arch arch, MemoryMap *memory_map, void *regs);
+
+////////////////////////////////
 //~ rjf: Abstracted Unwind Step Functions
 
 internal UWND_StepResult uwnd_step(UWND_Unwinder unwinder, Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info, U64 tls_vaddr, void *regs, U64 *cfa_out);

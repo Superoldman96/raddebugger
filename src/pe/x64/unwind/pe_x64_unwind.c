@@ -98,18 +98,16 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
   {
     B32 done = 0;
     Temp scratch = scratch_begin(0, 0);
-    X64_RegBlock *new_regs = push_array(scratch.arena, X64_RegBlock, 1);
-    MemoryCopyStruct(new_regs, regs);
     
     ////////////////////////////
     //- rjf: on PE/x64, the frame base address is always RSP
     //
-    cfa_out[0] = new_regs->rsp;
+    cfa_out[0] = regs->rsp;
     
     ////////////////////////////
     //- rjf: unpack context from rip
     //
-    U64 rip_voff = new_regs->rip - module_info->base_vaddr;
+    U64 rip_voff = regs->rip - module_info->base_vaddr;
     PE_IntelPdata *first_pdata = pe_x64_uwnd_intel_pdata_from_voff(unwind_info, rip_voff);
     
     ////////////////////////////
@@ -117,7 +115,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
     //
     B32 has_pdata_and_in_epilog = 0;
     U64 instruction_data_size_cap = 256;
-    Rng1U64 instruction_data_vaddr_range = r1u64(new_regs->rip, new_regs->rip+instruction_data_size_cap);
+    Rng1U64 instruction_data_vaddr_range = r1u64(regs->rip, regs->rip+instruction_data_size_cap);
     String8 instruction_data = {0};
     if(!done && first_pdata)
     {
@@ -346,7 +344,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
           case 0x5C:case 0x5D:case 0x5E:case 0x5F:
           {
             // rjf: read value at rsp
-            U64 sp = new_regs->rsp;
+            U64 sp = regs->rsp;
             U64 value = 0;
             if(memory_map_read_struct(memory_map, sp, &value) != sizeof(value))
             {
@@ -361,9 +359,9 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
               PE_UnwindGprRegX64 gpr_reg = (inst_byte - 0x58) + (rex & 1)*8;
               X64_RegCode reg_code = pe_x64_uwnd_reg_code_from_pe_gpr_reg(gpr_reg);
               Rng1U16 reg_rng = x64_reg_code_rng_table[reg_code];
-              U64 *reg_ptr = (U64 *)((U8 *)&new_regs + reg_rng.min);
+              U64 *reg_ptr = (U64 *)((U8 *)&regs + reg_rng.min);
               reg_ptr[0] = value;
-              new_regs->rsp = sp + 8;
+              regs->rsp = sp + 8;
             }
             
             // rjf: not a final instruction, so keep parsing
@@ -386,7 +384,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
             read_off += sizeof(imm);
             
             // rjf: update stack pointer
-            new_regs->rsp = (U64)(new_regs->rsp + imm);
+            regs->rsp = (U64)(regs->rsp + imm);
             
             // rjf: not a final instruction; keep parsing
             keep_parsing = 1;
@@ -408,7 +406,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
             read_off += sizeof(imm);
             
             // rjf: update stack pointer
-            new_regs->rsp = (U64)(new_regs->rsp + imm);
+            regs->rsp = (U64)(regs->rsp + imm);
             
             // rjf: not a final instruction; keep parsing
             keep_parsing = 1;
@@ -430,7 +428,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
             PE_UnwindGprRegX64 gpr_reg = (modrm & 7) + (rex & 1)*8;
             X64_RegCode reg_code = pe_x64_uwnd_reg_code_from_pe_gpr_reg(gpr_reg);
             Rng1U16 reg_rng = x64_reg_code_rng_table[reg_code];
-            U64 *reg_ptr = (U64 *)((U8 *)&new_regs + reg_rng.min);
+            U64 *reg_ptr = (U64 *)((U8 *)&regs + reg_rng.min);
             U64 reg_value = reg_ptr[0];
             
             // rjf: read immediate
@@ -462,7 +460,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
             // rjf: update stack pointer
             if(!done)
             {
-              new_regs->rsp = (U64)(reg_value + imm);
+              regs->rsp = (U64)(reg_value + imm);
             }
             
             // rjf: not a final instruction; keep parsing
@@ -473,7 +471,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
           case 0xC2:
           {
             // rjf: read new ip
-            U64 sp = new_regs->rsp;
+            U64 sp = regs->rsp;
             U64 new_ip = 0;
             if(memory_map_read_struct(memory_map, sp, &new_ip) != sizeof(new_ip))
             {
@@ -493,8 +491,8 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
             // rjf: commit registers
             if(!done)
             {
-              new_regs->rip = new_ip;
-              new_regs->rsp = new_sp;
+              regs->rip = new_ip;
+              regs->rsp = new_sp;
             }
           }break;
           
@@ -506,7 +504,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
           case 0xC3:
           {
             // rjf: read new ip
-            U64 sp = new_regs->rsp;
+            U64 sp = regs->rsp;
             U64 new_ip = 0;
             if(memory_map_read_struct(memory_map, sp, &new_ip) != sizeof(new_ip))
             {
@@ -521,8 +519,8 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
             // rjf: commit registers
             if(!done)
             {
-              new_regs->rip = new_ip;
-              new_regs->rsp = new_sp;
+              regs->rip = new_ip;
+              regs->rsp = new_sp;
             }
           }break;
           
@@ -604,11 +602,11 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
         }
         
         //- rjf: unpack frame base
-        U64 frame_base = new_regs->rsp;
+        U64 frame_base = regs->rsp;
         if(frame_reg_code != X64_RegCode_nil)
         {
           Rng1U16 frame_reg_rng = x64_reg_code_rng_table[frame_reg_code];
-          U64 raw_frame_base = *(U64 *)((U8 *)new_regs + frame_reg_rng.min);
+          U64 raw_frame_base = *(U64 *)((U8 *)regs + frame_reg_rng.min);
           U64 adjusted_frame_base = raw_frame_base - frame_off*16;
           frame_base = adjusted_frame_base;
         }
@@ -647,7 +645,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
               case PE_UnwindOpCode_PUSH_NONVOL:
               {
                 // rjf: read value from stack pointer
-                U64 rsp = new_regs->rsp;
+                U64 rsp = regs->rsp;
                 U64 value = 0;
                 if(memory_map_read_struct(memory_map, rsp, &value) != sizeof(value))
                 {
@@ -661,8 +659,8 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
                 {
                   X64_RegCode reg_code = pe_x64_uwnd_reg_code_from_pe_gpr_reg(op_info);
                   Rng1U16 reg_rng = x64_reg_code_rng_table[reg_code];
-                  *(U64 *)((U8 *)new_regs + reg_rng.min) = value;
-                  new_regs->rsp = rsp + 8;
+                  *(U64 *)((U8 *)regs + reg_rng.min) = value;
+                  regs->rsp = rsp + 8;
                 }
               }break;
               
@@ -686,20 +684,20 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
                 // rjf: advance stack pointer
                 if(!done)
                 {
-                  new_regs->rsp += size;
+                  regs->rsp += size;
                 }
               }break;
               
               case PE_UnwindOpCode_ALLOC_SMALL:
               {
                 // rjf: advance stack pointer
-                new_regs->rsp += op_info*8 + 8;
+                regs->rsp += op_info*8 + 8;
               }break;
               
               case PE_UnwindOpCode_SET_FPREG:
               {
                 // rjf: put stack pointer back to the frame base
-                new_regs->rsp = frame_base;
+                regs->rsp = frame_base;
               }break;
               
               case PE_UnwindOpCode_SAVE_NONVOL:
@@ -720,7 +718,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
                 {
                   X64_RegCode reg_code = pe_x64_uwnd_reg_code_from_pe_gpr_reg(op_info);
                   Rng1U16 reg_rng = x64_reg_code_rng_table[reg_code];
-                  *(U64 *)((U8 *)new_regs + reg_rng.min) = value;
+                  *(U64 *)((U8 *)regs + reg_rng.min) = value;
                 }
               }break;
               
@@ -742,7 +740,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
                 {
                   X64_RegCode reg_code = pe_x64_uwnd_reg_code_from_pe_gpr_reg(op_info);
                   Rng1U16 reg_rng = x64_reg_code_rng_table[reg_code];
-                  *(U64 *)((U8 *)new_regs + reg_rng.min) = value;
+                  *(U64 *)((U8 *)regs + reg_rng.min) = value;
                 }
               }break;
               
@@ -775,7 +773,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
                 // rjf: commit to register
                 if(!done)
                 {
-                  void *xmm_reg = (&new_regs->zmm0) + op_info;
+                  void *xmm_reg = (&regs->zmm0) + op_info;
                   MemoryCopy(xmm_reg, buf, sizeof(buf));
                 }
               }break;
@@ -797,7 +795,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
                 // rjf: commit to register
                 if(!done)
                 {
-                  void *xmm_reg = (&new_regs->zmm0) + op_info;
+                  void *xmm_reg = (&regs->zmm0) + op_info;
                   MemoryCopy(xmm_reg, buf, sizeof(buf));
                 }
               }break;
@@ -812,7 +810,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
                 }
                 
                 // rjf: unpack stack pointer
-                U64 sp_og = new_regs->rsp;
+                U64 sp_og = regs->rsp;
                 U64 sp_adj = sp_og;
                 if(op_info == 1)
                 {
@@ -861,10 +859,10 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
                 // rjf: commit registers
                 if(!done)
                 {
-                  new_regs->rip    = ip_value;
-                  new_regs->ss     = ss_value;
-                  new_regs->rflags = rflags_value;
-                  new_regs->rsp    = sp_value;
+                  regs->rip    = ip_value;
+                  regs->ss     = ss_value;
+                  regs->rflags = rflags_value;
+                  regs->rsp    = sp_value;
                 }
                 
                 // rjf: mark machine frame
@@ -898,27 +896,12 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
     }
     
     //////////////////////////////
-    //- rjf: no pdata, or didn't do machframe in xdata unwind -> unwind by reading stack pointer
+    //- rjf: no pdata, or didn't do machframe in xdata unwind -> module-less unwind
     //
     if(!done && (!first_pdata || (!has_pdata_and_in_epilog && !xdata_unwind_did_machframe)))
     {
-      // rjf: read new ip
-      U64 sp = new_regs->rsp;
-      U64 new_ip = 0;
-      if(memory_map_read_struct(memory_map, sp, &new_ip) != sizeof(new_ip))
-      {
-        done = 1;
-        result.status = UWND_StepStatus_FailedMemoryRead;
-        result.missed_read_vaddr_range = r1u64(sp, sp+sizeof(new_ip));
-      }
-      
-      // rjf: commit
-      if(!done)
-      {
-        U64 new_sp = sp+8;
-        new_regs->rip = new_ip;
-        new_regs->rsp = new_sp;
-      }
+      result = uwnd_step_moduleless(arch, memory_map, regs);
+      done = (result.status != UWND_StepStatus_Good);
     }
     
     //////////////////////////////
@@ -927,7 +910,6 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
     if(!done)
     {
       result.status = UWND_StepStatus_Good;
-      MemoryCopyStruct(regs, new_regs);
     }
     
     scratch_end(scratch);
