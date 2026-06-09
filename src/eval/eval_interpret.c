@@ -1013,32 +1013,39 @@ e_interpret(String8 bytecode)
         result.code = E_InterpretationCode_BadOp;
         goto done;
       }break;
-
+      
       case RDI_EvalOp_PartialValue:
       {
         // DW_OP_piece marker: top-of-stack is a piece of a composite value.
         // we do not assemble composites; for single-piece expressions the
         // value already on the stack is the result. for multi-piece, only
         // the first piece is returned (stack[0] is the final result).
+        result.code = E_InterpretationCode_BadOp;
+        goto done;
       }break;
-
+      
       case RDI_EvalOp_PartialValueBit:
       {
         // DW_OP_bit_piece marker. same caveat as PartialValue.
+        result.code = E_InterpretationCode_BadOp;
+        goto done;
       }break;
-
+      
       case RDI_EvalOp_Swap:
       {
-        if(stack_count + 2 > stack_cap)
+        if(stack_count >= 2)
+        {
+          E_Value swap = stack[stack_count-2];
+          stack[stack_count-2] = stack[stack_count-1];
+          stack[stack_count-1] = swap;
+        }
+        else
         {
           result.code = E_InterpretationCode_InsufficientStackSpace;
           goto done;
         }
-        stack[stack_count + 0] = svals[1];
-        stack[stack_count + 1] = svals[0];
-        stack_count += 2;
       }break;
-
+      
       case RDI_EvalOp_PushCfa:
       {
         nval.u64 = e_interpret_ctx->cfa;
