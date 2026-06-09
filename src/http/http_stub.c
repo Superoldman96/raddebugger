@@ -5,6 +5,7 @@
 //~ rjf: @per_os_impl Top-Level Layer Calls
 
 internal void http_init(void){}
+internal void http_async_tick(void){}
 
 ////////////////////////////////////////////////////////////////
 //~ rjf: @per_os_impl I/O Ring Functions

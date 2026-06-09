@@ -750,6 +750,27 @@ di_async_tick(void)
           }
         }
         
+        //- rjf: determine if RDI path is writable; if not, need to write into the writable cache path
+        if(!t->og_folder_analyzed)
+        {
+          t->og_folder_analyzed = 1;
+          File file = file_open(AccessFlag_Write, rdi_path);
+          t->og_folder_is_writable = !file_match(file, file_zero());
+          file_close(file);
+        }
+        
+        //- rjf: if RDI path is not writable -> adjust into writable cache directory
+        if(!t->og_folder_is_writable)
+        {
+          String8 cache_folder = get_process_info()->user_program_cache_data_path;
+          String8 raddbg_folder = str8f(scratch.arena, "%S/raddbg", cache_folder);
+          String8 rdis_folder = str8f(scratch.arena, "%S/rdis", raddbg_folder);
+          make_directory(cache_folder);
+          make_directory(raddbg_folder);
+          make_directory(rdis_folder);
+          rdi_path = str8f(scratch.arena, "%S/%S.rdi", rdis_folder, str8_chop_last_dot(str8_skip_last_slash(og_path)));
+        }
+        
         //- rjf: determine if RDI is stale
         if(!t->rdi_analyzed && !og_is_downloading)
         {

@@ -139,6 +139,8 @@ struct DI_LoadTask
   
   B32 og_analyzed;
   B32 og_is_rdi;
+  B32 og_folder_analyzed;
+  B32 og_folder_is_writable;
   U64 og_size;
   
   B32 rdi_analyzed;
