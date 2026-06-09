@@ -12483,6 +12483,10 @@ rd_frame(void)
           C_ID id = {u128_hash_from_str8(output_label_string)};
           C_Key key = c_key_make(d_user_state->output_log_root, id);
           U128 hash = c_hash_from_key(key, 0);
+          if(u128_match(hash, u128_zero()))
+          {
+            c_submit_data(key, 0, s(""));
+          }
           String8 data = c_data_from_hash(access, hash);
           E_Space space = e_space_make(E_SpaceKind_HashStoreKey);
           space.u64_0 = key.root.u64[0];

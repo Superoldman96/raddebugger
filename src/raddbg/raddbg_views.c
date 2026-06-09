@@ -2181,7 +2181,8 @@ RD_VIEW_UI_FUNCTION_DEF(text)
   //////////////////////////////
   //- rjf: code is not missing, but not ready -> equip loading info to this view
   //
-  if(!file_is_missing && info.lines_count == 0 && eval.msgs.max_kind == E_MsgKind_Null)
+  B32 is_loading = (!file_is_missing && info.lines_count == 0 && eval.msgs.max_kind == E_MsgKind_Null && eval.space.kind != E_SpaceKind_Null);
+  if(is_loading)
   {
     rd_store_view_loading_info(1, info.bytes_processed, info.bytes_to_process);
   }
@@ -2189,7 +2190,7 @@ RD_VIEW_UI_FUNCTION_DEF(text)
   //////////////////////////////
   //- rjf: build code contents
   //
-  if(!file_is_missing)
+  if(!file_is_missing && eval.space.kind != E_SpaceKind_Null)
   {
     RD_CodeViewBuildFlags flags = RD_CodeViewBuildFlag_All;
     if(rd_regs()->file_path.size == 0)

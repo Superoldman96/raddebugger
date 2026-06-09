@@ -3024,7 +3024,10 @@ txt_text_info_from_key_lang(Access *access, C_Key key, TXT_LangKind lang, U128 *
   for(U64 rewind_idx = 0; rewind_idx < C_KEY_HASH_HISTORY_COUNT; rewind_idx += 1)
   {
     U128 hash = c_hash_from_key(key, rewind_idx);
-    result = txt_text_info_from_hash_lang(access, hash, lang);
+    if(!u128_match(hash, u128_zero()))
+    {
+      result = txt_text_info_from_hash_lang(access, hash, lang);
+    }
     if(result.lines_count != 0)
     {
       if(hash_out)
