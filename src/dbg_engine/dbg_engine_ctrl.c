@@ -2675,6 +2675,7 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
     }
     
     // rjf: push local symbol server cache's path
+    if(local_symbol_server_cache_path.size != 0)
     {
       str8_list_push(scratch.arena, &candidates, local_symbol_server_cache_path);
     }
@@ -2698,7 +2699,7 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
   // if it exists, we can just use it. if it doesn't, then we only want to pick it *if*
   // automatic downloads are enabled.
   //
-  if(initial_debug_info_path.size == 0 && d_ctrl_state->auto_download_debug_info)
+  if(initial_debug_info_path.size == 0 && d_ctrl_state->auto_download_debug_info && local_symbol_server_cache_path.size != 0)
   {
     initial_debug_info_path = str8_copy(arena, local_symbol_server_cache_path);
   }

@@ -697,7 +697,7 @@ di_async_tick(void)
           if(!file_is_present)
           {
             String8 symbol_cache_path = smsv_cache_path();
-            if(str8_match(symbol_cache_path, og_path, StringMatchFlag_RightSideSloppy|StringMatchFlag_SlashInsensitive))
+            if(symbol_cache_path.size != 0 && str8_match(symbol_cache_path, og_path, StringMatchFlag_RightSideSloppy|StringMatchFlag_SlashInsensitive))
             {
               if(di_shared->auto_downloads)
               {
