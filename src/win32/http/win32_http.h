@@ -35,6 +35,8 @@ struct W32_HTTP_Request
   void *optional; // NOTE(rjf): must persist with in-flight requests
   U64 optional_size;
   HTTP_StatusCode status_code;
+  U64 total_response_bytes_sent;
+  U64 total_response_bytes;
   U64 arena_start_body_read_pos;
   String8List finished_body_pieces;
   void *next_body_piece;

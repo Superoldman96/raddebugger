@@ -3194,6 +3194,7 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
               default:{}break;
               case CV_SymKind_LPROC32:
               case CV_SymKind_GPROC32:
+              case CV_SymKind_THUNK32:
               {
                 procedure_record_count += 1;
                 scope_record_count += 1;
@@ -3598,6 +3599,35 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
                 regrel_idx = 0;
                 
                 proc_flags = proc32->flags;
+              }break;
+              
+              //- rjf: THUNK32
+              case CV_SymKind_THUNK32:
+              {
+                // rjf: unpack record
+                CV_SymThunk32 *thunk32 = (CV_SymThunk32 *)iter.struct_base;
+                String8 name = str8_cstring_capped(thunk32+1, iter.opl);
+                COFF_SectionHeader *section = (0 < thunk32->sec && thunk32->sec <= coff_sections.count) ? &coff_sections.v[thunk32->sec-1] : 0;
+                U64 voff_first = 0;
+                U64 voff_opl = 0;
+                if(section != 0)
+                {
+                  voff_first = section->voff + thunk32->off;
+                  voff_opl = voff_first + thunk32->len;
+                }
+                
+                // rjf: build symbol / scope
+                RDIM_Symbol *symbol = rdim_symbol_chunk_list_push(arena, sym_procedures, sym_procedures_chunk_cap);
+                symbol->name = name;
+                symbol->is_thunk = 1;
+                if(voff_first != voff_opl)
+                {
+                  RDIM_Scope *scope = rdim_scope_chunk_list_push(arena, sym_scopes, sym_scopes_chunk_cap);
+                  RDIM_Rng1U64 range = {voff_first, voff_opl};
+                  rdim_scope_push_voff_range(arena, sym_scopes, scope, range);
+                  scope->symbol = symbol;
+                  symbol->root_scope = scope;
+                }
               }break;
               
               //- rjf: REGREL32

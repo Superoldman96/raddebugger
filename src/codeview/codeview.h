@@ -1044,12 +1044,12 @@ CV_ThunkOrdinalEnum;
 typedef struct CV_SymThunk32 CV_SymThunk32;
 struct CV_SymThunk32
 {
-  U32             parent;
-  U32             end;
-  U32             next;
-  U32             off;
-  U16             sec;
-  U16             len;
+  U32 parent;
+  U32 end;
+  U32 next;
+  U32 off;
+  U16 sec;
+  U16 len;
   CV_ThunkOrdinal ord;
   // U8[] name (null terminated)
   // U8[] variant (null terminated)

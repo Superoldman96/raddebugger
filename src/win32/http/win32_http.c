@@ -344,10 +344,22 @@ http_async_tick(void)
           DWORD status_code = 0;
           DWORD status_code_size = sizeof(status_code);
           WinHttpQueryHeaders(req->hRequest, 
-                              WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER, 
+                              WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,
                               WINHTTP_HEADER_NAME_BY_INDEX, 
                               &status_code, &status_code_size, WINHTTP_NO_HEADER_INDEX);
           req->status_code = status_code;
+        }
+        
+        // rjf: figure out total bytes
+        if(req->total_response_bytes == 0)
+        {
+          DWORD buffer_size = sizeof(req->total_response_bytes);
+          WinHttpQueryHeaders(req->hRequest,
+                              WINHTTP_QUERY_CONTENT_LENGTH|WINHTTP_QUERY_FLAG_NUMBER64,
+                              WINHTTP_HEADER_NAME_BY_INDEX,
+                              &req->total_response_bytes, 
+                              &buffer_size,
+                              WINHTTP_NO_HEADER_INDEX);
         }
         
         // rjf: join all currently read body contents
@@ -359,7 +371,7 @@ http_async_tick(void)
         
         // rjf: compute size per record header
         U64 max_record_size = req->out_ring->ring->size;
-        U64 bytes_per_record_header = sizeof(U64) + sizeof(U64) + sizeof(B32) + sizeof(HTTP_StatusCode);
+        U64 bytes_per_record_header = sizeof(U64) + sizeof(U64) + sizeof(U64) + sizeof(U64) + sizeof(B32) + sizeof(HTTP_StatusCode);
         
         // rjf: push response records
         for(U64 off = 0, next_off = 0; off <= body.size; off = next_off)
@@ -383,6 +395,8 @@ http_async_tick(void)
             B32 has_more = !is_last;
             str8_list_push(scratch.arena, &pieces, str8_struct(&record_size));
             str8_list_push(scratch.arena, &pieces, str8_struct(&req->id));
+            str8_list_push(scratch.arena, &pieces, str8_struct(&req->total_response_bytes_sent));
+            str8_list_push(scratch.arena, &pieces, str8_struct(&req->total_response_bytes));
             str8_list_push(scratch.arena, &pieces, str8_struct(&has_more));
             str8_list_push(scratch.arena, &pieces, str8_struct(&req->status_code));
             str8_list_push(scratch.arena, &pieces, str8_substr(body, r1u64(off, next_off)));
@@ -396,10 +410,16 @@ http_async_tick(void)
             if(!guarded_ring_write_string_or_wait(&g, record_data, 0))
             {
               push_failed = 1;
-              String8 unpushed_body_piece = str8_substr(body, r1u64(off, next_off));
+              String8 unpushed_body_piece = str8_substr(body, r1u64(off, body.size));
               str8_list_push(req->arena, &req->finished_body_pieces, str8_copy(req->arena, unpushed_body_piece));
             }
             guarded_ring_close(&g);
+          }
+          
+          // rjf: advance total bytes sent
+          if(!push_failed)
+          {
+            req->total_response_bytes_sent += (next_off - off);
           }
           
           // rjf: cancel on no movement
@@ -528,6 +548,8 @@ http_pop_response(Arena *arena, GuardedRing *out_ring, HTTP_Response *response_o
     guarded_ring_read_or_wait(&g, data.size, data.str, max_U64);
     U64 off = 0;
     off += str8_deserial_read_struct(data, off, &response_out->id);
+    off += str8_deserial_read_struct(data, off, &response_out->off);
+    off += str8_deserial_read_struct(data, off, &response_out->off_opl);
     off += str8_deserial_read_struct(data, off, &response_out->has_more);
     off += str8_deserial_read_struct(data, off, &response_out->code);
     response_out->body.size = (data.size - off);

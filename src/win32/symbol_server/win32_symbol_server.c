@@ -201,7 +201,7 @@ smsv_async_tick(void)
         {
           str8_list_push(task->arena, &task->file_pieces, str8_copy(task->arena, r.body));
         }
-        if(r.has_more == 0 && task->status != W32_SMSV_TaskStatus_DoneDownloading)
+        if(!r.has_more && task->status != W32_SMSV_TaskStatus_DoneDownloading)
         {
           task->status = W32_SMSV_TaskStatus_DoneDownloading;
           W32_SMSV_TaskNode *n = push_array(scratch.arena, W32_SMSV_TaskNode, 1);
@@ -329,6 +329,11 @@ smsv_async_tick(void)
           }
         }
         write_data_list_to_file_path(task->local_path, task->file_pieces);
+        if(task->current_server_url_node != 0)
+        {
+          String8 origin_path = str8f(scratch.arena, "%S/origin.txt", str8_chop_last_slash(task->local_path));
+          write_data_to_file_path(origin_path, task->current_server_url_node->string);
+        }
       }
       
       // rjf: evict task from cache

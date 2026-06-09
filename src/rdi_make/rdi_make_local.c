@@ -3353,9 +3353,13 @@ rdim_bake(Arena *arena, RDIM_BakeParams *params)
             dst->type_idx             = (RDI_U32)rdim_idx_from_type(src->type); // TODO(rjf): @u64_to_u32
             dst->root_scope_idx       = (RDI_U32)rdim_idx_from_scope(src->root_scope); // TODO(rjf): @u64_to_u32
             dst->link_name_string_idx = rdim_bake_idx_from_string(bake_strings, src->link_name);
-            if (src->is_param)
+            if(src->is_param)
             {
               dst->symbol_flags |= RDI_SymbolFlag_IsParam;
+            }
+            if(src->is_thunk)
+            {
+              dst->symbol_flags |= RDI_SymbolFlag_IsThunk;
             }
             
             // rjf: fill container info

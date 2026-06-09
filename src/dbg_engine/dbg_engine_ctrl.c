@@ -2666,10 +2666,12 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
   //////////////////////////////
   //- rjf: no found debug info path -> try to fall back on symbol server cache path
   //
+#if 0
   if(initial_debug_info_path.size == 0)
   {
     initial_debug_info_path = smsv_local_path_from_key(arena, str8_skip_last_slash(module_info->debug_info_path), module_info->debug_info_guid, module_info->debug_info_age);
   }
+#endif
   
   //////////////////////////////
   //- rjf: write 1 at attachment marker, to signify attachment
@@ -3086,25 +3088,25 @@ d_ctrl_thread__next_dmn_event(Arena *arena, DMN_CtrlCtx *ctrl_ctx, D_Msg *msg, D
       {
         d_process_write(spoof->process, r1u64(spoof->vaddr, spoof->vaddr+size_of_spoof), &spoof_old_ip_value);
       }
-    }
-  }
-  
-  //- rjf: irrespective of what event came back, we should ALWAYS check the
-  // spoof's thread and see if it hit the spoof address, because we may have
-  // simply been sent other debug events first
-  if(spoof != 0)
-  {
-    D_Entity *thread = d_entity_from_handle(spoof->thread);
-    Arch arch = thread->arch;
-    ARCH_Info *arch_info = arch_info_from_arch(arch);
-    U64 arch_reg_block_size = arch_info->reg_block_size;
-    void *regs_block = push_array(scratch.arena, U8, arch_reg_block_size);
-    d_thread_read_reg_block(spoof->thread, regs_block);
-    U64 spoof_thread_rip = arch_ip_from_reg_block(arch_info, regs_block);
-    if(spoof_thread_rip == spoof->new_ip_value)
-    {
-      arch_reg_block_write_ip(arch_info, regs_block, spoof_old_ip_value);
-      d_thread_write_reg_block(spoof->thread, regs_block);
+      
+      // rjf: irrespective of what event came back, we should ALWAYS check the
+      // spoof's thread and see if it hit the spoof address, because we may have
+      // simply been sent other debug events first
+      if(spoof != 0)
+      {
+        D_Entity *thread = d_entity_from_handle(spoof->thread);
+        Arch arch = thread->arch;
+        ARCH_Info *arch_info = arch_info_from_arch(arch);
+        U64 arch_reg_block_size = arch_info->reg_block_size;
+        void *regs_block = push_array(scratch.arena, U8, arch_reg_block_size);
+        d_thread_read_reg_block(spoof->thread, regs_block);
+        U64 spoof_thread_rip = arch_ip_from_reg_block(arch_info, regs_block);
+        if(spoof_thread_rip == spoof->new_ip_value)
+        {
+          arch_reg_block_write_ip(arch_info, regs_block, spoof_old_ip_value);
+          d_thread_write_reg_block(spoof->thread, regs_block);
+        }
+      }
     }
   }
   
@@ -5154,22 +5156,38 @@ d_ctrl_thread__run(DMN_CtrlCtx *ctrl_ctx, D_Msg *msg)
         }
       }
       
-      //- rjf: trap net on on-target threads trigger trap net logic
-      B32 use_trap_net_logic = 0;
-      if(!hard_stop && use_stepping_logic && hit_trap_net_bp)
+      //- rjf: trap net logic: stack pointer check on target thread
+      B32 stack_pointer_check_passes = 0;
+      if(!hard_stop && use_stepping_logic && hit_trap_net_bp && dmn_handle_match(event->thread, d_dmn_from_handle(target_thread)))
       {
-        if(dmn_handle_match(event->thread, d_dmn_from_handle(target_thread)))
+        U64 sp = d_sp_from_thread(target_thread);
+        stack_pointer_check_passes = ((hit_trap_flags & D_TrapFlag_IgnoreStackPointerCheck) || (sp == sp_check_value));
+      }
+      
+      //- rjf: trap net on on-target threads trigger trap net logic, *if* the stack pointer check passes.
+      // if it doesn't -> step over trap net & continue
+      B32 use_trap_net_logic = 0;
+      if(!hard_stop && use_stepping_logic && hit_trap_net_bp && dmn_handle_match(event->thread, d_dmn_from_handle(target_thread)))
+      {
+        if(stack_pointer_check_passes)
         {
           use_trap_net_logic = 1;
         }
+        else
+        {
+          step_past_trap_net = 1;
+          use_stepping_logic = 0;
+        }
       }
       
-      //- rjf: trap net logic: stack pointer check
-      B32 stack_pointer_matches = 0;
-      if(use_trap_net_logic)
+      //- rjf: trap net logic: save stack pointer *before* step-over
+      if(!hard_stop && use_trap_net_logic)
       {
-        U64 sp = d_sp_from_thread(target_thread);
-        stack_pointer_matches = (sp == sp_check_value);
+        if(hit_trap_flags & D_TrapFlag_SaveStackPointerBefore)
+        {
+          sp_check_value = d_sp_from_thread(target_thread);
+          log_infof("sp_check_value = 0x%I64x\n", sp_check_value);
+        }
       }
       
       //- rjf: trap net logic: single step after hit
@@ -5217,6 +5235,16 @@ d_ctrl_thread__run(DMN_CtrlCtx *ctrl_ctx, D_Msg *msg)
         }
       }
       
+      //- rjf: trap net logic: save stack pointer *after* step-over
+      if(!hard_stop && use_trap_net_logic)
+      {
+        if(hit_trap_flags & D_TrapFlag_SaveStackPointerAfter)
+        {
+          sp_check_value = d_sp_from_thread(target_thread);
+          log_infof("sp_check_value = 0x%I64x\n", sp_check_value);
+        }
+      }
+      
       //- rjf: trap net logic: begin spoof mode
       B32 begin_spoof_mode = 0;
       if(!hard_stop && use_trap_net_logic)
@@ -5234,33 +5262,14 @@ d_ctrl_thread__run(DMN_CtrlCtx *ctrl_ctx, D_Msg *msg)
         }
       }
       
-      //- rjf: trap net logic: save stack pointer
-      B32 save_stack_pointer = 0;
-      if(!hard_stop && use_trap_net_logic)
-      {
-        if(hit_trap_flags & D_TrapFlag_SaveStackPointer)
-        {
-          if(stack_pointer_matches) LogInfoNamedBlockF("trap_net__save_sp")
-          {
-            save_stack_pointer = 1;
-            sp_check_value = d_sp_from_thread(target_thread);
-            log_infof("sp_check_value = 0x%I64x\n", sp_check_value);
-          }
-        }
-      }
-      
       //- rjf: trap net logic: end stepping
       B32 trap_net_stop = 0;
       if(!hard_stop && use_trap_net_logic)
       {
         if(hit_trap_flags & D_TrapFlag_EndStepping) LogInfoNamedBlockF("trap_net__end_step")
         {
-          if((hit_trap_flags & D_TrapFlag_IgnoreStackPointerCheck) ||
-             stack_pointer_matches)
-          {
-            trap_net_stop = 1;
-            use_trap_net_logic = 0;
-          }
+          trap_net_stop = 1;
+          use_trap_net_logic = 0;
         }
       }
       

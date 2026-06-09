@@ -1020,6 +1020,7 @@ RDI_LocationKindTable:
 RDI_SymbolFlagTable:
 {
   {IsParam 0x1}
+  {IsThunk 0x2}
 }
 
 @table(name type desc)

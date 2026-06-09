@@ -516,16 +516,24 @@ d_trap_net_from_thread__step_over_line(Arena *arena, D_Entity *thread)
       
     }
     
+    // rjf: call => save stack pointer before, single-step to go into call; trap on return
+    else if(point->inst_flags & DASM_InstFlag_Call)
+    {
+      flags |= (D_TrapFlag_SaveStackPointerBefore|D_TrapFlag_SingleStepAfterHit);
+    }
+    
+#if 0 // TODO(rjf): @spoof_stepping
     // rjf: call => place spoof at return spot in stack, single-step after hitting
     else if(point->inst_flags & DASM_InstFlag_Call)
     {
       flags |= (D_TrapFlag_BeginSpoofMode|D_TrapFlag_SingleStepAfterHit);
     }
+#endif
     
-    // rjf: instruction changes stack pointer => save off the stack pointer, single-step over, keep stepping
+    // rjf: instruction changes stack pointer => single-step over, save off the stack pointer, keep stepping
     else if(point->inst_flags & DASM_InstFlag_ChangesStackPointer)
     {
-      flags |= (D_TrapFlag_SingleStepAfterHit|D_TrapFlag_SaveStackPointer);
+      flags |= (D_TrapFlag_SingleStepAfterHit|D_TrapFlag_SaveStackPointerAfter);
     }
     
     // rjf: add if appropriate
@@ -734,7 +742,7 @@ d_trap_net_from_thread__step_into_line(Arena *arena, D_Entity *thread)
     // rjf: instruction changes stack pointer => save off the stack pointer, single-step over, keep stepping
     else if(point->inst_flags & DASM_InstFlag_ChangesStackPointer)
     {
-      flags |= (D_TrapFlag_SingleStepAfterHit|D_TrapFlag_SaveStackPointer);
+      flags |= (D_TrapFlag_SingleStepAfterHit|D_TrapFlag_SaveStackPointerAfter);
     }
     
     // rjf: add if appropriate

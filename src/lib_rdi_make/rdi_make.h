@@ -849,6 +849,7 @@ typedef struct RDIM_Symbol RDIM_Symbol;
 struct RDIM_Symbol
 {
   struct RDIM_SymbolChunkNode *chunk;
+  RDI_S32 is_thunk;
   RDI_S32 is_extern;
   RDI_S32 is_param;
   RDIM_String8 name;

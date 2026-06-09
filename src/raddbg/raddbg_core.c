@@ -6634,18 +6634,14 @@ rd_window_frame(void)
                              UI_PermissionFlag_All)
         {
           B32 has_footer = (is_lister && !is_anchored);
-          F32 container_corner_top_radius_px = is_lister ? ui_top_font_size()*1.f : ui_top_font_size()*0.15f;
-          F32 container_corner_bottom_radius_px = has_footer ? ui_top_font_size()*1.f : ui_top_font_size()*0.15f;
+          F32 container_corner_radius_px = has_footer ? ui_top_font_size()*1.f : ui_top_font_size()*0.15f;
           
           // rjf: build top-level container box
           UI_Box *container = &ui_nil_box;
           UI_Rect(rect) UI_ChildLayoutAxis(Axis2_Y)
             UI_Squish(0.1f-0.1f*open_t)
             UI_Transparency(1.f-open_t)
-            UI_CornerRadius00(container_corner_top_radius_px)
-            UI_CornerRadius10(container_corner_top_radius_px)
-            UI_CornerRadius01(container_corner_bottom_radius_px)
-            UI_CornerRadius11(container_corner_bottom_radius_px)
+            UI_CornerRadius(container_corner_radius_px)
           {
             container = ui_build_box_from_stringf(UI_BoxFlag_Clickable|
                                                   UI_BoxFlag_DrawBorder|
@@ -11108,7 +11104,7 @@ rd_frame(void)
     for(HTTP_Response response = {0}; http_pop_response(rd_state->update_check_arena, rd_state->update_check_http_ring, &response, 0);)
     {
       str8_list_push(rd_state->update_check_arena, &rd_state->update_check_response_body_pieces, response.body);
-      if(response.has_more == 0)
+      if(!response.has_more)
       {
         done = 1;
       }
@@ -12318,7 +12314,7 @@ rd_frame(void)
                                                         });
         E_Expr *expr = e_push_expr(scratch.arena, E_ExprKind_LeafOffset, r1u64(0, 0));
         expr->type_key = collection_type_key;
-        expr->space = e_space_make(RD_EvalSpaceKind_MetaCtrlEntity);
+        expr->space = e_space_make(RD_EvalSpaceKind_MetaQuery);
         e_string2expr_map_insert(scratch.arena, macro_map, collection_name, expr);
         e_string2typekey_map_insert(rd_frame_arena(), rd_state->meta_name2type_map, collection_name, collection_type_key);
       }

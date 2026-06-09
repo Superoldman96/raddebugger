@@ -146,6 +146,8 @@ typedef struct HTTP_Response HTTP_Response;
 struct HTTP_Response
 {
   U64 id;
+  U64 off;
+  U64 off_opl;
   B32 has_more;
   HTTP_StatusCode code;
   String8 body;

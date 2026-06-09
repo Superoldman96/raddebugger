@@ -270,9 +270,10 @@ enum
 {
   D_TrapFlag_IgnoreStackPointerCheck = (1<<0),
   D_TrapFlag_SingleStepAfterHit      = (1<<1),
-  D_TrapFlag_SaveStackPointer        = (1<<2),
-  D_TrapFlag_BeginSpoofMode          = (1<<3),
-  D_TrapFlag_EndStepping             = (1<<4),
+  D_TrapFlag_SaveStackPointerBefore  = (1<<2),
+  D_TrapFlag_SaveStackPointerAfter   = (1<<3),
+  D_TrapFlag_BeginSpoofMode          = (1<<4),
+  D_TrapFlag_EndStepping             = (1<<5),
 };
 
 typedef struct D_Trap D_Trap;

@@ -396,6 +396,7 @@ typedef RDI_U8 RDI_SymbolFlags;
 typedef enum RDI_SymbolFlagsEnum
 {
 RDI_SymbolFlag_IsParam              = 0x1,
+RDI_SymbolFlag_IsThunk              = 0x2,
 } RDI_SymbolFlagsEnum;
 
 typedef RDI_U8 RDI_LocationKind;

@@ -682,6 +682,7 @@ di_async_tick(void)
         
         //- rjf: kick off symbol server download, or check to see if we are actively downloading O.G.
         B32 og_is_downloading = 0;
+        if(og_path.size != 0)
         {
           B32 file_is_present = (properties_from_file_path(og_path).modified != 0);
           if(!file_is_present)
