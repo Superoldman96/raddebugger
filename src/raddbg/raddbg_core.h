@@ -397,6 +397,8 @@ struct RD_State
   // rjf: update checker
   B32 got_update_check;
   B32 newer_update_available;
+  Arena *update_check_arena;
+  String8List update_check_response_body_pieces;
   GuardedRing *update_check_http_ring;
   
   // rjf: config bucket paths

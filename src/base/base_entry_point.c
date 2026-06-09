@@ -224,6 +224,9 @@ async_thread_entry_point(void *params)
 #if defined(HTTP_H)
       http_async_tick();
 #endif
+#if defined(SYMBOL_SERVER_H)
+      smsv_async_tick();
+#endif
 #if defined(DBG_INFO_H)
       di_async_tick();
 #endif

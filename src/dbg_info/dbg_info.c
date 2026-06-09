@@ -680,8 +680,22 @@ di_async_tick(void)
           }
         }
         
+        //- rjf: check with the symbol server to see if we are actively downloading O.G.
+        B32 og_is_downloading = 0;
+        {
+          B32 file_is_present = (properties_from_file_path(og_path).modified != 0);
+          if(!file_is_present)
+          {
+            SMSV_Status status = smsv_status_from_local_path(og_path);
+            if(status == SMSV_Status_Pending)
+            {
+              og_is_downloading = 1;
+            }
+          }
+        }
+        
         //- rjf: analyze O.G. debug info
-        if(!t->og_analyzed)
+        if(!t->og_analyzed && !og_is_downloading)
         {
           t->og_analyzed = 1;
           File file = file_open(AccessFlag_ShareRead|AccessFlag_Read, og_path);
@@ -714,7 +728,7 @@ di_async_tick(void)
         }
         
         //- rjf: determine if RDI is stale
-        if(!t->rdi_analyzed)
+        if(!t->rdi_analyzed && !og_is_downloading)
         {
           t->rdi_analyzed = 1;
           File file = file_open(AccessFlag_ShareRead|AccessFlag_Read, rdi_path);
@@ -737,7 +751,7 @@ di_async_tick(void)
         B32 rdi_is_stale = t->rdi_is_stale;
         
         //- rjf: calculate thread counts for conversion processes
-        if(!og_is_rdi && rdi_is_stale && t->thread_count == 0)
+        if(!og_is_rdi && rdi_is_stale && t->thread_count == 0 && !og_is_downloading)
         {
           U64 thread_count = 1;
           U64 max_thread_count = get_system_info()->logical_processor_count/2;
@@ -768,7 +782,7 @@ di_async_tick(void)
         
         //- rjf: if this conversion will overwrite an RDI we already have in cache,
         // then we need to evict the old one from the cache.
-        B32 ready_to_launch_conversion = (threads_available && !og_is_rdi && rdi_is_stale && t->thread_count != 0 && t->status != DI_LoadTaskStatus_Active);
+        B32 ready_to_launch_conversion = (!og_is_downloading && threads_available && !og_is_rdi && rdi_is_stale && t->thread_count != 0 && t->status != DI_LoadTaskStatus_Active);
         if(ready_to_launch_conversion)
         {
           U64 path2key_hash = u64_hash_from_str8(og_path);
@@ -863,7 +877,7 @@ di_async_tick(void)
         
         //- rjf: if the RDI for this task is not stale, then we're already done - mark this
         // task as done & prepped for storing into the cache
-        if(!rdi_is_stale)
+        if(!rdi_is_stale && !og_is_downloading)
         {
           t->status = DI_LoadTaskStatus_Done;
         }

@@ -29,6 +29,7 @@ struct P2R_LinkNameNode
   P2R_LinkNameNode *next;
   U64 voff;
   String8 name;
+  U64 referencing_symbol_count;
 };
 
 typedef struct P2R_LinkNameMap P2R_LinkNameMap;

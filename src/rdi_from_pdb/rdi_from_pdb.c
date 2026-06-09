@@ -397,22 +397,18 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
 {
   Temp scratch = scratch_begin(&arena, 1);
   
-  Arena *scratch_conflicts[2] = { scratch.arena, arena };
-  
   //////////////////////////////////////////////////////////////
   //- rjf: do base MSF parse
   //
   MSF_Parsed *msf = 0;
   ProfScope("do base MSF parse")
   {
-    Temp scratch2 = scratch_begin(scratch_conflicts, ArrayCount(scratch_conflicts));
-    
     // rjf: setup output buckets
     MSF_RawStreamTable *msf_raw_stream_table = 0;
     U64 *msf_stream_take_counter = 0;
     if(lane_idx() == 0)
     {
-      msf_raw_stream_table = msf_raw_stream_table_from_data(scratch2.arena, params->input_pdb_data);
+      msf_raw_stream_table = msf_raw_stream_table_from_data(scratch.arena, params->input_pdb_data);
       msf = push_array(scratch.arena, MSF_Parsed, 1);
       msf->page_size = msf_raw_stream_table->page_size;
       msf->page_count = msf_raw_stream_table->total_page_count;
@@ -437,8 +433,6 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
       }
     }
     lane_sync();
-    
-    scratch_end(scratch2);
   }
   lane_sync();
   
@@ -677,7 +671,7 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
   //
   U64 exe_voff_max = 0;
   {
-    Temp scratch2 = scratch_begin(scratch_conflicts, ArrayCount(scratch_conflicts));
+    Temp scratch2 = scratch_begin(&scratch.arena, 1);
     
     // rjf: set up
     U64 *lane_voff_maxes = 0;
@@ -827,7 +821,7 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
     //- rjf: do wide gather
     ProfScope("do wide gather")
     {
-      Temp scratch2 = scratch_begin(scratch_conflicts, ArrayCount(scratch_conflicts));
+      Temp scratch2 = scratch_begin(&scratch.arena, 1);
       
       //- rjf: build local hash table to dedup files within this lane
       U64 hit_path_slots_count = 4096;
@@ -1758,7 +1752,7 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
         }
         
         //- rjf: walk dependent types, push to chain
-        Temp scratch2 = scratch_begin(scratch_conflicts, ArrayCount(scratch_conflicts));
+        Temp scratch2 = scratch_begin(&scratch.arena, 1);
         P2R_TypeIdChain start_walk_task = {0, itype};
         P2R_TypeIdChain *first_walk_task = &start_walk_task;
         P2R_TypeIdChain *last_walk_task = &start_walk_task;
@@ -1767,7 +1761,7 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
             walk_task = walk_task->next)
         {
           CV_TypeId walk_itype = itype_fwd_map[walk_task->itype] ? itype_fwd_map[walk_task->itype] : walk_task->itype;
-          if(walk_itype < tpi_leaf->itype_first)
+          if(walk_itype < tpi_leaf->itype_first || tpi_leaf->itype_opl <= walk_itype)
           {
             continue;
           }
@@ -2041,7 +2035,7 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
   U64 all_namespace_slots_count = 0;
   ProfScope("gather all unique namespaces from types")
   {
-    Temp scratch2 = scratch_begin(scratch_conflicts, ArrayCount(scratch_conflicts));
+    Temp scratch2 = scratch_begin(&scratch.arena, 1);
     
     //- rjf: find all unique namespaces on this lane
     U64 namespace_slots_count = (U64)itype_opl / lane_count();
@@ -2874,7 +2868,7 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
                              RDIM_SubsetFlag_Types))
     ProfScope("gather all namespaces which are only encoded in symbols (not found in types)")
   {
-    Temp scratch2 = scratch_begin(scratch_conflicts, ArrayCount(scratch_conflicts));
+    Temp scratch2 = scratch_begin(&scratch.arena, 1);
     U64 lane_namespace_slots_count = 4096;
     String8Node **lane_namespace_slots = push_array(scratch2.arena, String8Node *, lane_namespace_slots_count);
     
@@ -3537,6 +3531,7 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
                     if(n->voff == voff)
                     {
                       link_name = n->name;
+                      ins_atomic_u64_inc_eval(&n->referencing_symbol_count);
                       break;
                     }
                   }
@@ -4180,6 +4175,82 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
       }
     }
 #undef p2r_type_ptr_from_itype
+  }
+  lane_sync();
+  
+  //////////////////////////////////////////////////////////////
+  //- rjf: produce stub procedures from all pub32 symbols
+  //
+  if(lane_idx() == 0)
+  {
+    CV_SymParsed *sym = all_syms[0];
+    for(CV_RecIter iter = {0}; cv_rec_next(sym->data, &sym->sym_ranges, 0, &iter);)
+    {
+      RDIM_Unit *sym_unit = &all_units_ptr->first->v[0];
+      RDIM_SymbolChunkList *sym_procedures = &sym_unit->procedures;
+      RDIM_SymbolChunkList *sym_global_variables = &sym_unit->global_variables;
+      RDIM_ScopeChunkList *sym_scopes = &sym_unit->scopes;
+      switch(iter.kind)
+      {
+        default:{}break;
+        case CV_SymKind_PUB32:
+        {
+          // rjf: unpack record
+          CV_SymPub32 *pub32 = (CV_SymPub32 *)iter.struct_base;
+          String8 name = str8_cstring_capped(pub32+1, iter.opl);
+          COFF_SectionHeader *section = (0 < pub32->sec && pub32->sec <= coff_sections.count) ? &coff_sections.v[pub32->sec-1] : 0;
+          U64 voff = 0;
+          if(section != 0)
+          {
+            voff = section->voff + pub32->off;
+          }
+          
+          // rjf: determine if this pub32 was covered by another symbol record
+          B32 was_in_other_record = 0;
+          {
+            U64 hash = p2r_hash_from_voff(voff);
+            U64 slot_idx = hash%link_name_map->buckets_count;
+            for(P2R_LinkNameNode *n = link_name_map->buckets[slot_idx]; n != 0; n = n->next)
+            {
+              if(n->voff == voff)
+              {
+                was_in_other_record = (n->referencing_symbol_count != 0);
+                break;
+              }
+            }
+          }
+          
+          // rjf: find compilation unit contribution to determine pub32's size
+          U64 voff_opl = voff+1;
+          if(!was_in_other_record)
+          {
+            PDB_CompUnitContribution *contrib = pdb_comp_unit_contribution_from_voff__binary_search(comp_unit_contributions, voff);
+            if(contrib != 0)
+            {
+              voff_opl = contrib->voff_opl;
+            }
+          }
+          
+          // rjf: if this pub32 was *not* covered by another symbol record, build a symbol for it
+          if(!was_in_other_record)
+          {
+            B32 is_procedure = (pub32->flags & (CV_Pub32Flag_Code|CV_Pub32Flag_Function));
+            RDIM_SymbolChunkList *symbols = is_procedure ? sym_procedures : sym_global_variables;
+            RDIM_Symbol *symbol = rdim_symbol_chunk_list_push(arena, symbols, 64);
+            symbol->name = name;
+            symbol->link_name = name;
+            if(is_procedure)
+            {
+              RDIM_Scope *scope = rdim_scope_chunk_list_push(arena, sym_scopes, 64);
+              scope->symbol = symbol;
+              RDIM_Rng1U64 range = {voff, voff_opl};
+              rdim_scope_push_voff_range(arena, sym_scopes, scope, range);
+              symbol->root_scope = scope;
+            }
+          }
+        }break;
+      }
+    }
   }
   lane_sync();
   

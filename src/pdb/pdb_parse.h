@@ -212,6 +212,7 @@ internal PDB_CompUnitArray*   pdb_comp_unit_array_from_data(Arena *arena,
                                                             String8 module_info_data);
 
 internal PDB_CompUnitContributionArray pdb_comp_unit_contribution_array_from_data(Arena *arena, String8 seccontrib_data, COFF_SectionHeaderArray sections);
+internal PDB_CompUnitContribution *pdb_comp_unit_contribution_from_voff__binary_search(PDB_CompUnitContributionArray *array, U64 voff);
 
 ////////////////////////////////
 //~ PDB Dbi Functions

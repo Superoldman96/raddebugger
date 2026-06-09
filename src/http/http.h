@@ -146,6 +146,7 @@ typedef struct HTTP_Response HTTP_Response;
 struct HTTP_Response
 {
   U64 id;
+  B32 has_more;
   HTTP_StatusCode code;
   String8 body;
 };
@@ -154,6 +155,11 @@ struct HTTP_Response
 //~ rjf: Basic Type Functions
 
 internal HTTP_StatusKind http_status_kind_from_code(HTTP_StatusCode code);
+
+////////////////////////////////////////////////////////////////
+//~ rjf: Synchronous Request Helper
+
+internal HTTP_Response http_request(Arena *arena, HTTP_RequestParams *params);
 
 ////////////////////////////////////////////////////////////////
 //~ rjf: @per_os_impl Top-Level Layer Calls

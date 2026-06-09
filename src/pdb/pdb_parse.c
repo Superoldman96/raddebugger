@@ -5,17 +5,21 @@
 //~ PDB Parser Functions
 
 internal PDB_Info*
-pdb_info_from_data(Arena *arena, String8 data){
+pdb_info_from_data(Arena *arena, String8 data)
+{
   ProfBegin("pdb_info_from_data");
+  PDB_Info *result = push_array(arena, PDB_Info, 1);
   
   // get header
   PDB_InfoHeader *header = 0;
-  if (data.size >= sizeof(*header)){
+  if(data.size >= sizeof(*header))
+  {
     header = (PDB_InfoHeader *)data.str;
   }
   
-  PDB_Info *result = 0;
-  if (header != 0){
+  // rjf: parse info given header
+  if(header != 0)
+  {
     // read guid
     Guid *auth_guid = 0;
     U32 after_auth_guid_off = sizeof(*header);
@@ -122,7 +126,6 @@ pdb_info_from_data(Arena *arena, String8 data){
   }
   
   ProfEnd();
-  
   return(result);
 }
 
@@ -754,6 +757,37 @@ pdb_comp_unit_contribution_array_from_data(Arena *arena, String8 data, COFF_Sect
   PDB_CompUnitContributionArray result = {0};
   result.contributions = contributions;
   result.count = count;
+  return result;
+}
+
+internal PDB_CompUnitContribution *
+pdb_comp_unit_contribution_from_voff__binary_search(PDB_CompUnitContributionArray *array, U64 voff)
+{
+  PDB_CompUnitContribution *result = 0;
+  if(array->count != 0)
+  {
+    U64 first_idx = 0;
+    U64 last_idx = array->count-1;
+    for(;first_idx < last_idx;)
+    {
+      U64 mid_idx = (last_idx + first_idx) / 2;
+      U64 mid_voff_first = array->contributions[mid_idx].voff_first;
+      U64 mid_voff_opl = array->contributions[mid_idx].voff_opl;
+      if(voff < mid_voff_first)
+      {
+        last_idx = mid_idx;
+      }
+      else if(mid_voff_opl <= voff)
+      {
+        first_idx = mid_idx+1;
+      }
+      else
+      {
+        result = &array->contributions[mid_idx];
+        break;
+      }
+    }
+  }
   return result;
 }
 

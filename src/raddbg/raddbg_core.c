@@ -10684,7 +10684,8 @@ rd_init(CmdLine *cmdln)
   
   // rjf: set up update check http ring & send request
   {
-    rd_state->update_check_http_ring = guarded_ring_alloc(arena, KB(8));
+    rd_state->update_check_arena = arena_alloc();
+    rd_state->update_check_http_ring = guarded_ring_alloc(rd_state->update_check_arena, KB(8));
     HTTP_RequestParams p =
     {
       .id = 1,
@@ -11102,12 +11103,24 @@ rd_frame(void)
   //
   if(!rd_state->got_update_check)
   {
-    Temp scratch = scratch_begin(0, 0);
-    HTTP_Response response = {0};
-    if(http_pop_response(scratch.arena, rd_state->update_check_http_ring, &response, 0))
+    // rjf: pop all responses that we can
+    B32 done = 0;
+    for(HTTP_Response response = {0}; http_pop_response(rd_state->update_check_arena, rd_state->update_check_http_ring, &response, 0);)
+    {
+      str8_list_push(rd_state->update_check_arena, &rd_state->update_check_response_body_pieces, response.body);
+      if(response.has_more == 0)
+      {
+        done = 1;
+      }
+    }
+    
+    // rjf: if we're done -> parse response & determine if there is a new version
+    if(done)
     {
       rd_state->got_update_check = 1;
-      MD_Node *root = md_tree_from_string(scratch.arena, response.body)->first;
+      Temp scratch = scratch_begin(0, 0);
+      String8 response_body = str8_list_join(rd_state->update_check_arena, &rd_state->update_check_response_body_pieces, 0);
+      MD_Node *root = md_tree_from_string(scratch.arena, response_body)->first;
       MD_Node *html_url = md_child_from_string(root, s("html_url"), 0);
       String8 newest_release_url = html_url->first->string;
       U64 tag_pos = str8_find_needle(newest_release_url, 0, s("tag/v"), 0);
@@ -11120,8 +11133,13 @@ rd_frame(void)
       {
         rd_state->newer_update_available = 1;
       }
+      guarded_ring_release(rd_state->update_check_http_ring);
+      arena_release(rd_state->update_check_arena);
+      rd_state->update_check_arena = 0;
+      rd_state->update_check_http_ring = 0;
+      MemoryZeroStruct(&rd_state->update_check_response_body_pieces);
+      scratch_end(scratch);
     }
-    scratch_end(scratch);
   }
   
   //////////////////////////////
@@ -17380,7 +17398,9 @@ rd_frame(void)
           D_Entity *module = d_entity_from_handle(evt->entity);
           D_Entity *debug_info_path = d_entity_child_from_kind(module, D_EntityKind_DebugInfoPath);
           String8 new_path = debug_info_path->string;
-          if(new_path.size != 0 && file_path_exists(new_path))
+          B32 file_exists = file_path_exists(new_path);
+          B32 file_is_pending = (!file_exists ? smsv_status_from_local_path(new_path) == SMSV_Status_Pending : 0);
+          if(new_path.size != 0 && (file_exists || file_is_pending))
           {
             CFG_NodePtrList dbg_infos = cfg_node_top_level_list_from_string(scratch.arena, str8_lit("debug_info"));
             B32 path_found = 0;

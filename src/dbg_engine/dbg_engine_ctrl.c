@@ -2685,10 +2685,12 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
   //////////////////////////////
   //- rjf: no found debug info path -> try to fall back on symbol server
   //
+#if 0
   if(initial_debug_info_path.size == 0)
   {
-    initial_debug_info_path = smsv_local_path_from_key(arena, str8_skip_last_slash(module_info->module_path), str8_skip_last_slash(module_info->debug_info_path), module_info->debug_info_guid, module_info->debug_info_age);
+    initial_debug_info_path = smsv_local_path_from_key(arena, str8_skip_last_slash(module_info->debug_info_path), module_info->debug_info_guid, module_info->debug_info_age);
   }
+#endif
   
   //////////////////////////////
   //- rjf: write 1 at attachment marker, to signify attachment
