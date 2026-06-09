@@ -4318,12 +4318,16 @@ rd_view_ui(Rng2F32 rect)
                           selected_eval = cell->eval;
                           ewv->next_cursor = ewv->next_mark = cell_pt;
                           pressed = 1;
-                          rd_cmd(RD_CmdKind_PushQuery,
-                                 .expr = s("query:eval_commands"),
-                                 .do_implicit_root = 1,
-                                 .do_lister = 1,
-                                 .activate_with_single_click = 1,
-                                 .ui_key = cell_box->key);
+                          if(cell->eval.space.kind == D_EvalSpaceKind_Entity)
+                          {
+                            rd_cmd(RD_CmdKind_PushQuery,
+                                   .expr = s("query:memory_eval_commands"),
+                                   .do_implicit_root = 1,
+                                   .do_lister = 1,
+                                   .activate_with_single_click = 1,
+                                   .small_size = 1,
+                                   .ui_key = cell_box->key);
+                          }
                         }
                         
                         // rjf: reversion
@@ -6524,7 +6528,7 @@ rd_window_frame(void)
           }
           if(!ui_key_match(ui_key_zero(), ws->query_regs->ui_key))
           {
-            query_width_px = is_small ? (ui_top_font_size()*25.f) : (ui_top_font_size()*60.f);
+            query_width_px = is_small ? (ui_top_font_size()*28.f) : (ui_top_font_size()*60.f);
             max_query_height_px = is_small ? (ui_top_font_size()*40.f) : (ui_top_font_size()*80.f);
           }
           F32 query_height_px = max_query_height_px;
@@ -11917,7 +11921,7 @@ rd_frame(void)
           s("tab_commands"),
           s("text_pt_commands"),
           s("text_range_commands"),
-          s("eval_commands"),
+          s("memory_eval_commands"),
         };
         for EachElement(idx, names)
         {

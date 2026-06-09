@@ -34,7 +34,7 @@ E_TYPE_EXPAND_INFO_FUNCTION_DEF(commands)
                   (str8_match(type->name, s("text_pt_commands"), 0) && info->flags & RD_CmdKindFlag_ListInTextPt) ||
                   (str8_match(type->name, s("text_range_commands"), 0) && info->flags & RD_CmdKindFlag_ListInTextRng) ||
                   (str8_match(type->name, s("tab_commands"), 0) && info->flags & RD_CmdKindFlag_ListInTab) ||
-                  (str8_match(type->name, s("eval_commands"), 0) && info->flags & RD_CmdKindFlag_ListInEval) ||
+                  (str8_match(type->name, s("memory_eval_commands"), 0) && info->flags & RD_CmdKindFlag_ListInMemoryEval) ||
                   (str8_match(type->name, s("memory_commands"), 0) && info->flags & RD_CmdKindFlag_ListInMemory));
       if(show)
       {

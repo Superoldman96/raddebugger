@@ -27,8 +27,12 @@ struct W32_HTTP_Request
 {
   B32 active;
   Arena *arena;
+  
+  // rjf: request parameters
   GuardedRing *out_ring;
   U64 id;
+  
+  // rjf: working state
   W32_HTTP_RequestStatus status;
   HINTERNET hConnect;
   HINTERNET hRequest;
@@ -38,9 +42,12 @@ struct W32_HTTP_Request
   U64 total_response_bytes_sent;
   U64 total_response_bytes;
   U64 arena_start_body_read_pos;
-  String8List finished_body_pieces;
   void *next_body_piece;
   U64 next_body_piece_size;
+  
+  // rjf: finished response body read state
+  Arena *finished_body_arena;
+  String8List finished_body_pieces;
 };
 
 typedef struct W32_HTTP_Response W32_HTTP_Response;

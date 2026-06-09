@@ -65,6 +65,7 @@ http_init(void)
   for EachElement(idx, w32_http_state->active_requests)
   {
     w32_http_state->active_requests[idx].arena = arena_alloc();
+    w32_http_state->active_requests[idx].finished_body_arena = arena_alloc();
   }
   w32_http_state->hSession = WinHttpOpen(0, WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, WINHTTP_FLAG_ASYNC);
   WinHttpSetStatusCallback(w32_http_state->hSession, w32_http_status_callback, WINHTTP_CALLBACK_FLAG_ALL_NOTIFICATIONS, 0);
@@ -138,6 +139,7 @@ http_async_tick(void)
         req = &w32_http_state->active_requests[free_slot_num-1];
         req->active = 1;
         arena_clear(req->arena);
+        arena_clear(req->finished_body_arena);
         req->out_ring = out_ring;
         req->id = params.id;
         req->status = W32_HTTP_RequestStatus_Null;
@@ -323,6 +325,7 @@ http_async_tick(void)
         WinHttpReceiveResponse(req->hRequest, 0);
       }
     }
+    lane_sync();
   }
   
   //- rjf: push response output
@@ -366,7 +369,7 @@ http_async_tick(void)
         String8 body = str8_list_join(scratch.arena, &req->finished_body_pieces, 0);
         
         // rjf: clear current body output
-        arena_pop_to(req->arena, req->arena_start_body_read_pos);
+        arena_clear(req->finished_body_arena);
         MemoryZeroStruct(&req->finished_body_pieces);
         
         // rjf: compute size per record header
@@ -386,13 +389,16 @@ http_async_tick(void)
           // rjf: advance by that amount of the body
           next_off = off + body_data_size;
           
+          // rjf: determine if we have more responses after this one
+          B32 is_last = (next_off == body.size && (status == W32_HTTP_RequestStatus_Done || status == W32_HTTP_RequestStatus_Failed));
+          B32 has_more = !is_last;
+          
           // rjf: serialize this record
           String8 record_data = {0};
+          if(is_last || next_off != off)
           {
             String8List pieces = {0};
             U64 record_size = bytes_per_record_header + (next_off - off);
-            B32 is_last = (next_off == body.size && (status == W32_HTTP_RequestStatus_Done || status == W32_HTTP_RequestStatus_Failed));
-            B32 has_more = !is_last;
             str8_list_push(scratch.arena, &pieces, str8_struct(&record_size));
             str8_list_push(scratch.arena, &pieces, str8_struct(&req->id));
             str8_list_push(scratch.arena, &pieces, str8_struct(&req->total_response_bytes_sent));
@@ -404,16 +410,22 @@ http_async_tick(void)
           }
           
           // rjf: push this record
-          B32 push_failed = 0;
+          B32 push_failed = 1;
+          if(record_data.size != 0)
           {
             RingGuard g = guarded_ring_open(req->out_ring);
-            if(!guarded_ring_write_string_or_wait(&g, record_data, 0))
-            {
-              push_failed = 1;
-              String8 unpushed_body_piece = str8_substr(body, r1u64(off, body.size));
-              str8_list_push(req->arena, &req->finished_body_pieces, str8_copy(req->arena, unpushed_body_piece));
-            }
+            push_failed = !guarded_ring_write_string_or_wait(&g, record_data, 0);
             guarded_ring_close(&g);
+          }
+          
+          // rjf: push failed -> remember unsent portions of body
+          if(push_failed)
+          {
+            String8 unpushed_body_piece = str8_substr(body, r1u64(off, body.size));
+            if(unpushed_body_piece.size != 0)
+            {
+              str8_list_push(req->finished_body_arena, &req->finished_body_pieces, str8_copy(req->finished_body_arena, unpushed_body_piece));
+            }
           }
           
           // rjf: advance total bytes sent
@@ -432,6 +444,7 @@ http_async_tick(void)
         scratch_end(scratch);
       }
     }
+    lane_sync();
   }
   
   //- rjf: kick off body size queries
@@ -444,12 +457,16 @@ http_async_tick(void)
       {
         if(req->next_body_piece_size != 0)
         {
-          str8_list_push(req->arena, &req->finished_body_pieces, str8((U8 *)req->next_body_piece, req->next_body_piece_size));
+          str8_list_push(req->finished_body_arena, &req->finished_body_pieces, str8_copy(req->finished_body_arena, str8((U8 *)req->next_body_piece, req->next_body_piece_size)));
+          req->next_body_piece_size = 0;
+          req->next_body_piece = 0;
+          arena_pop_to(req->arena, req->arena_start_body_read_pos);
         }
         ins_atomic_u32_eval_assign(&req->status, W32_HTTP_RequestStatus_PendingDataSize);
         WinHttpQueryDataAvailable(req->hRequest, 0);
       }
     }
+    lane_sync();
   }
   
   //- rjf: kick off body reads
@@ -465,6 +482,7 @@ http_async_tick(void)
         WinHttpReadData(req->hRequest, req->next_body_piece, req->next_body_piece_size, 0);
       }
     }
+    lane_sync();
   }
   
   //- rjf: complete requests
@@ -480,6 +498,7 @@ http_async_tick(void)
       {
         req->active = 0;
         arena_clear(req->arena);
+        arena_clear(req->finished_body_arena);
         MemoryZeroStruct(&req->finished_body_pieces);
         req->next_body_piece = 0;
         req->next_body_piece_size = 0;
@@ -487,6 +506,7 @@ http_async_tick(void)
         WinHttpCloseHandle(req->hRequest);
       }
     }
+    lane_sync();
   }
 }
 
@@ -536,15 +556,16 @@ http_push_request(GuardedRing *out_ring, HTTP_RequestParams *params, U64 endt_us
 internal B32
 http_pop_response(Arena *arena, GuardedRing *out_ring, HTTP_Response *response_out, U64 endt_us)
 {
-  U64 data_size = 0;
   RingGuard g = guarded_ring_open(out_ring);
+  U64 data_size = 0;
   B32 result = guarded_ring_read_struct_or_wait(&g, &data_size, endt_us);
   if(result)
   {
+    Temp scratch = scratch_begin(&arena, 1);
     U64 data_size_minus_size_prefix = data_size - sizeof(data_size);
     String8 data = {0};
     data.size = data_size_minus_size_prefix;
-    data.str = push_array(arena, U8, data.size);
+    data.str = push_array(scratch.arena, U8, data.size);
     guarded_ring_read_or_wait(&g, data.size, data.str, max_U64);
     U64 off = 0;
     off += str8_deserial_read_struct(data, off, &response_out->id);
@@ -555,6 +576,7 @@ http_pop_response(Arena *arena, GuardedRing *out_ring, HTTP_Response *response_o
     response_out->body.size = (data.size - off);
     response_out->body.str = push_array(arena, U8, response_out->body.size);
     off += str8_deserial_read(data, off, response_out->body.str, response_out->body.size, 1);
+    scratch_end(scratch);
   }
   guarded_ring_close(&g);
   return result;

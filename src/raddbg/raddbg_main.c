@@ -4,13 +4,7 @@
 ////////////////////////////////
 //~ rjf: post-0.9.26 TODO notes
 //
-// [ ] unwinding crash - f5 on bp in w32_http_status_callback to repro
-// [ ] unwinding in jit page - fail
-// [ ] jeff stepping bug
 // [ ] wassim memory bug
-// [ ] switch off spoofs for step-over
-// [x] test concepts -> base
-// [x] debugger, d2r, p2r exemplar / determinism testing
 //
 // [ ] symbol server
 // [ ] core dump saving/loading
@@ -278,6 +272,12 @@
 // [x] external window focusing bugs
 // [x] "autos" collection, which can be evaluated
 // [x] show "autos" inline in source code near thread?
+// [x] switch off spoofs for step-over
+// [x] jeff stepping bug
+// [x] unwinding crash - f5 on bp in w32_http_status_callback to repro
+// [x] unwinding in jit page - fail
+// [x] test concepts -> base
+// [x] debugger, d2r, p2r exemplar / determinism testing
 
 ////////////////////////////////
 //~ rjf: Build Options
