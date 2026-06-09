@@ -313,8 +313,7 @@ struct D_Event
   U32 rgba;
   D_BreakpointFlags bp_flags;
   String8 string;
-  OperatingSystem target_os;
-  D_TlsModel tls_model;
+  OperatingSystem os;
 };
 
 typedef struct D_EventNode D_EventNode;
@@ -444,11 +443,6 @@ internal D_LineList d_lines_from_dbgi_key_file_path_line_num(Arena *arena, DI_Ke
 internal D_LineList d_lines_from_file_path_line_num(Arena *arena, String8 file_path, S64 line_num, U64 max_voffs_per_line);
 
 ////////////////////////////////
-//~ rjf: Process/Thread/Module Info Lookups
-
-internal U64 d_tls_base_vaddr_from_process_root_rip(D_Entity *process, U64 root_vaddr, U64 rip_vaddr);
-
-////////////////////////////////
 //~ rjf: Target Controls
 
 //- rjf: stopped info from the control thread
@@ -473,7 +467,6 @@ internal DI_KeyList d_push_active_dbgi_key_list(Arena *arena);
 internal U64 d_query_cached_rip_from_thread(D_Entity *thread);
 internal U64 d_query_cached_rip_from_thread_unwind(D_Entity *thread, U64 unwind_count);
 internal U64 d_query_cached_cfa_from_thread_unwind(D_Entity *thread, U64 unwind_count);
-internal U64 d_query_cached_tls_base_vaddr_from_process_root_rip(D_Entity *process, U64 root_vaddr, U64 rip_vaddr);
 internal E_String2NumMap *d_query_cached_locals_map_from_dbgi_key_voff(DI_Key dbgi_key, U64 voff);
 internal E_String2NumMap *d_query_cached_member_map_from_dbgi_key_voff(DI_Key dbgi_key, U64 voff);
 

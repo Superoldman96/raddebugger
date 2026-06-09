@@ -2268,7 +2268,7 @@ RD_VIEW_UI_FUNCTION_DEF(text)
       default:
       {
         String8 checksum_value = rd_checksum_value_from_hash_kind(scratch.arena, hash, checksum_kind);
-        file_is_out_of_date = !memory_is_zero(checksum_value.str, checksum_value.size) && !str8_match(checksum_value, checksum_expected, 0);
+        file_is_out_of_date = checksum_expected.size != 0 && !memory_is_zero(checksum_value.str, checksum_value.size) && !str8_match(checksum_value, checksum_expected, 0);
       }break;
       case RDI_ChecksumKind_Timestamp:
       {

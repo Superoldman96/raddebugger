@@ -42,20 +42,6 @@ d_exception_kind_from_dmn(DMN_ExceptionKind kind)
   return result;
 }
 
-internal D_TlsModel
-d_tls_model_from_dmn(DMN_TlsModel type)
-{
-  D_TlsModel result = D_TlsModel_Null;
-  switch(type)
-  {
-    default:{}break;
-    case DMN_TlsModel_Null:      {result = D_TlsModel_Null;}break;
-    case DMN_TlsModel_WinodwsNt: {result = D_TlsModel_WinodwsNt;}break;
-    case DMN_TlsModel_Gnu:       {result = D_TlsModel_Gnu;}break;
-  }
-  return result;
-}
-
 internal String8
 d_string_from_event_kind(D_EventKind kind)
 {
@@ -645,8 +631,7 @@ d_serialized_string_from_event(Arena *arena, D_Event *event, U64 max)
     str8_serial_push_struct(scratch.arena, &srl, &event->exception_code);
     str8_serial_push_struct(scratch.arena, &srl, &event->rgba);
     str8_serial_push_struct(scratch.arena, &srl, &event->bp_flags);
-    str8_serial_push_struct(scratch.arena, &srl, &event->target_os);
-    str8_serial_push_struct(scratch.arena, &srl, &event->tls_model);
+    str8_serial_push_struct(scratch.arena, &srl, &event->os);
     str8_serial_push_struct(scratch.arena, &srl, &event->tls_index);
     str8_serial_push_struct(scratch.arena, &srl, &event->tls_offset);
     String8 string = event->string;
@@ -682,8 +667,7 @@ d_event_from_serialized_string(Arena *arena, String8 string)
     read_off += str8_deserial_read_struct(string, read_off, &event.exception_code);
     read_off += str8_deserial_read_struct(string, read_off, &event.rgba);
     read_off += str8_deserial_read_struct(string, read_off, &event.bp_flags);
-    read_off += str8_deserial_read_struct(string, read_off, &event.target_os);
-    read_off += str8_deserial_read_struct(string, read_off, &event.tls_model);
+    read_off += str8_deserial_read_struct(string, read_off, &event.os);
     read_off += str8_deserial_read_struct(string, read_off, &event.tls_index);
     read_off += str8_deserial_read_struct(string, read_off, &event.tls_offset);
     read_off += str8_deserial_read_struct(string, read_off, &event.string.size);
@@ -1300,8 +1284,7 @@ d_entity_store_apply_events(D_EntityCtxRWStore *store, D_EventList *list)
         if(machine != &d_entity_nil)
         {
           D_Entity *process = d_entity_alloc(store, machine, D_EntityKind_Process, event->arch, event->entity, (U64)event->entity_id);
-          process->tls_model = event->tls_model;
-          process->target_os = event->target_os;
+          process->os = event->os;
           process->src_msg_id = event->msg_id;
           d_entity_equip_string(store, process, event->string);
         }
@@ -1437,8 +1420,6 @@ d_entity_store_apply_events(D_EntityCtxRWStore *store, D_EventList *list)
         d_entity_equip_string(store, module, event->string);
         module->timestamp = event->timestamp;
         module->vaddr_range = event->vaddr_rng;
-        module->tls_index = event->tls_index;
-        module->tls_offset = event->tls_offset;
         D_Entity *first_module = d_entity_child_from_kind(process, D_EntityKind_Module);
         if(first_module == module && process->string.size == 0)
         {
@@ -1565,7 +1546,7 @@ d_thread_read_reg_block(D_Handle handle, void *reg_block)
         if(thread_ctx != 0)
         {
           Arch arch = thread->arch;
-          OperatingSystem os = process->target_os;
+          OperatingSystem os = process->os;
           result = arch_os_write_reg_block_from_thread_ctx(arch, os, reg_block, thread_ctx);
         }
       }
@@ -2683,14 +2664,12 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
   }
   
   //////////////////////////////
-  //- rjf: no found debug info path -> try to fall back on symbol server
+  //- rjf: no found debug info path -> try to fall back on symbol server cache path
   //
-#if 0
   if(initial_debug_info_path.size == 0)
   {
     initial_debug_info_path = smsv_local_path_from_key(arena, str8_skip_last_slash(module_info->debug_info_path), module_info->debug_info_guid, module_info->debug_info_age);
   }
-#endif
   
   //////////////////////////////
   //- rjf: write 1 at attachment marker, to signify attachment
@@ -3154,8 +3133,7 @@ d_ctrl_thread__next_dmn_event(Arena *arena, DMN_CtrlCtx *ctrl_ctx, D_Msg *msg, D
       out_evt->entity    = d_handle_from_dmn(D_MachineID_Local, event->process);
       out_evt->arch      = event->arch;
       out_evt->entity_id = event->code;
-      out_evt->tls_model = d_tls_model_from_dmn(event->tls_model);
-      out_evt->target_os = OperatingSystem_CURRENT; // TODO: operating system of the remote target machine
+      out_evt->os        = OperatingSystem_CURRENT; // TODO: operating system of the remote target machine
       d_ctrl_state->process_counter += 1;
     }break;
     case DMN_EventKind_CreateThread:
@@ -3985,7 +3963,7 @@ d_ctrl_thread__open_crash_dump(DMN_CtrlCtx *ctrl_ctx, D_Msg *msg)
     evt->msg_id    = msg->msg_id;
     evt->entity    = process;
     evt->arch      = process_arch;
-    evt->target_os = process_os;
+    evt->os        = process_os;
     evt->string    = path;
   }
   
@@ -6064,11 +6042,8 @@ d_call_stack_artifact_create(String8 key, B32 *cancel_signal, B32 *retry_out, U6
               dst_e->stack_base       = src_e->stack_base;
               dst_e->timestamp        = src_e->timestamp;
               dst_e->bp_flags         = src_e->bp_flags;
-              dst_e->string           = push_str8_copy(scratch.arena, src_e->string);
-              dst_e->tls_index        = src_e->tls_index;
-              dst_e->tls_offset       = src_e->tls_offset;
-              dst_e->target_os        = src_e->target_os;
-              dst_e->tls_model        = src_e->tls_model;
+              dst_e->string           = str8_copy(scratch.arena, src_e->string);
+              dst_e->os               = src_e->os;
             }
             if(dst_parent == &d_entity_nil)
             {

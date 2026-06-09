@@ -390,20 +390,20 @@ http_async_tick(void)
           }
           
           // rjf: push this record
+          B32 push_failed = 0;
           {
-            // TODO(rjf): can't wait here technically, because we might be waiting for other
-            // work in the async threads to pop! so we'll just deadlock right here. two options:
-            //
-            // (a) http requests need to be on another timeline
-            // (b) we need to prepare for this to fail & batch it up or something.
-            //
             RingGuard g = guarded_ring_open(req->out_ring);
-            guarded_ring_write_string_or_wait(&g, record_data, max_U64);
+            if(!guarded_ring_write_string_or_wait(&g, record_data, 0))
+            {
+              push_failed = 1;
+              String8 unpushed_body_piece = str8_substr(body, r1u64(off, next_off));
+              str8_list_push(req->arena, &req->finished_body_pieces, str8_copy(req->arena, unpushed_body_piece));
+            }
             guarded_ring_close(&g);
           }
           
           // rjf: cancel on no movement
-          if(next_off == off)
+          if(next_off == off || push_failed)
           {
             break;
           }

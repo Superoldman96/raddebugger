@@ -562,39 +562,50 @@ rd_title_fstrs_from_ctrl_entity(Arena *arena, D_Entity *entity, B32 include_extr
     ARCH_Info *arch_info = arch_info_from_arch(entity->arch);
     B32 call_stack_high_priority = d_handle_match(entity->handle, rd_base_regs()->thread);
     D_CallStack call_stack = d_call_stack_from_thread(access, entity->handle, call_stack_high_priority, call_stack_high_priority ? rd_state->frame_eval_memread_endt_us : 0);
+    B32 did_first_in_main_module = 0;
     B32 did_first_known = 0;
+    U64 num_pushed = 0;
+    D_Entity *first_module = d_entity_child_from_kind(process, D_EntityKind_Module);
     for(U64 idx = 0, limit = 10;
-        idx < call_stack.frames_count && idx < limit;
+        idx < call_stack.frames_count && num_pushed < limit;
         idx += 1)
     {
       D_CallStackFrame *f = &call_stack.frames[call_stack.frames_count - 1 - idx];
-      U64 rip_vaddr = arch_ip_from_reg_block(arch_info, f->regs);
-      D_Entity *module = d_module_from_process_vaddr(process, rip_vaddr);
-      U64 rip_voff = d_voff_from_vaddr(module, rip_vaddr);
-      String8 name = {0};
+      if(f->inline_depth == 0)
       {
-        DI_Key dbgi_key = d_dbgi_key_from_module(module);
-        RDI_Parsed *rdi = di_rdi_from_key(access, dbgi_key, 0, 0);
-        if(rdi != &rdi_parsed_nil)
+        U64 rip_vaddr = arch_ip_from_reg_block(arch_info, f->regs);
+        D_Entity *module = d_module_from_process_vaddr(process, rip_vaddr);
+        if(did_first_in_main_module || module == first_module)
         {
-          RDI_Symbol *procedure = rdi_procedure_from_voff(rdi, rip_voff);
-          name.str = rdi_string_from_idx(rdi, procedure->name_string_idx, &name.size);
-          name = push_str8_copy(arena, name);
-        }
-        if(name.size == 0 && did_first_known)
-        {
-          name = str8_lit("???");
-        }
-        if(name.size != 0)
-        {
-          did_first_known = 1;
-          dr_fstrs_push_new(arena, &result, &params, name, .size = extras_size, .color = symbol_color);
-          if(idx+1 < call_stack.frames_count)
+          did_first_in_main_module = 1;
+          U64 rip_voff = d_voff_from_vaddr(module, rip_vaddr);
+          String8 name = {0};
           {
-            dr_fstrs_push_new(arena, &result, &params, str8_lit(" > "), .color = secondary_color, .size = extras_size);
-            if(idx+1 == limit)
+            DI_Key dbgi_key = d_dbgi_key_from_module(module);
+            RDI_Parsed *rdi = di_rdi_from_key(access, dbgi_key, 0, 0);
+            if(rdi != &rdi_parsed_nil)
             {
-              dr_fstrs_push_new(arena, &result, &params, str8_lit("..."), .color = secondary_color, .size = extras_size);
+              RDI_Symbol *procedure = rdi_procedure_from_voff(rdi, rip_voff);
+              name.str = rdi_string_from_idx(rdi, procedure->name_string_idx, &name.size);
+              name = push_str8_copy(arena, name);
+            }
+            if(name.size == 0 && did_first_known)
+            {
+              name = str8_lit("???");
+            }
+            if(name.size != 0)
+            {
+              did_first_known = 1;
+              num_pushed += 1;
+              dr_fstrs_push_new(arena, &result, &params, name, .size = extras_size, .color = symbol_color);
+              if(idx+1 < call_stack.frames_count)
+              {
+                dr_fstrs_push_new(arena, &result, &params, str8_lit(" > "), .color = secondary_color, .size = extras_size);
+                if(num_pushed+1 == limit)
+                {
+                  dr_fstrs_push_new(arena, &result, &params, str8_lit("..."), .color = secondary_color, .size = extras_size);
+                }
+              }
             }
           }
         }

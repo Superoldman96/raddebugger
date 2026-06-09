@@ -1,6 +1,36 @@
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
+////////////////////////////////
+//~ rjf: Helpers
+
+internal String8
+w32_smsv_dbg_name_from_local_path(String8 path)
+{
+  String8 result = str8_skip_last_slash(path);
+  return result;
+}
+
+internal String8
+w32_smsv_unique_identifier_from_local_path(String8 path)
+{
+  U64 local_cache_path_pos = str8_find_needle(path, 0, w32_smsv_state->symbol_cache_path, StringMatchFlag_SlashInsensitive);
+  U64 first_slash_pos = str8_find_needle(path, local_cache_path_pos, s("/"), StringMatchFlag_SlashInsensitive);
+  String8 cache_relative_path = str8_skip(path, first_slash_pos);
+  U64 second_slash_pos = str8_find_needle(cache_relative_path, 0, s("/"), StringMatchFlag_SlashInsensitive);
+  String8 name_root = str8_skip(cache_relative_path, second_slash_pos+1);
+  U64 third_slash_pos = str8_find_needle(name_root, 0, s("/"), 0);
+  String8 name = str8_skip(name_root, third_slash_pos+1);
+  U64 fourth_slash_pos = str8_find_needle(name, 0, s("/"), StringMatchFlag_SlashInsensitive);
+  String8 unique_identifier = str8_skip(name, fourth_slash_pos+1);
+  U64 last_slash_pos = str8_find_needle(unique_identifier, 0, s("/"), StringMatchFlag_SlashInsensitive);
+  unique_identifier = str8_prefix(unique_identifier, last_slash_pos);
+  return unique_identifier;
+}
+
+////////////////////////////////
+//~ rjf: Implementation
+
 internal void
 smsv_init(void)
 {
@@ -231,18 +261,13 @@ smsv_async_tick(void)
       if(server_url.size != 0)
       {
         task->status = W32_SMSV_TaskStatus_Requested;
-        Guid guid = task->guid;
-        U64 age = task->age;
-        String8 debug_info_unique_identifier = {0};
-        {
-          debug_info_unique_identifier = str8f(scratch.arena, "%08X%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X%I64x",
-                                               guid.data1, guid.data2, guid.data3, guid.data4[0], guid.data4[1], guid.data4[2], guid.data4[3], guid.data4[4], guid.data4[5], guid.data4[6], guid.data4[7], age);
-        }
+        String8 dbg_name = w32_smsv_dbg_name_from_local_path(task->local_path);
+        String8 debug_info_unique_identifier = w32_smsv_unique_identifier_from_local_path(task->local_path);
         HTTP_RequestParams params =
         {
           .id = (U64)task,
           .method = HTTP_Method_Get,
-          .url = str8f(scratch.arena, "%S/%S/%S/%S", server_url, task->dbg_name, debug_info_unique_identifier, task->dbg_name),
+          .url = str8f(scratch.arena, "%S/%S/%S/%S", server_url, dbg_name, debug_info_unique_identifier, dbg_name),
         };
         if(!http_push_request(w32_smsv_state->http_response_ring, &params, 0))
         {
@@ -323,6 +348,12 @@ smsv_async_tick(void)
 }
 
 internal String8
+smsv_cache_path(void)
+{
+  return w32_smsv_state->symbol_cache_path;
+}
+
+internal String8
 smsv_local_path_from_key(Arena *arena, String8 dbg_name, Guid guid, U64 age)
 {
   String8 result = {0};
@@ -342,67 +373,68 @@ smsv_local_path_from_key(Arena *arena, String8 dbg_name, Guid guid, U64 age)
       String8 path = str8f(scratch.arena, "%S/%S/%S/%S", symbol_cache_path, dbg_name, debug_info_unique_identifier, dbg_name);
       result = path_normalized_from_string(arena, path);
     }
-    
-    // rjf: determine if we already have this debug info stored locally
-    B32 already_cached_locally = (properties_from_file_path(result).modified != 0);
-    
-    // rjf: if not cached: record (local path -> download task) mapping
-    B32 task_is_new = 0;
-    U64 task_id = 0;
-    if(!already_cached_locally)
-    {
-      U64 hash = u64_hash_from_str8(result);
-      U64 slot_idx = hash%w32_smsv_state->task_slots_count;
-      W32_SMSV_TaskSlot *slot = &w32_smsv_state->task_slots[slot_idx];
-      Stripe *stripe = stripe_from_slot_idx(&w32_smsv_state->task_stripes, slot_idx);
-      for(B32 write_mode = 0; write_mode <= 1; write_mode += 1)
-      {
-        B32 already_exists = 0;
-        RWMutexScope(stripe->rw_mutex, write_mode)
-        {
-          W32_SMSV_Task *node = 0;
-          for(W32_SMSV_Task *n = slot->first; n != 0; n = n->next)
-          {
-            if(MemoryMatchStruct(&n->guid, &guid))
-            {
-              already_exists = 1;
-              node = n;
-              break;
-            }
-          }
-          if(node == 0 && write_mode)
-          {
-            Arena *arena = arena_alloc();
-            node = push_array(arena, W32_SMSV_Task, 1);
-            node->arena = arena;
-            node->local_path = str8_copy(arena, result);
-            node->dbg_name = str8_copy(arena, dbg_name);
-            node->guid = guid;
-            node->age = age;
-            DLLPushBack(slot->first, slot->last, node);
-            task_is_new = 1;
-            task_id = (U64)node;
-          }
-        }
-        if(already_exists)
-        {
-          break;
-        }
-      }
-    }
-    
-    // rjf: if the task is new -> push request to start task
-    if(task_is_new)
-    {
-      RingGuard g = guarded_ring_open(w32_smsv_state->new_task_ring);
-      guarded_ring_write_struct_or_wait(&g, &task_id, max_U64);
-      guarded_ring_close(&g);
-      ins_atomic_u32_eval_assign(&async_loop_again, 1);
-      cond_var_broadcast(async_tick_start_cond_var);
-    }
   }
   scratch_end(scratch);
   return result;
+}
+
+internal void
+smsv_fill_local_path(String8 path)
+{
+  // rjf: determine if we already have this debug info stored locally
+  B32 already_cached_locally = (properties_from_file_path(path).modified != 0);
+  
+  // rjf: if not cached: record (local path -> download task) mapping
+  B32 task_is_new = 0;
+  U64 task_id = 0;
+  if(!already_cached_locally)
+  {
+    U64 hash = u64_hash_from_str8(path);
+    U64 slot_idx = hash%w32_smsv_state->task_slots_count;
+    W32_SMSV_TaskSlot *slot = &w32_smsv_state->task_slots[slot_idx];
+    Stripe *stripe = stripe_from_slot_idx(&w32_smsv_state->task_stripes, slot_idx);
+    for(B32 write_mode = 0; write_mode <= 1; write_mode += 1)
+    {
+      B32 already_exists = 0;
+      RWMutexScope(stripe->rw_mutex, write_mode)
+      {
+        W32_SMSV_Task *node = 0;
+        for(W32_SMSV_Task *n = slot->first; n != 0; n = n->next)
+        {
+          if(path_match_normalized(n->local_path, path))
+          {
+            already_exists = 1;
+            node = n;
+            break;
+          }
+        }
+        if(node == 0 && write_mode)
+        {
+          Arena *arena = arena_alloc();
+          node = push_array(arena, W32_SMSV_Task, 1);
+          node->arena = arena;
+          node->local_path = path_normalized_from_string(arena, path);
+          DLLPushBack(slot->first, slot->last, node);
+          task_is_new = 1;
+          task_id = (U64)node;
+        }
+      }
+      if(already_exists)
+      {
+        break;
+      }
+    }
+  }
+  
+  // rjf: if the task is new -> push request to start task
+  if(task_is_new)
+  {
+    RingGuard g = guarded_ring_open(w32_smsv_state->new_task_ring);
+    guarded_ring_write_struct_or_wait(&g, &task_id, max_U64);
+    guarded_ring_close(&g);
+    ins_atomic_u32_eval_assign(&async_loop_again, 1);
+    cond_var_broadcast(async_tick_start_cond_var);
+  }
 }
 
 internal SMSV_Status

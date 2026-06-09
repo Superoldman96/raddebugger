@@ -41,6 +41,14 @@ struct W32_HTTP_Request
   U64 next_body_piece_size;
 };
 
+typedef struct W32_HTTP_Response W32_HTTP_Response;
+struct W32_HTTP_Response
+{
+  W32_HTTP_Response *next;
+  GuardedRing *out_ring;
+  String8 record;
+};
+
 typedef struct W32_HTTP_State W32_HTTP_State;
 struct W32_HTTP_State
 {

@@ -140,7 +140,6 @@ struct DI_LoadTask
   B32 og_analyzed;
   B32 og_is_rdi;
   U64 og_size;
-  B32 og_is_downloading;
   
   B32 rdi_analyzed;
   B32 rdi_is_stale;

@@ -1327,80 +1327,6 @@ d_lines_from_file_path_line_num(Arena *arena, String8 file_path, S64 line_num, U
 }
 
 ////////////////////////////////
-//~ rjf: Process/Thread/Module Info Lookups
-
-internal U64
-d_tls_base_vaddr_from_process_root_rip(D_Entity *process, U64 root_vaddr, U64 rip_vaddr)
-{
-  ProfBeginFunction();
-  U64 base_vaddr = 0;
-  if(!d_ctrl_targets_running())
-  {
-    Temp scratch = scratch_begin(0, 0);
-    
-    //- rjf: unpack module info
-    D_Entity *module = d_module_from_process_vaddr(process, rip_vaddr);
-    U64 addr_size = byte_size_from_arch(process->arch);
-    
-    switch(process->tls_model)
-    {
-      case D_TlsModel_Null: {}break;
-      case D_TlsModel_WinodwsNt:
-      {
-        // read thread local base pointer out of TEB
-        U64 thread_local_base = root_vaddr;
-        U64 tls_addr_array    = 0;
-        D_ProcessMemorySlice tls_addr_array_slice = d_process_memory_slice_from_vaddr_range(scratch.arena, process->handle, r1u64(thread_local_base, thread_local_base + addr_size), 0, 0);
-        String8                 tls_array_vaddr_data = tls_addr_array_slice.data;
-        if(tls_array_vaddr_data.size == addr_size)
-        {
-          U64 tls_array_vaddr = 0;
-          MemoryCopyStr8(&tls_array_vaddr, tls_array_vaddr_data);
-          
-          // read thread local storage pointer (array of TLS pointers, one per module)
-          U64 tls_ptr_vaddr = tls_array_vaddr + module->tls_index * addr_size;
-          D_ProcessMemorySlice result_slice = d_process_memory_slice_from_vaddr_range(scratch.arena, process->handle, r1u64(tls_ptr_vaddr, tls_ptr_vaddr + addr_size), 0, 0);
-          String8                 result_data  = result_slice.data;
-          if(result_data.size == addr_size)
-          {
-            MemoryCopyStr8(&base_vaddr, result_data);
-          }
-        }
-      }break;
-      case D_TlsModel_Gnu:
-      {
-        if(module->tls_index > 0) // zero is reserved for the generation counter
-        {
-          // read dynamic thread vector pointer (one per dynamic module)
-          U64 dtv_base          = root_vaddr;
-          U64 dtv_size          = addr_size * 2; // union dtv { size_t counter; struct dtv_pointer { void *val, *to_free; }; };
-          U64 dtv_pointer_vaddr = dtv_base + module->tls_index * dtv_size;
-          D_ProcessMemorySlice dtv_pointer_slice = d_process_memory_slice_from_vaddr_range(scratch.arena, process->handle, r1u64(dtv_pointer_vaddr, dtv_pointer_vaddr + dtv_size), 0, 0);
-          String8                 dtv_pointer_data  = dtv_pointer_slice.data;
-          if(dtv_pointer_data.size == dtv_size)
-          {
-            U64 dtv_pointer = 0;
-            MemoryCopyStr8(&dtv_pointer, dtv_pointer_data);
-            
-            // verify that TLS block was allocated
-            U64 tls_dtv_unallocated = addr_size == 4 ? max_U32 : max_U64;
-            if(dtv_pointer != tls_dtv_unallocated)
-            {
-              base_vaddr = dtv_pointer + module->tls_offset; // add tls_offset because DT_NEEDED modules share TLS block with the main exe
-            }
-          }
-        }
-      }break;
-      default: {InvalidPath;}break;
-    }
-    
-    scratch_end(scratch);
-  }
-  ProfEnd();
-  return base_vaddr;
-}
-
-////////////////////////////////
 //~ rjf: Target Controls
 
 //- rjf: stopped info from the control thread
@@ -1507,57 +1433,6 @@ d_query_cached_cfa_from_thread_unwind(D_Entity *thread, U64 unwind_count)
   }
   access_close(access);
   return cfa;
-}
-
-internal U64
-d_query_cached_tls_base_vaddr_from_process_root_rip(D_Entity *process, U64 root_vaddr, U64 rip_vaddr)
-{
-  U64 result = 0;
-  for(U64 cache_idx = 0; cache_idx < ArrayCount(d_user_state->tls_base_caches); cache_idx += 1)
-  {
-    D_RunTLSBaseCache *cache = &d_user_state->tls_base_caches[(d_user_state->tls_base_cache_gen+cache_idx)%ArrayCount(d_user_state->tls_base_caches)];
-    if(cache_idx == 0 && cache->slots_count == 0)
-    {
-      cache->slots_count = 256;
-      cache->slots = push_array(cache->arena, D_RunTLSBaseCacheSlot, cache->slots_count);
-    }
-    else if(cache->slots_count == 0)
-    {
-      break;
-    }
-    D_Handle handle = process->handle;
-    U64 hash = d_hash_from_seed_string(d_hash_from_string(str8_struct(&handle)), str8_struct(&rip_vaddr));
-    U64 slot_idx = hash%cache->slots_count;
-    D_RunTLSBaseCacheSlot *slot = &cache->slots[slot_idx];
-    D_RunTLSBaseCacheNode *node = 0;
-    for(D_RunTLSBaseCacheNode *n = slot->first; n != 0; n = n->hash_next)
-    {
-      if(d_handle_match(n->process, handle) && n->root_vaddr == root_vaddr && n->rip_vaddr == rip_vaddr)
-      {
-        node = n;
-        break;
-      }
-    }
-    if(node == 0)
-    {
-      U64 tls_base_vaddr = d_tls_base_vaddr_from_process_root_rip(process, root_vaddr, rip_vaddr);
-      if(tls_base_vaddr != 0)
-      {
-        node = push_array(cache->arena, D_RunTLSBaseCacheNode, 1);
-        SLLQueuePush_N(slot->first, slot->last, node, hash_next);
-        node->process = handle;
-        node->root_vaddr = root_vaddr;
-        node->rip_vaddr = rip_vaddr;
-        node->tls_base_vaddr = tls_base_vaddr;
-      }
-    }
-    if(node != 0 && node->tls_base_vaddr != 0)
-    {
-      result = node->tls_base_vaddr;
-      break;
-    }
-  }
-  return result;
 }
 
 internal E_String2NumMap *

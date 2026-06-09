@@ -103,17 +103,6 @@ struct D_BreakpointList
 };
 
 ////////////////////////////////
-//~ Dynamic Linker Types
-
-typedef U32 D_TlsModel;
-enum
-{
-  D_TlsModel_Null,
-  D_TlsModel_WinodwsNt,
-  D_TlsModel_Gnu
-};
-
-////////////////////////////////
 //~ rjf: Entity Types
 
 typedef struct D_Entity D_Entity;
@@ -136,11 +125,8 @@ struct D_Entity
   U64 timestamp;
   D_BreakpointFlags bp_flags;
   String8 string;
-  D_TlsModel tls_model;
-  U64 tls_index;
-  U64 tls_offset;
   U64 tls_root_vaddr;
-  OperatingSystem target_os;
+  OperatingSystem os;
   D_MsgID src_msg_id;
 };
 

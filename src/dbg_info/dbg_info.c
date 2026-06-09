@@ -680,16 +680,22 @@ di_async_tick(void)
           }
         }
         
-        //- rjf: check with the symbol server to see if we are actively downloading O.G.
+        //- rjf: kick off symbol server download, or check to see if we are actively downloading O.G.
         B32 og_is_downloading = 0;
         {
           B32 file_is_present = (properties_from_file_path(og_path).modified != 0);
           if(!file_is_present)
           {
-            SMSV_Status status = smsv_status_from_local_path(og_path);
-            if(status == SMSV_Status_Pending)
+            String8 symbol_cache_path = smsv_cache_path();
+            if(str8_match(symbol_cache_path, og_path, StringMatchFlag_RightSideSloppy|StringMatchFlag_SlashInsensitive))
             {
               og_is_downloading = 1;
+              smsv_fill_local_path(og_path);
+              SMSV_Status status = smsv_status_from_local_path(og_path);
+              if(status == SMSV_Status_Null)
+              {
+                og_is_downloading = 0;
+              }
             }
           }
         }

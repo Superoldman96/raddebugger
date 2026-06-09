@@ -12,9 +12,20 @@ smsv_async_tick(void)
 }
 
 internal String8
+smsv_cache_path(void)
+{
+  return s("");
+}
+
+internal String8
 smsv_local_path_from_key(Arena *arena, String8 dbg_name, Guid guid, U64 age)
 {
   return s("");
+}
+
+internal void
+smsv_fill_local_path(String8 path)
+{
 }
 
 internal SMSV_Status

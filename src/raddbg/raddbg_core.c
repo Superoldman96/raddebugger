@@ -13066,7 +13066,6 @@ rd_frame(void)
               str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "  exception_code: 0x%I64x\n", (U64)evt.exception_code);
               str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "  bp_flags: 0x%I64x\n", (U64)evt.bp_flags);
               str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "  string: \"%S\"\n", escaped_from_raw_str8(scratch.arena, evt.string));
-              str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "  tls_model: 0x%I64x\n", evt.tls_model);
               str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "  explanation: \"%S\"\n", escaped_from_raw_str8(scratch.arena, explanation_string));
               str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, " }\n");
             }
@@ -17393,14 +17392,13 @@ rd_frame(void)
             }
           }
         }break;
-        case D_EventKind_NewModule:
+        case D_EventKind_ModuleDebugInfoPathChange:
         {
           D_Entity *module = d_entity_from_handle(evt->entity);
           D_Entity *debug_info_path = d_entity_child_from_kind(module, D_EntityKind_DebugInfoPath);
           String8 new_path = debug_info_path->string;
-          B32 file_exists = file_path_exists(new_path);
-          B32 file_is_pending = (!file_exists ? smsv_status_from_local_path(new_path) == SMSV_Status_Pending : 0);
-          if(new_path.size != 0 && (file_exists || file_is_pending))
+          B32 file_exists = 1; // file_path_exists(new_path);
+          if(new_path.size != 0 && file_exists)
           {
             CFG_NodePtrList dbg_infos = cfg_node_top_level_list_from_string(scratch.arena, str8_lit("debug_info"));
             B32 path_found = 0;

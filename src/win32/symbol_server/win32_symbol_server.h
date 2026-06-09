@@ -22,9 +22,6 @@ struct W32_SMSV_Task
   // rjf: key / parameters
   Arena *arena;
   String8 local_path;
-  String8 dbg_name;
-  Guid guid;
-  U64 age;
   
   // rjf: working state
   W32_SMSV_TaskStatus status;
@@ -63,5 +60,11 @@ struct W32_SMSV_State
 };
 
 global W32_SMSV_State *w32_smsv_state = 0;
+
+////////////////////////////////
+//~ rjf: Helpers
+
+internal String8 w32_smsv_dbg_name_from_local_path(String8 path);
+internal String8 w32_smsv_unique_identifier_from_local_path(String8 path);
 
 #endif // WIN32_SYMBOL_SERVER_H

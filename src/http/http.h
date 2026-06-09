@@ -157,11 +157,6 @@ struct HTTP_Response
 internal HTTP_StatusKind http_status_kind_from_code(HTTP_StatusCode code);
 
 ////////////////////////////////////////////////////////////////
-//~ rjf: Synchronous Request Helper
-
-internal HTTP_Response http_request(Arena *arena, HTTP_RequestParams *params);
-
-////////////////////////////////////////////////////////////////
 //~ rjf: @per_os_impl Top-Level Layer Calls
 
 internal void http_init(void);
