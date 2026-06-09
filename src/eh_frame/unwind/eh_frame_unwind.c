@@ -570,8 +570,11 @@ eh_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info, U64
       switch(rule->code)
       {
         default:
-        case DW_UnwindRuleCode_Undefined:
         case DW_UnwindRuleCode_SameVal:{}break;
+        case DW_UnwindRuleCode_Undefined:
+        {
+          MemoryZero((U8 *)regs + reg_rng.min, reg_size);
+        }break;
         case DW_UnwindRuleCode_Off:
         {
           Temp temp = temp_begin(scratch.arena);
