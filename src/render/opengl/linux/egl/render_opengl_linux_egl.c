@@ -51,7 +51,7 @@ r_ogl_os_init(CmdLine *cmdln)
     wm_graphical_message(1, str8_lit("Fatal Error"), str8_lit("Couldn't initialize EGL API to OpenGL."));
     abort_self(1);
   }
-
+  
   //- choose EGL config, extract matching X11 visual/colormap, publish to os layer
   {
     EGLint config_filter[] =
@@ -103,11 +103,11 @@ r_ogl_os_init(CmdLine *cmdln)
     lnx_wm_state->window_visual = vi->visual;
     lnx_wm_state->window_depth = vi->depth;
     lnx_wm_state->window_colormap = XCreateColormap(lnx_wm_state->display,
-                                                        XRootWindow(lnx_wm_state->display, vi->screen),
-                                                        vi->visual, AllocNone);
+                                                    XRootWindow(lnx_wm_state->display, vi->screen),
+                                                    vi->visual, AllocNone);
     XFree(vi);
   }
-
+  
   //- rjf: construct context
   {
     B32 debug_mode = cmd_line_has_flag(cmdln, str8_lit("opengl_debug"));
@@ -129,7 +129,7 @@ r_ogl_os_init(CmdLine *cmdln)
       abort_self(1);
     }
   }
-
+  
   //- bind context to 1x1 pbuffer so GL calls work before any window exists
   {
     EGLint pbuffer_attribs[] = { EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE };
@@ -181,7 +181,6 @@ r_ogl_os_window_unequip(WM_Window os, R_Handle r)
 {
   R_OGL_LNX_Window *w = (R_OGL_LNX_Window *)r.u64[0];
   {
-    
   }
   SLLStackPush(r_ogl_lnx_state->free_window, w);
 }
@@ -189,7 +188,6 @@ r_ogl_os_window_unequip(WM_Window os, R_Handle r)
 internal void
 r_ogl_os_select_window(WM_Window os, R_Handle r)
 {
-  // r is the outer R_OGL_Window* wrapper; the os-layer handle is .os
   R_OGL_Window *outer = (R_OGL_Window *)r.u64[0];
   R_OGL_LNX_Window *w_r = (R_OGL_LNX_Window *)outer->os.u64[0];
   eglMakeCurrent(r_ogl_lnx_state->display, w_r->surface, w_r->surface, r_ogl_lnx_state->context);
