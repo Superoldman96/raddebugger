@@ -2389,24 +2389,27 @@ d_ctrl_thread__entry_point(void *p)
           {
             String8 path = msg->path;
             D_Entity *module = d_entity_from_handle(msg->entity);
-            D_Entity *debug_info_path = d_entity_child_from_kind(module, D_EntityKind_DebugInfoPath);
-            DI_Key old_dbgi_key = di_key_from_path_timestamp(debug_info_path->string, debug_info_path->timestamp);
-            di_close(old_dbgi_key, 0);
-            MutexScopeW(d_ctrl_state->ctrl_thread_entity_ctx_rw_mutex)
+            if(module != &d_entity_nil)
             {
-              d_entity_equip_string(d_ctrl_state->ctrl_thread_entity_store, debug_info_path, path_normalized_from_string(scratch.arena, path));
+              D_Entity *debug_info_path = d_entity_child_from_kind(module, D_EntityKind_DebugInfoPath);
+              DI_Key old_dbgi_key = di_key_from_path_timestamp(debug_info_path->string, debug_info_path->timestamp);
+              di_close(old_dbgi_key, 0);
+              MutexScopeW(d_ctrl_state->ctrl_thread_entity_ctx_rw_mutex)
+              {
+                d_entity_equip_string(d_ctrl_state->ctrl_thread_entity_store, debug_info_path, path_normalized_from_string(scratch.arena, path));
+              }
+              U64 new_dbgi_timestamp = properties_from_file_path(path).modified;
+              debug_info_path->timestamp = new_dbgi_timestamp;
+              DI_Key new_dbgi_key = di_key_from_path_timestamp(debug_info_path->string, new_dbgi_timestamp);
+              di_open(new_dbgi_key);
+              D_EventList evts = {0};
+              D_Event *evt = d_event_list_push(scratch.arena, &evts);
+              evt->kind       = D_EventKind_ModuleDebugInfoPathChange;
+              evt->entity     = msg->entity;
+              evt->string     = path;
+              evt->timestamp  = new_dbgi_timestamp;
+              d_c2u_push_events(&evts);
             }
-            U64 new_dbgi_timestamp = properties_from_file_path(path).modified;
-            debug_info_path->timestamp = new_dbgi_timestamp;
-            DI_Key new_dbgi_key = di_key_from_path_timestamp(debug_info_path->string, new_dbgi_timestamp);
-            di_open(new_dbgi_key);
-            D_EventList evts = {0};
-            D_Event *evt = d_event_list_push(scratch.arena, &evts);
-            evt->kind       = D_EventKind_ModuleDebugInfoPathChange;
-            evt->entity     = msg->entity;
-            evt->string     = path;
-            evt->timestamp  = new_dbgi_timestamp;
-            d_c2u_push_events(&evts);
           }break;
           case D_MsgKind_FreezeThread:
           {
