@@ -4843,7 +4843,12 @@ rd_view_setting_addr_from_name(String8 name)
   E_Eval eval = e_eval_from_string(string);
   E_TypeKey type_key = e_type_key_unwrap(eval.irtree.type_key, E_TypeUnwrapFlag_AllDecorative);
   E_TypeKind type_kind = e_type_kind_from_key(type_key);
-  if(eval.irtree.mode == E_Mode_Offset && !e_type_kind_is_pointer_or_ref(type_kind))
+  if(eval.irtree.mode == E_Mode_Offset && e_space_match(e_base_ctx->thread_reg_space, eval.space))
+  {
+    E_Eval value_eval = e_value_eval_from_eval(eval);
+    result = value_eval.value.u64;
+  }
+  else if(eval.irtree.mode == E_Mode_Offset && !e_type_kind_is_pointer_or_ref(type_kind))
   {
     result = eval.value.u64;
   }

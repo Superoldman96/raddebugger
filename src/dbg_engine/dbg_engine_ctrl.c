@@ -1857,7 +1857,7 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
       
       //- rjf: do one unwind step
       B32 step_is_good = 0;
-      for(;!unwind.flags;)
+      for(;!unwind.flags && !step_is_good;)
       {
         // rjf: remember registers pre-step
         MemoryCopy(regs_block_restore, regs_block, arch_reg_block_size);
@@ -1905,14 +1905,18 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
         {
           last_frame_node->v.cfa = cfa;
           step_is_good = 1;
-          break;
         }
       }
       
-      //- rjf: push successful steps to frame list
-      if(step_is_good && arch_ip_from_reg_block(arch_info, regs_block) != 0 &&
-         (arch_ip_from_reg_block(arch_info, regs_block) != start_ip ||
-          arch_sp_from_reg_block(arch_info, regs_block) != start_sp))
+      //- rjf: push successful steps to frame list - we disqualify steps that are:
+      //
+      // (a) bad
+      // (b) advance ip to 0
+      // (c) do not modify either ip *or* sp (just one is fine)
+      //
+      B32 step_made_process = (arch_ip_from_reg_block(arch_info, regs_block) != start_ip ||
+                               arch_sp_from_reg_block(arch_info, regs_block) != start_sp);
+      if(step_is_good && step_made_process && arch_ip_from_reg_block(arch_info, regs_block) != 0)
       {
         D_UnwindFrameNode *frame_node = push_array(scratch.arena, D_UnwindFrameNode, 1);
         D_UnwindFrame *f = &frame_node->v;
@@ -1926,8 +1930,7 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
       access_close(access);
       
       //- rjf: exit if we made no progress on the unwind
-      if(arch_ip_from_reg_block(arch_info, regs_block) == start_ip &&
-         arch_sp_from_reg_block(arch_info, regs_block) == start_sp)
+      if(!step_made_process)
       {
         break;
       }
