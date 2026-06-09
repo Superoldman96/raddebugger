@@ -5,9 +5,16 @@ target:
 {
   executable: "build/raddbg.exe"
   working_directory: "../raddebugger"
-  arguments: "--user:C:/devel/raddebugger/build/raddbg_test.user --project:C:/devel/raddebugger/build/raddbg_test.project --capture"
+  arguments: "--user:C:/devel/raddebugger/build/raddbg_test.user --project:C:/devel/raddebugger/build/raddbg_test.project"
   debug_subprocesses: 0
   enabled: 1
+}
+target:
+{
+  executable: "../raddebugger_exemplar/build/raddbg.exe"
+  working_directory: "../raddebugger"
+  arguments: "--user:C:/devel/raddebugger/build/raddbg_test.user --project:C:/devel/raddebugger/build/raddbg_test.project"
+  debug_subprocesses: 0
 }
 target:
 {

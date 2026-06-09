@@ -1900,7 +1900,9 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
       }
       
       //- rjf: push successful steps to frame list
-      if(step_is_good && arch_ip_from_reg_block(arch_info, regs_block) != 0 && arch_ip_from_reg_block(arch_info, regs_block) != start_ip)
+      if(step_is_good && arch_ip_from_reg_block(arch_info, regs_block) != 0 &&
+         (arch_ip_from_reg_block(arch_info, regs_block) != start_ip ||
+          arch_sp_from_reg_block(arch_info, regs_block) != start_sp))
       {
         D_UnwindFrameNode *frame_node = push_array(scratch.arena, D_UnwindFrameNode, 1);
         D_UnwindFrame *f = &frame_node->v;
@@ -1914,7 +1916,7 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
       access_close(access);
       
       //- rjf: exit if we made no progress on the unwind
-      if(arch_ip_from_reg_block(arch_info, regs_block) == start_ip ||
+      if(arch_ip_from_reg_block(arch_info, regs_block) == start_ip &&
          arch_sp_from_reg_block(arch_info, regs_block) == start_sp)
       {
         break;

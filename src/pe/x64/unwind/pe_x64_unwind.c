@@ -361,7 +361,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
               PE_UnwindGprRegX64 gpr_reg = (inst_byte - 0x58) + (rex & 1)*8;
               X64_RegCode reg_code = pe_x64_uwnd_reg_code_from_pe_gpr_reg(gpr_reg);
               Rng1U16 reg_rng = x64_reg_code_rng_table[reg_code];
-              U64 *reg_ptr = (U64 *)((U8 *)&regs + reg_rng.min);
+              U64 *reg_ptr = (U64 *)((U8 *)&new_regs + reg_rng.min);
               reg_ptr[0] = value;
               new_regs->rsp = sp + 8;
             }
@@ -430,7 +430,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
             PE_UnwindGprRegX64 gpr_reg = (modrm & 7) + (rex & 1)*8;
             X64_RegCode reg_code = pe_x64_uwnd_reg_code_from_pe_gpr_reg(gpr_reg);
             Rng1U16 reg_rng = x64_reg_code_rng_table[reg_code];
-            U64 *reg_ptr = (U64 *)((U8 *)&regs + reg_rng.min);
+            U64 *reg_ptr = (U64 *)((U8 *)&new_regs + reg_rng.min);
             U64 reg_value = reg_ptr[0];
             
             // rjf: read immediate
@@ -608,7 +608,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
         if(frame_reg_code != X64_RegCode_nil)
         {
           Rng1U16 frame_reg_rng = x64_reg_code_rng_table[frame_reg_code];
-          U64 raw_frame_base = *(U64 *)((U8 *)regs + frame_reg_rng.min);
+          U64 raw_frame_base = *(U64 *)((U8 *)new_regs + frame_reg_rng.min);
           U64 adjusted_frame_base = raw_frame_base - frame_off*16;
           frame_base = adjusted_frame_base;
         }
@@ -661,7 +661,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
                 {
                   X64_RegCode reg_code = pe_x64_uwnd_reg_code_from_pe_gpr_reg(op_info);
                   Rng1U16 reg_rng = x64_reg_code_rng_table[reg_code];
-                  *(U64 *)((U8 *)regs + reg_rng.min) = value;
+                  *(U64 *)((U8 *)new_regs + reg_rng.min) = value;
                   new_regs->rsp = rsp + 8;
                 }
               }break;
@@ -720,7 +720,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
                 {
                   X64_RegCode reg_code = pe_x64_uwnd_reg_code_from_pe_gpr_reg(op_info);
                   Rng1U16 reg_rng = x64_reg_code_rng_table[reg_code];
-                  *(U64 *)((U8 *)regs + reg_rng.min) = value;
+                  *(U64 *)((U8 *)new_regs + reg_rng.min) = value;
                 }
               }break;
               
@@ -742,7 +742,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
                 {
                   X64_RegCode reg_code = pe_x64_uwnd_reg_code_from_pe_gpr_reg(op_info);
                   Rng1U16 reg_rng = x64_reg_code_rng_table[reg_code];
-                  *(U64 *)((U8 *)regs + reg_rng.min) = value;
+                  *(U64 *)((U8 *)new_regs + reg_rng.min) = value;
                 }
               }break;
               
