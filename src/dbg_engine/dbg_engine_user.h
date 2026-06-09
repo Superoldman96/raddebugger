@@ -193,6 +193,7 @@ struct D_Msg
   U32 exit_code;
   B32 env_inherit;
   B32 debug_subprocesses;
+  B32 auto_download_debug_info;
   U64 exception_code_filters[(D_ExceptionCodeKind_COUNT+63)/64];
   String8 path;
   String8List entry_points;
@@ -480,6 +481,6 @@ internal B32 d_next_cmd(D_Cmd **cmd);
 ////////////////////////////////
 //~ rjf: Main Layer Top-Level Calls
 
-internal D_EventList d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_PathMapArray *path_maps, U64 exception_code_filters[(D_ExceptionCodeKind_COUNT+63)/64]);
+internal D_EventList d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_PathMapArray *path_maps, U64 exception_code_filters[(D_ExceptionCodeKind_COUNT+63)/64], B32 auto_download_debug_info);
 
 #endif // DBG_ENGINE_USER_H

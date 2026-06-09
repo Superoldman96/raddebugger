@@ -1582,7 +1582,7 @@ d_next_cmd(D_Cmd **cmd)
 //~ rjf: Main Layer Top-Level Calls
 
 internal D_EventList
-d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_PathMapArray *path_maps, U64 exception_code_filters[(D_ExceptionCodeKind_COUNT+63)/64])
+d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_PathMapArray *path_maps, U64 exception_code_filters[(D_ExceptionCodeKind_COUNT+63)/64], B32 auto_download_debug_info)
 {
   ProfBeginFunction();
   Temp scratch = scratch_begin(&arena, 1);
@@ -1832,6 +1832,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
                 msg->debug_subprocesses = target->debug_subprocesses;
                 msg->env_inherit = 1;
                 MemoryCopyArray(msg->exception_code_filters, exception_code_filters);
+                msg->auto_download_debug_info = auto_download_debug_info;
                 str8_list_push(scratch.arena, &msg->entry_points, custom_entry_point_name);
                 msg->env_string_list = env;
               }
@@ -1864,6 +1865,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
             msg->exit_code = 1;
             msg->entity = process->handle;
             MemoryCopyArray(msg->exception_code_filters, exception_code_filters);
+            msg->auto_download_debug_info = auto_download_debug_info;
           }
         }break;
         case D_CmdKind_KillAll:
@@ -1872,6 +1874,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
           msg->kind = D_MsgKind_KillAll;
           msg->exit_code = 1;
           MemoryCopyArray(msg->exception_code_filters, exception_code_filters);
+          msg->auto_download_debug_info = auto_download_debug_info;
         }break;
         case D_CmdKind_Detach:
         {
@@ -1886,6 +1889,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
             msg->kind   = D_MsgKind_Detach;
             msg->entity = process->handle;
             MemoryCopyArray(msg->exception_code_filters, exception_code_filters);
+            msg->auto_download_debug_info = auto_download_debug_info;
           }
         }break;
         case D_CmdKind_Continue:
@@ -2111,6 +2115,8 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
               D_Msg *msg = d_msg_list_push(scratch.arena, &ctrl_msgs);
               msg->kind   = (should_freeze ? D_MsgKind_FreezeThread : D_MsgKind_ThawThread);
               msg->entity = e->handle;
+              MemoryCopyArray(msg->exception_code_filters, exception_code_filters);
+              msg->auto_download_debug_info = auto_download_debug_info;
             }
           }
           if(d_ctrl_targets_running())
@@ -2135,6 +2141,22 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
           d_entity_equip_string(d_user_state->ctrl_entity_store, entity, params->string);
         }break;
         
+        //- rjf: modules
+        case D_CmdKind_DownloadModuleDebugInfo:
+        {
+          Access *access = access_open();
+          D_ModuleInfo *info = d_info_from_module(access, params->entity);
+          String8 symbol_server_local_cache_path = smsv_local_path_from_key(scratch.arena, info->dbg_name, info->dbg_guid, info->dbg_age);
+          smsv_fill_local_path(symbol_server_local_cache_path);
+          D_Msg *msg = d_msg_list_push(scratch.arena, &ctrl_msgs);
+          msg->kind = D_MsgKind_SetModuleDebugInfoPath;
+          msg->entity = params->entity;
+          msg->path = symbol_server_local_cache_path;
+          MemoryCopyArray(msg->exception_code_filters, exception_code_filters);
+          msg->auto_download_debug_info = auto_download_debug_info;
+          access_close(access);
+        }break;
+        
         //- rjf: attaching
         case D_CmdKind_Attach:
         {
@@ -2145,6 +2167,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
             msg->kind      = D_MsgKind_Attach;
             msg->entity_id = pid;
             MemoryCopyArray(msg->exception_code_filters, exception_code_filters);
+            msg->auto_download_debug_info = auto_download_debug_info;
           }
         }break;
         
@@ -2156,6 +2179,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
           msg->kind      = D_MsgKind_OpenCrashDump;
           msg->path      = str8_copy(scratch.arena, file_path);
           MemoryCopyArray(msg->exception_code_filters, exception_code_filters);
+          msg->auto_download_debug_info = auto_download_debug_info;
         }break;
       }
       
@@ -2182,6 +2206,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
           msg->entity     = run_thread->handle;
           msg->parent     = process->handle;
           MemoryCopyArray(msg->exception_code_filters, exception_code_filters);
+          msg->auto_download_debug_info = auto_download_debug_info;
           MemoryCopyStruct(&msg->traps, &run_traps);
           D_BreakpointArray *bp_batches[] =
           {

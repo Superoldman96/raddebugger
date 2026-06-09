@@ -169,6 +169,9 @@ struct D_ModuleInfo
   UWND_Unwinder unwinder;
   void *unwind_info;
   String8 local_debug_info_path;
+  String8 dbg_name;
+  Guid dbg_guid;
+  U64 dbg_age;
   U64 raddbg_attached_marker_voff;
   String8 raddbg_data;
 };
@@ -365,6 +368,7 @@ struct D_CtrlState
   Arena *user_entry_point_arena;
   String8List user_entry_points;
   U64 exception_code_filters[(D_ExceptionCodeKind_COUNT+63)/64];
+  B32 auto_download_debug_info;
   U64 process_counter;
   Arena *dbg_dir_arena;
   D_DbgDirNode *dbg_dir_root;

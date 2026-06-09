@@ -379,6 +379,7 @@ d_serialized_string_from_msg_list(Arena *arena, D_MsgList *msgs)
       str8_serial_push_struct(scratch.arena, &msgs_srlzed, &msg->exit_code);
       str8_serial_push_struct(scratch.arena, &msgs_srlzed, &msg->env_inherit);
       str8_serial_push_struct(scratch.arena, &msgs_srlzed, &msg->debug_subprocesses);
+      str8_serial_push_struct(scratch.arena, &msgs_srlzed, &msg->auto_download_debug_info);
       str8_serial_push_array (scratch.arena, &msgs_srlzed, &msg->exception_code_filters[0], ArrayCount(msg->exception_code_filters));
       
       // rjf: write path string
@@ -479,6 +480,7 @@ d_msg_list_from_serialized_string(Arena *arena, String8 string)
       read_off += str8_deserial_read_struct(string, read_off, &msg->exit_code);
       read_off += str8_deserial_read_struct(string, read_off, &msg->env_inherit);
       read_off += str8_deserial_read_struct(string, read_off, &msg->debug_subprocesses);
+      read_off += str8_deserial_read_struct(string, read_off, &msg->auto_download_debug_info);
       read_off += str8_deserial_read_array (string, read_off, &msg->exception_code_filters[0], ArrayCount(msg->exception_code_filters));
       
       // rjf: read path string
@@ -2294,6 +2296,7 @@ d_ctrl_thread__entry_point(void *p)
           MemoryZeroStruct(&d_ctrl_state->msg_user_bp_touched_files);
           MemoryZeroStruct(&d_ctrl_state->msg_user_bp_touched_symbols);
           MemoryCopyArray(d_ctrl_state->exception_code_filters, msg->exception_code_filters);
+          d_ctrl_state->auto_download_debug_info = msg->auto_download_debug_info;
         }
         
         //- rjf: gather all touched symbols by user breakpoints
@@ -2384,7 +2387,6 @@ d_ctrl_thread__entry_point(void *p)
           }break;
           case D_MsgKind_SetModuleDebugInfoPath:
           {
-            D_EntityCtx *entity_ctx = &d_ctrl_state->ctrl_thread_entity_store->ctx;
             String8 path = msg->path;
             D_Entity *module = d_entity_from_handle(msg->entity);
             D_Entity *debug_info_path = d_entity_child_from_kind(module, D_EntityKind_DebugInfoPath);
@@ -2433,7 +2435,6 @@ d_ctrl_thread__entry_point(void *p)
     //- rjf: update thread register cache
     ProfScope("update thread register cache")
     {
-      D_EntityCtx *entity_ctx = &d_ctrl_state->ctrl_thread_entity_store->ctx;
       D_EntityArray threads = d_entity_array_from_kind(D_EntityKind_Thread);
       X64_RegBlock *blocks = push_array(scratch.arena, X64_RegBlock, threads.count);
       {
@@ -2637,6 +2638,11 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
   }
   
   //////////////////////////////
+  //- rjf: compute local symbol server cache path for this debug info
+  //
+  String8 local_symbol_server_cache_path = smsv_local_path_from_key(scratch.arena, str8_skip_last_slash(module_info->debug_info_path), module_info->debug_info_guid, module_info->debug_info_age);
+  
+  //////////////////////////////
   //- rjf: pick default initial debug info path
   //
   String8 initial_debug_info_path = {0};
@@ -2665,6 +2671,11 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
       str8_list_pushf(scratch.arena, &candidates, "%S.rdi", exe_path);
     }
     
+    // rjf: push local symbol server cache's path
+    {
+      str8_list_push(scratch.arena, &candidates, local_symbol_server_cache_path);
+    }
+    
     // rjf: pick first candidate that works
     for EachNode(n, String8Node, candidates.first)
     {
@@ -2679,14 +2690,15 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
   }
   
   //////////////////////////////
-  //- rjf: no found debug info path -> try to fall back on symbol server cache path
+  //- rjf: no found debug info path -> try to fall back on symbol server cache path.
   //
-#if 1
-  if(initial_debug_info_path.size == 0)
+  // if it exists, we can just use it. if it doesn't, then we only want to pick it *if*
+  // automatic downloads are enabled.
+  //
+  if(initial_debug_info_path.size == 0 && d_ctrl_state->auto_download_debug_info)
   {
-    initial_debug_info_path = smsv_local_path_from_key(arena, str8_skip_last_slash(module_info->debug_info_path), module_info->debug_info_guid, module_info->debug_info_age);
+    initial_debug_info_path = str8_copy(arena, local_symbol_server_cache_path);
   }
-#endif
   
   //////////////////////////////
   //- rjf: write 1 at attachment marker, to signify attachment
@@ -2706,6 +2718,9 @@ d_ctrl_thread__module_open(D_Handle process, D_Handle module, U64 base_vaddr, DM
     info.unwinder                     = unwinder;
     info.unwind_info                  = unwind_info_opaque;
     info.local_debug_info_path        = initial_debug_info_path;
+    info.dbg_name                     = str8_copy(arena, str8_skip_last_slash(module_info->debug_info_path));
+    info.dbg_guid                     = module_info->debug_info_guid;
+    info.dbg_age                      = module_info->debug_info_age;
     info.raddbg_attached_marker_voff  = module_info->raddbg_is_attached_marker_voff;
     info.raddbg_data                  = raddbg_data;
   }

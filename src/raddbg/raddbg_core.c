@@ -11186,6 +11186,8 @@ rd_frame(void)
   //////////////////////////////
   //- rjf: apply debug info config trees -> loaded debug info cache
   //
+  B32 auto_download_debug_info = rd_setting_b32_from_name(s("auto_download_debug_info"));
+  di_set_auto_downloads(auto_download_debug_info);
   ProfScope("apply debug info config trees -> loaded debug info cache")
   {
     U64 current_update_tick_idx = update_tick_idx();
@@ -17319,7 +17321,7 @@ rd_frame(void)
     }
     
     ////////////////////////////
-    //- rjf: gather exception code filters
+    //- rjf: gather debug engine settings
     //
     U64 exception_code_filters[(D_ExceptionCodeKind_COUNT+63)/64] = {0};
     {
@@ -17344,7 +17346,7 @@ rd_frame(void)
     }
     U64 cmd_count_pre_tick = rd_state->cmds[0].count;
     B32 soft_halt_issued = d_user_state->ctrl_soft_halt_issued;
-    D_EventList engine_events = d_tick(scratch.arena, &targets, &breakpoints, &path_maps, exception_code_filters);
+    D_EventList engine_events = d_tick(scratch.arena, &targets, &breakpoints, &path_maps, exception_code_filters, auto_download_debug_info);
     
     ////////////////////////////
     //- rjf: process debug engine events

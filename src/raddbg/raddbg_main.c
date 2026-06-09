@@ -4,6 +4,9 @@
 ////////////////////////////////
 //~ rjf: post-0.9.26 TODO notes
 //
+// [ ] debug info loading retry mechanism, in cases where the load failed, but settings/filesystem state changes -
+//     e.g. turn on automatic downloads, already tried to load symbol server cache file that doesn't exist ->
+//     need to retry
 // [ ] wassim memory bug
 //
 // [ ] symbol server

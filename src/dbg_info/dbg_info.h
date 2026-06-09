@@ -249,6 +249,9 @@ struct DI_Shared
   U64 load_gen;
   U64 load_count;
   
+  // rjf: settings
+  B32 auto_downloads;
+  
   // rjf: key -> path cache
   U64 key2path_slots_count;
   DI_KeySlot *key2path_slots;
@@ -314,6 +317,11 @@ internal DI_KeyArray di_key_array_from_list(Arena *arena, DI_KeyList *list);
 //~ rjf: Main Layer Initialization
 
 internal void di_init(CmdLine *cmdline);
+
+////////////////////////////////
+//~ rjf: Settings Submission
+
+internal void di_set_auto_downloads(B32 auto_downloads);
 
 ////////////////////////////////
 //~ rjf: Path * Timestamp Cache Submission & Lookup

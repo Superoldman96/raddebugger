@@ -101,6 +101,15 @@ di_init(CmdLine *cmdline)
 }
 
 ////////////////////////////////
+//~ rjf: Settings Submission
+
+internal void
+di_set_auto_downloads(B32 auto_downloads)
+{
+  ins_atomic_u32_eval_assign(&di_shared->auto_downloads, auto_downloads);
+}
+
+////////////////////////////////
 //~ rjf: Path * Timestamp Cache Submission & Lookup
 
 internal DI_Key
@@ -690,10 +699,17 @@ di_async_tick(void)
             String8 symbol_cache_path = smsv_cache_path();
             if(str8_match(symbol_cache_path, og_path, StringMatchFlag_RightSideSloppy|StringMatchFlag_SlashInsensitive))
             {
-              og_is_downloading = 1;
-              smsv_fill_local_path(og_path);
+              if(di_shared->auto_downloads)
+              {
+                og_is_downloading = 1;
+                smsv_fill_local_path(og_path);
+              }
               SMSV_Status status = smsv_status_from_local_path(og_path);
-              if(status == SMSV_Status_Null)
+              if(status == SMSV_Status_Pending)
+              {
+                og_is_downloading = 1;
+              }
+              else if(status == SMSV_Status_Null)
               {
                 og_is_downloading = 0;
               }

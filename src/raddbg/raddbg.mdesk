@@ -316,6 +316,10 @@ RD_VocabTable:
       //- rjf: auto-load last project
       @default(0) @display_name('Auto Load Last Project') @description("Enables loading the most recently opened project, if one is not specified from the command line.")
         'auto_load_last_project': bool,
+      
+      //- rjf: symbol server
+      @default(0) @display_name('Auto Download Debug Info') @Description("Automatically tries to download missing debug info from symbol server(s).")
+        'auto_download_debug_info': bool,
     }
     ```
   }
