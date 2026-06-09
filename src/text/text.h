@@ -177,6 +177,14 @@ typedef TXT_TokenArray TXT_LangLexFunctionType(Arena *arena, U64 *bytes_processe
 //~ rjf: Globals
 
 read_only global TXT_ScopeNode txt_scope_node_nil = {0};
+read_only global Rng1U64 txt_info_line_range_nil = {0};
+read_only global TXT_TextInfo txt_info_nil =
+{
+  1,
+  &txt_info_line_range_nil,
+  0,
+  TXT_LineEndKind_Null,
+};
 
 ////////////////////////////////
 //~ rjf: Basic Helpers

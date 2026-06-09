@@ -318,7 +318,7 @@ RD_VocabTable:
         'auto_load_last_project': bool,
       
       //- rjf: symbol server
-      @default(0) @display_name('Auto Download Debug Info') @Description("Automatically tries to download missing debug info from symbol server(s).")
+      @default(0) @display_name('Auto Download Debug Info') @description("Automatically tries to download missing debug info from symbol server(s).")
         'auto_download_debug_info': bool,
     }
     ```

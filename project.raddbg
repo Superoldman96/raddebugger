@@ -5,7 +5,7 @@ target:
 {
   executable: "build/raddbg.exe"
   working_directory: "../raddebugger"
-  arguments: "--user:C:/devel/raddebugger/build/raddbg_test.user --project:C:/devel/raddebugger/build/raddbg_test.project"
+  arguments: "--user:C:/devel/raddebugger/build/raddbg_test.user"
   debug_subprocesses: 0
   enabled: 1
 }

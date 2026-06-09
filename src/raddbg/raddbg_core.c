@@ -331,6 +331,7 @@ rd_setting_from_name(String8 name)
     CfgSeedTask panel_task = {0, &cfg_nil_node, 1};
     if(panel_task.cfg == &cfg_nil_node) { panel_task.cfg = cfg_node_from_id(rd_regs()->panel); }
     if(panel_task.cfg == &cfg_nil_node) { panel_task.cfg = cfg_node_from_id(rd_regs()->window); }
+    if(panel_task.cfg == &cfg_nil_node) { panel_task.cfg = cfg_node_child_from_string(cfg_node_root(), s("user")); }
     CfgSeedTask view_task = {&panel_task, view_cfg, 1};
     CfgSeedTask *first_task = &view_task;
     CfgSeedTask *last_task = &panel_task;
@@ -11186,8 +11187,7 @@ rd_frame(void)
   //////////////////////////////
   //- rjf: apply debug info config trees -> loaded debug info cache
   //
-  B32 auto_download_debug_info = rd_setting_b32_from_name(s("auto_download_debug_info"));
-  di_set_auto_downloads(auto_download_debug_info);
+  di_set_auto_downloads(rd_state->auto_download_debug_info);
   ProfScope("apply debug info config trees -> loaded debug info cache")
   {
     U64 current_update_tick_idx = update_tick_idx();
@@ -12757,11 +12757,12 @@ rd_frame(void)
     //- rjf: evaluate unpacked settings (must be used earlier than this point in the frame,
     // but cannot evaluate before this point, so we need to prep for next frame
     //
-    rd_state->alt_menu_bar_enabled = rd_setting_b32_from_name(str8_lit("focus_menu_bar_with_alt"));
-    rd_state->use_default_stl_type_views = rd_setting_b32_from_name(str8_lit("use_default_stl_type_views"));
-    rd_state->use_default_ue_type_views = rd_setting_b32_from_name(str8_lit("use_default_ue_type_views"));
+    rd_state->alt_menu_bar_enabled = rd_setting_b32_from_name(s("focus_menu_bar_with_alt"));
+    rd_state->use_default_stl_type_views = rd_setting_b32_from_name(s("use_default_stl_type_views"));
+    rd_state->use_default_ue_type_views = rd_setting_b32_from_name(s("use_default_ue_type_views"));
+    rd_state->auto_download_debug_info = rd_setting_b32_from_name(s("auto_download_debug_info"));
     rd_state->eval_viz_base_string_flags = 0;
-    if(rd_setting_b32_from_name(str8_lit("display_pointer_addresses_before_contents")))
+    if(rd_setting_b32_from_name(s("display_pointer_addresses_before_contents")))
     {
       rd_state->eval_viz_base_string_flags |= EV_StringFlag_AddressesBeforeContent;
     }
@@ -17346,7 +17347,7 @@ rd_frame(void)
     }
     U64 cmd_count_pre_tick = rd_state->cmds[0].count;
     B32 soft_halt_issued = d_user_state->ctrl_soft_halt_issued;
-    D_EventList engine_events = d_tick(scratch.arena, &targets, &breakpoints, &path_maps, exception_code_filters, auto_download_debug_info);
+    D_EventList engine_events = d_tick(scratch.arena, &targets, &breakpoints, &path_maps, exception_code_filters, rd_state->auto_download_debug_info);
     
     ////////////////////////////
     //- rjf: process debug engine events
