@@ -6,6 +6,10 @@
 ** stepping, breakpoints, evaluation, cross-module calls.
 */
 
+#if defined(__clang__)
+#define _ALLOW_COMPILER_AND_STL_VERSION_MISMATCH 1
+#endif
+
 #if _WIN32 && _DEBUG
 #pragma comment(linker, "/nodefaultlib:libcmt")
 #pragma comment(lib, "libcmtd")
@@ -2363,7 +2367,8 @@ overloaded_function(int x){
 // NOTE(allen): Control Flow Stepping
 
 static void
-control_flow_stepping_tests(void){
+control_flow_stepping_tests(void)
+{
   {
     int a = 1;
     if (a < 1){
@@ -2531,6 +2536,15 @@ control_flow_stepping_tests(void){
       i += 1;
     } while (i < 10);
   }
+  
+#if defined(__clang__)
+  for (int i = 0; i < 1;
+       ++i, ({ goto exit; }))
+  {
+    int x = 0;
+  }
+  exit:;
+#endif
   
   {
     int i = 17;

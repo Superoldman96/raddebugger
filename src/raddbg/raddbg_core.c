@@ -13059,6 +13059,7 @@ rd_frame(void)
               RDI_Symbol *procedure = rdi_procedure_from_voff(rdi, voff);
               String8 name = fully_qualified_str8_from_rdi_symbol(scratch.arena, rdi, procedure);
               name = escaped_from_raw_str8(scratch.arena, name);
+              str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, " ip_module: \"%S\"\n", str8_skip_last_slash(module->string));
               str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, " ip_voff: 0x%I64x\n", voff);
               str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, " ip_voff_symbol: \"%S\"\n", name);
               access_close(access);

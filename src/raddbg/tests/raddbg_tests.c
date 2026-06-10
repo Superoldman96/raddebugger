@@ -181,15 +181,20 @@ rd_test__stepping_regressions(Arena *arena, TestCtx *ctx, String8 target_binary,
         // rjf: if we are ready for the next operation, then accumulate deterministic log info
         if(ready_for_next_operation)
         {
-          MD_Node *lines = md_child_from_string(state, s("lines"), 0);
-          MD_Node *ip_voff = md_child_from_string(state, s("ip_voff"), 0);
-          MD_Node *ip_voff_symbol = md_child_from_string(state, s("ip_voff_symbol"), 0);
-          String8 lines_dump = md_string_from_tree(scratch.arena, lines);
-          String8 ip_voff_dump = md_string_from_tree(scratch.arena, ip_voff);
-          String8 ip_voff_symbol_dump = md_string_from_tree(scratch.arena, ip_voff_symbol);
-          str8_list_push(scratch.arena, &test_log_strings, lines_dump);
-          str8_list_push(scratch.arena, &test_log_strings, ip_voff_dump);
-          str8_list_push(scratch.arena, &test_log_strings, ip_voff_symbol_dump);
+          MD_Node *ip_module = md_child_from_string(state, s("ip_module"), 0);
+          String8 ip_module_name = ip_module->first->string;
+          if(str8_match(str8_chop_last_dot(ip_module_name), target_binary, 0))
+          {
+            MD_Node *lines = md_child_from_string(state, s("lines"), 0);
+            MD_Node *ip_voff = md_child_from_string(state, s("ip_voff"), 0);
+            MD_Node *ip_voff_symbol = md_child_from_string(state, s("ip_voff_symbol"), 0);
+            String8 lines_dump = md_string_from_tree(scratch.arena, lines);
+            String8 ip_voff_dump = md_string_from_tree(scratch.arena, ip_voff);
+            String8 ip_voff_symbol_dump = md_string_from_tree(scratch.arena, ip_voff_symbol);
+            str8_list_push(scratch.arena, &test_log_strings, lines_dump);
+            str8_list_push(scratch.arena, &test_log_strings, ip_voff_dump);
+            str8_list_push(scratch.arena, &test_log_strings, ip_voff_symbol_dump);
+          }
         }
         
         // rjf: are we without line info? -> step out

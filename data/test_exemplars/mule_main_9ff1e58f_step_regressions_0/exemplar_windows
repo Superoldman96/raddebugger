@@ -58,9 +58,6 @@ lines:
 }
 ip_voff: 0x1044
 ip_voff_symbol: raddbg_thread_id__impl
-lines
-ip_voff: 0x15890
-ip_voff_symbol: ""
 lines:
 {
  {
@@ -166,9 +163,6 @@ lines:
 }
 ip_voff: 0x1044
 ip_voff_symbol: raddbg_thread_id__impl
-lines
-ip_voff: 0x15890
-ip_voff_symbol: ""
 lines:
 {
  {
@@ -364,9 +358,6 @@ lines:
 }
 ip_voff: 0x1af4
 ip_voff_symbol: mule_init
-lines
-ip_voff: 0x20830
-ip_voff_symbol: ""
 lines:
 {
  {
