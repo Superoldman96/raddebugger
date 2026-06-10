@@ -750,13 +750,28 @@ di_async_tick(void)
           }
         }
         
-        //- rjf: determine if RDI path is writable; if not, need to write into the writable cache path
+        //- rjf: determine if RDI folder is writable; if not, need to write into the writable cache path
         if(!t->og_folder_analyzed)
         {
           t->og_folder_analyzed = 1;
-          File file = file_open(AccessFlag_Write, rdi_path);
+          String8 rdi_folder = str8_chop_last_slash(rdi_path);
+          for(U64 slash_pos = 0; slash_pos <= rdi_folder.size; slash_pos = str8_find_needle(rdi_folder, slash_pos+1, s("/"), StringMatchFlag_SlashInsensitive))
+          {
+            String8 ancestor_folder = str8_substr(rdi_folder, r1u64(0, slash_pos));
+            if(ancestor_folder.size != 0)
+            {
+              make_directory(ancestor_folder);
+            }
+            if(slash_pos == rdi_folder.size)
+            {
+              break;
+            }
+          }
+          String8 dummy_file_path = str8f(scratch.arena, "%S/writability_test", rdi_folder);
+          File file = file_open(AccessFlag_Write, dummy_file_path);
           t->og_folder_is_writable = !file_match(file, file_zero());
           file_close(file);
+          delete_file_at_path(dummy_file_path);
         }
         
         //- rjf: if RDI path is not writable -> adjust into writable cache directory

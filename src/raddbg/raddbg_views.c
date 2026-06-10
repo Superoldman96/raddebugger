@@ -78,24 +78,24 @@ rd_code_view_build(Arena *arena, RD_CodeViewState *cv, RD_CodeViewBuildFlags fla
       case RD_CmdKind_Search:
       {
         arena_clear(cv->find_text_arena);
-        cv->find_text_fwd = push_str8_copy(cv->find_text_arena, cmd->regs->string);
+        cv->find_text_fwd = str8_copy(cv->find_text_arena, cmd->regs->string);
       }break;
       case RD_CmdKind_SearchBackwards:
       {
         arena_clear(cv->find_text_arena);
-        cv->find_text_bwd = push_str8_copy(cv->find_text_arena, cmd->regs->string);
+        cv->find_text_bwd = str8_copy(cv->find_text_arena, cmd->regs->string);
       }break;
       case RD_CmdKind_FindNext:
       {
         String8 string = rd_view_query_input();
         arena_clear(cv->find_text_arena);
-        cv->find_text_fwd = push_str8_copy(cv->find_text_arena, string);
+        cv->find_text_fwd = str8_copy(cv->find_text_arena, string);
       }break;
       case RD_CmdKind_FindPrev:
       {
         String8 string = rd_view_query_input();
         arena_clear(cv->find_text_arena);
-        cv->find_text_bwd = push_str8_copy(cv->find_text_arena, string);
+        cv->find_text_bwd = str8_copy(cv->find_text_arena, string);
       }break;
       case RD_CmdKind_ToggleWatchExpressionAtMouse:
       {

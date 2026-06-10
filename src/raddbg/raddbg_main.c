@@ -518,34 +518,6 @@ entry_point(CmdLine *cmd_line)
 {
   Temp scratch = scratch_begin(0, 0);
   
-  //- TODO(rjf): test symbol server download
-#if 0
-  {
-    GuardedRing *out_ring = guarded_ring_alloc(scratch.arena, KB(64));
-    {
-      HTTP_RequestParams p =
-      {
-        .id = 1,
-        .method = HTTP_Method_Get,
-        .url = s("https://msdl.microsoft.com/download/symbols/ntdll.pdb/E84AF4A1E3CDFABC99A41209581EB6861/ntdll.pdb"),
-      };
-      http_push_request(out_ring, &p, max_U64);
-      String8List pieces = {0};
-      for(HTTP_Response r = {0}; http_pop_response(scratch.arena, out_ring, &r, max_U64);)
-      {
-        str8_list_push(scratch.arena, &pieces, r.body);
-        if(r.has_more == 0)
-        {
-          int x = 0;
-          break;
-        }
-      }
-      int x = 0;
-    }
-    guarded_ring_release(out_ring);
-  }
-#endif
-  
   //- rjf: unpack command line arguments
   ExecMode exec_mode = ExecMode_Normal;
   B32 auto_run = 0;
