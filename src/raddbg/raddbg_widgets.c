@@ -1880,7 +1880,8 @@ rd_code_slice(RD_CodeSliceParams *params, TxtPt *cursor, TxtPt *mark, S64 *prefe
           rd_cmd(RD_CmdKind_AddBreakpoint,
                  .file_path  = params->line_vaddrs[line_idx] ? str8_zero() : rd_regs()->file_path,
                  .cursor     = params->line_vaddrs[line_idx] ? txt_pt(0, 0) : txt_pt(line_num, 1),
-                 .vaddr      = params->line_vaddrs[line_idx]);
+                 .vaddr      = params->line_vaddrs[line_idx],
+                 .expr = s(""));
         }
       }
     }
