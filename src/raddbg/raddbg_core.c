@@ -11955,7 +11955,6 @@ rd_frame(void)
       E_BaseCtx *ctx = eval_base_ctx;
       
       //- rjf: fill instruction pointer info
-      ctx->thread_ip_vaddr     = rip_vaddr;
       ctx->thread_ip_voff      = rip_voff;
       ctx->thread_reg_space    = rd_eval_space_from_ctrl_entity(thread, D_EvalSpaceKind_Entity);
       ctx->thread_process_space= rd_eval_space_from_ctrl_entity(process, D_EvalSpaceKind_Entity);

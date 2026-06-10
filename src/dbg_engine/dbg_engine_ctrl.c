@@ -3579,7 +3579,6 @@ d_ctrl_thread__eval_scope_begin(Arena *arena, D_BreakpointList *user_bps, D_Enti
     E_BaseCtx *ctx = &scope->base_ctx;
     
     //- rjf: fill instruction pointer info
-    ctx->thread_ip_vaddr     = thread_rip_vaddr;
     ctx->thread_ip_voff      = thread_rip_voff;
     ctx->thread_arch         = thread->arch;
     ctx->thread_reg_space = e_space_make(D_EvalSpaceKind_Entity);

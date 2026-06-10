@@ -33,7 +33,6 @@
 // [ ] need to eliminate accelerators from evaluation context, and build them on the fly instead -
 //     this is necessary because, for instance, the correct locals_map varies by expression, if we
 //     want to (we do) support features like "look up call stack to find local"
-// [ ] unit / module name qualification
 //
 //- memory view pass
 // [ ] toggleable ascii column
@@ -83,8 +82,6 @@
 //     a way we can defer to the underlying shell in a non-horrible way...?
 //
 //- stepping or breakpoint oddness/fixes
-// [ ] halting during a spoof-ridden step leaves the spoofs in place!!!
-//     (repro via LOTS of code on one line & halting)
 // [ ] stepping-onto a line with a conditional breakpoint, which fails, causes a
 // single step over the first instruction of that line, even if the thread
 // would've stopped at the first instruction due to the step, were that bp not
@@ -185,7 +182,6 @@
 // [ ] investigate /DEBUG:FASTLINK - can we somehow alert that we do not
 //     support it?
 // [ ] just-in-time debugging
-// [ ] step-out-of-loop
 //
 //- late-conversion performance improvements
 // [ ] live++ investigations - ctrl+alt+f11 in UE?
@@ -281,6 +277,10 @@
 // [x] unwinding in jit page - fail
 // [x] test concepts -> base
 // [x] debugger, d2r, p2r exemplar / determinism testing
+// [x] halting during a spoof-ridden step leaves the spoofs in place!!!
+//     (repro via LOTS of code on one line & halting)
+// [x] unit / module name qualification
+// [x] step-out-of-loop
 
 ////////////////////////////////
 //~ rjf: Build Options
