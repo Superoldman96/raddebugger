@@ -806,7 +806,7 @@ RD_VocabTable:
   //- rjf: @schema process
   {
     process, 0,
-    ```x:{'label':code_string, 'id':u64, @no_expand 'active':bool, 'modules':set, 'threads':set}```,
+    ```x:{'label':code_string, 'id':u64, @no_expand 'active':bool, 'modules':set, 'threads':set, @query @no_expand 'memory':address_space}```,
   }
   
   //- rjf: @schema module

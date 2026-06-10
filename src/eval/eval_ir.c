@@ -1305,6 +1305,13 @@ e_push_irtree_and_type_from_expr(Arena *arena, E_IRTreeAndType *root_parent, E_I
                 int_root = e_irtree_binary_op_u(arena, RDI_EvalOp_Mul, ptr_size, int_root, const_root);
               }
               E_TypeKey ptr_type = ptr_tree->type_key;
+              {
+                E_Type *ptr_type_info = e_type_from_key(ptr_type);
+                if(ptr_type_info->flags != 0)
+                {
+                  ptr_type = e_type_key_cons_ptr(ptr_type_info->arch, ptr_type_info->direct_type_key, 1,  0);
+                }
+              }
               if(ptr_is_decay)
               {
                 ptr_type = e_type_key_cons_ptr(e_base_ctx->primary_module->arch, direct_type, 1, 0);

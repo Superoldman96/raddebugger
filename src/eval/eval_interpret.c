@@ -339,9 +339,9 @@ e_interpret(String8 bytecode)
       
       case RDI_EvalOp_RegRead:
       {
-        U8 rdi_reg_code     = (imm.u64&0x0000FF)>>0;
-        U8 byte_size        = (imm.u64&0x00FF00)>>8;
-        U8 byte_off         = (imm.u64&0xFF0000)>>16;
+        U8 rdi_reg_code = (imm.u64&0x0000FF)>>0;
+        U8 byte_size    = (imm.u64&0x00FF00)>>8;
+        U8 byte_off     = (imm.u64&0xFF0000)>>16;
         Arch arch = e_interpret_ctx->reg_arch;
         ARCH_Info *arch_info = arch_info_from_arch(arch);
         ARCH_RegCode base_reg_code = arch_reg_code_from_rdi(arch, rdi_reg_code);

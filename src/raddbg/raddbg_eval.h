@@ -74,6 +74,14 @@ E_TYPE_EXPAND_ID_FROM_NUM_FUNCTION_DEF(cfgs_slice);
 E_TYPE_EXPAND_NUM_FROM_ID_FUNCTION_DEF(cfgs_slice);
 
 ////////////////////////////////
+//~ rjf: `call_stack_frame` Type Hooks
+
+E_TYPE_IREXT_FUNCTION_DEF(call_stack_frame);
+E_TYPE_ACCESS_FUNCTION_DEF(call_stack_frame);
+E_TYPE_EXPAND_INFO_FUNCTION_DEF(call_stack_frame);
+E_TYPE_EXPAND_RANGE_FUNCTION_DEF(call_stack_frame);
+
+////////////////////////////////
 //~ rjf: `call_stack` Type Hooks
 
 E_TYPE_IREXT_FUNCTION_DEF(call_stack);

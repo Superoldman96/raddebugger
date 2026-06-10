@@ -869,6 +869,74 @@ e_dbg_info_from_type_key(E_TypeKey type_key)
 ////////////////////////////////
 //~ rjf: Cache Accessing Functions
 
+//- rjf: locals/members maps
+
+internal E_String2NumMap *
+e_locals_map_from_dbgi_key_voff(DI_Key dbgi_key, U64 voff)
+{
+  if(e_cache->locals_map_map_slots_count == 0)
+  {
+    e_cache->locals_map_map_slots_count = 8;
+    e_cache->locals_map_map_slots = push_array(e_cache->arena, E_LocalMapCacheSlot, e_cache->locals_map_map_slots_count);
+  }
+  U64 hash = u64_hash_from_seed_str8(voff, str8_struct(&dbgi_key));
+  U64 slot_idx = hash%e_cache->locals_map_map_slots_count;
+  E_LocalMapCacheSlot *slot = &e_cache->locals_map_map_slots[slot_idx];
+  E_LocalMapCacheNode *node = 0;
+  for(E_LocalMapCacheNode *n = slot->first; n != 0; n = n->next)
+  {
+    if(di_key_match(n->dbgi_key, dbgi_key) && n->voff == voff)
+    {
+      node = n;
+    }
+  }
+  if(node == 0)
+  {
+    Access *access = access_open();
+    RDI_Parsed *rdi = di_rdi_from_key(access, dbgi_key, 0, 0);
+    node = push_array(e_cache->arena, E_LocalMapCacheNode, 1);
+    SLLQueuePush(slot->first, slot->last, node);
+    node->dbgi_key = dbgi_key;
+    node->voff = voff;
+    node->map = e_push_locals_map_from_rdi_voff(e_cache->arena, rdi, voff);
+    access_close(access);
+  }
+  return node->map;
+}
+
+internal E_String2NumMap *
+e_member_map_from_dbgi_key_voff(DI_Key dbgi_key, U64 voff)
+{
+  if(e_cache->member_map_map_slots_count == 0)
+  {
+    e_cache->member_map_map_slots_count = 8;
+    e_cache->member_map_map_slots = push_array(e_cache->arena, E_LocalMapCacheSlot, e_cache->member_map_map_slots_count);
+  }
+  U64 hash = u64_hash_from_seed_str8(voff, str8_struct(&dbgi_key));
+  U64 slot_idx = hash%e_cache->member_map_map_slots_count;
+  E_LocalMapCacheSlot *slot = &e_cache->member_map_map_slots[slot_idx];
+  E_LocalMapCacheNode *node = 0;
+  for(E_LocalMapCacheNode *n = slot->first; n != 0; n = n->next)
+  {
+    if(di_key_match(n->dbgi_key, dbgi_key) && n->voff == voff)
+    {
+      node = n;
+    }
+  }
+  if(node == 0)
+  {
+    Access *access = access_open();
+    RDI_Parsed *rdi = di_rdi_from_key(access, dbgi_key, 0, 0);
+    node = push_array(e_cache->arena, E_LocalMapCacheNode, 1);
+    SLLQueuePush(slot->first, slot->last, node);
+    node->dbgi_key = dbgi_key;
+    node->voff = voff;
+    node->map = e_push_member_map_from_rdi_voff(e_cache->arena, rdi, voff);
+    access_close(access);
+  }
+  return node->map;
+}
+
 //- rjf: parent key stack
 
 internal E_Key

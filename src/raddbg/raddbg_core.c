@@ -707,6 +707,7 @@ rd_ctrl_entity_from_eval_space(E_Space space)
   D_Entity *entity = &d_entity_nil;
   if(space.kind == D_EvalSpaceKind_Entity ||
      space.kind == RD_EvalSpaceKind_MetaCtrlEntity ||
+     space.kind == RD_EvalSpaceKind_MetaCallStack ||
      space.kind == RD_EvalSpaceKind_MetaUnattachedProcess)
   {
     D_Handle handle;
@@ -2058,11 +2059,16 @@ rd_view_ui(Rng2F32 rect)
         //////////////////////////////
         //- rjf: unpack arguments
         //
+        B32 is_autocomplete = cfg_node_child_from_string(view, str8_lit("autocomplete")) != &cfg_nil_node;
         EV_View *eval_view = rd_view_eval_view();
         F32 row_height_px = ui_top_px_height();
         S64 num_possible_visible_rows = (S64)(dim_2f32(rect).y/row_height_px);
         F32 row_string_max_size_px = dim_2f32(rect).x;
         EV_StringFlags string_flags = EV_StringFlag_ReadOnlyDisplayRules|rd_state->eval_viz_base_string_flags;
+        if(is_autocomplete)
+        {
+          string_flags |= EV_StringFlag_DisablePrettyNames;
+        }
         String8 filter = rd_view_query_input();
         Vec4F32 pop_background_rgba = {0};
         UI_TagF("pop") pop_background_rgba = ui_color_from_name(str8_lit("background"));
@@ -3186,8 +3192,7 @@ rd_view_ui(Rng2F32 rect)
         //////////////////////////////
         //- rjf: autocomplete watches -> feed autocompletion info forward
         //
-        if(rd_watch_pt_match(ewv->cursor, ewv->mark) &&
-           cfg_node_child_from_string(view, str8_lit("autocomplete")) != &cfg_nil_node)
+        if(rd_watch_pt_match(ewv->cursor, ewv->mark) && is_autocomplete)
         {
           U64 row_num = ev_num_from_key(&block_ranges, ewv->cursor.key);
           EV_Row *row = ev_row_from_num(scratch.arena, rd_view_eval_view(), &block_ranges, row_num);
@@ -3195,7 +3200,7 @@ rd_view_ui(Rng2F32 rect)
           RD_WatchCell *cell = row_info.cells.first;
           if(cell != 0)
           {
-            RD_WatchRowCellInfo cell_info = rd_info_from_watch_row_cell(scratch.arena, row, 0, &row_info, cell, ui_top_font(), ui_top_font_size(), dim_2f32(rect).y);
+            RD_WatchRowCellInfo cell_info = rd_info_from_watch_row_cell(scratch.arena, row, string_flags, &row_info, cell, ui_top_font(), ui_top_font_size(), dim_2f32(rect).y);
             String8 string = dr_string_from_fstrs(ui_build_arena(), &cell_info.eval_fstrs);
             if(string.size != 0)
             {
@@ -12370,7 +12375,7 @@ rd_frame(void)
         String8 collection_name = str8_lit("call_stack_tree");
         E_TypeKey collection_type_key = e_type_key_cons(.kind = E_TypeKind_Set,
                                                         .name = collection_name,
-                                                        .flags = E_TypeFlag_StubSingleLineExpansion,
+                                                        .flags = E_TypeFlag_StubSingleLineExpansion|E_TypeFlag_ArrayLikeExpansion,
                                                         .access = E_TYPE_ACCESS_FUNCTION_NAME(call_stack_tree),
                                                         .expand =
                                                         {
@@ -12451,6 +12456,18 @@ rd_frame(void)
                                                       .range       = E_TYPE_EXPAND_RANGE_FUNCTION_NAME(peek_types),
                                                       .id_from_num = E_TYPE_EXPAND_ID_FROM_NUM_FUNCTION_NAME(peek_types),
                                                       .num_from_id = E_TYPE_EXPAND_NUM_FROM_ID_FUNCTION_NAME(peek_types),
+                                                    }));
+        e_string2typekey_map_insert(rd_frame_arena(),
+                                    rd_state->meta_name2type_map,
+                                    str8_lit("call_stack_frame"),
+                                    e_type_key_cons(.kind = E_TypeKind_Set,
+                                                    .name = str8_lit("call_stack_frame"),
+                                                    .irext  = E_TYPE_IREXT_FUNCTION_NAME(call_stack_frame),
+                                                    .access = E_TYPE_ACCESS_FUNCTION_NAME(call_stack_frame),
+                                                    .expand =
+                                                    {
+                                                      .info    = E_TYPE_EXPAND_INFO_FUNCTION_NAME(call_stack_frame),
+                                                      .range   = E_TYPE_EXPAND_RANGE_FUNCTION_NAME(call_stack_frame),
                                                     }));
         e_string2typekey_map_insert(rd_frame_arena(),
                                     rd_state->meta_name2type_map,

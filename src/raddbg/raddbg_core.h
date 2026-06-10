@@ -16,6 +16,7 @@ enum
   RD_EvalSpaceKind_MetaTheme,
   RD_EvalSpaceKind_MetaView,
   RD_EvalSpaceKind_MetaCtrlEntity,
+  RD_EvalSpaceKind_MetaCallStack,
   RD_EvalSpaceKind_MetaUnattachedProcess,
   RD_EvalSpaceKind_MetaCallStackTree,
 };

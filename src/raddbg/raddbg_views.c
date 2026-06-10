@@ -1424,7 +1424,7 @@ rd_watch_row_info_from_row(Arena *arena, EV_Row *row)
       F32 next_pct = 0;
 #define take_pct() (next_pct = (F32)f64_from_str8(w_cfg->string), w_cfg = w_cfg->next, next_pct)
       rd_watch_cell_list_push_new(arena, &info.cells, RD_WatchCellKind_CallStackFrame, row->eval,                                 .default_pct = 0.05f, .pct = take_pct());
-      rd_watch_cell_list_push_new(arena, &info.cells, RD_WatchCellKind_Eval,           row->eval,                                 .default_pct = 0.75f, .pct = take_pct());
+      rd_watch_cell_list_push_new(arena, &info.cells, RD_WatchCellKind_Eval,           e_eval_wrapf(row->eval, "$.address"),      .default_pct = 0.75f, .pct = take_pct());
       rd_watch_cell_list_push_new(arena, &info.cells, RD_WatchCellKind_Eval,           (module == &d_entity_nil ? (E_Eval)zero_struct : module_eval),
                                   .default_pct = 0.20f, .pct = take_pct());
 #undef take_pct
@@ -1656,7 +1656,7 @@ rd_info_from_watch_row_cell(Arena *arena, EV_Row *row, EV_StringFlags string_fla
           String8 expr_string = {0};
           
           // rjf: if this cell has a meta-display-name, then use that
-          if(expr_string.size == 0)
+          if(expr_string.size == 0 && !(string_flags & EV_StringFlag_DisablePrettyNames))
           {
             for(E_Type *t = e_type_from_key(cell->eval.irtree.type_key);
                 t != &e_type_nil;
@@ -1741,10 +1741,11 @@ rd_info_from_watch_row_cell(Arena *arena, EV_Row *row, EV_StringFlags string_fla
                   // do a code-string of ".member_name"
                   String8 member_name = notable_expr->first->next->string;
                   String8 fancy_name = {0};
-                  if(cell->eval.space.kind == RD_EvalSpaceKind_MetaCfg ||
-                     cell->eval.space.kind == RD_EvalSpaceKind_MetaCtrlEntity ||
-                     cell->eval.space.kind == E_SpaceKind_File ||
-                     cell->eval.space.kind == E_SpaceKind_FileSystem)
+                  if(!(string_flags & EV_StringFlag_DisablePrettyNames) &&
+                     (cell->eval.space.kind == RD_EvalSpaceKind_MetaCfg ||
+                      cell->eval.space.kind == RD_EvalSpaceKind_MetaCtrlEntity ||
+                      cell->eval.space.kind == E_SpaceKind_File ||
+                      cell->eval.space.kind == E_SpaceKind_FileSystem))
                   {
                     fancy_name = rd_display_from_code_name(member_name);
                   }

@@ -1795,6 +1795,13 @@ ev_string_iter_next(Arena *arena, EV_StringIter *it, String8 *out_string)
       case E_TypeKind_RRef:
       case E_TypeKind_Array:
       {
+        E_Type *type = e_type_from_key(type_key);
+        if(type->flags & E_TypeFlag_ArrayLikeExpansion)
+        {
+          expansion_opener_symbol = str8_lit("[");
+          expansion_closer_symbol = str8_lit("]");
+          goto arrays_and_sets_and_structs;
+        }
         if(type_kind == E_TypeKind_Array && it->top_task->redirect_to_sets_and_structs)
         {
           expansion_opener_symbol = str8_lit("[");

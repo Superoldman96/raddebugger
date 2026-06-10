@@ -472,7 +472,7 @@ RD_NameSchemaInfo rd_name_schema_info_table[39] =
 {str8_lit_comp("type_view"), 0, str8_lit_comp("@collection_commands(add_type_view) @row_commands(remove_cfg) x:{'type':expr_string, 'expr':expr_string}")},
 {str8_lit_comp("recent_project"), 0, str8_lit_comp("x:{'path':path, 'name':string}")},
 {str8_lit_comp("machine"), 0, str8_lit_comp("x:{'label':code_string, @no_expand 'active':bool, 'unattached_processes':set, 'processes':set}")},
-{str8_lit_comp("process"), 0, str8_lit_comp("x:{'label':code_string, 'id':u64, @no_expand 'active':bool, 'modules':set, 'threads':set}")},
+{str8_lit_comp("process"), 0, str8_lit_comp("x:{'label':code_string, 'id':u64, @no_expand 'active':bool, 'modules':set, 'threads':set, @query @no_expand 'memory':address_space}")},
 {str8_lit_comp("module"), 0, str8_lit_comp("x:{'exe':path, 'dbg':path, 'vaddr_range':vaddr_range}")},
 {str8_lit_comp("thread"), 0, str8_lit_comp("x:{'label':code_string, 'id':u64, @no_expand 'active':bool, 'call_stack':set}")},
 };

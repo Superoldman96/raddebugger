@@ -1065,6 +1065,24 @@ struct E_CacheSlot
   E_CacheNode *last;
 };
 
+//- rjf: locals/members cache types
+
+typedef struct E_LocalMapCacheNode E_LocalMapCacheNode;
+struct E_LocalMapCacheNode
+{
+  E_LocalMapCacheNode *next;
+  DI_Key dbgi_key;
+  U64 voff;
+  E_String2NumMap *map;
+};
+
+typedef struct E_LocalMapCacheSlot E_LocalMapCacheSlot;
+struct E_LocalMapCacheSlot
+{
+  E_LocalMapCacheNode *first;
+  E_LocalMapCacheNode *last;
+};
+
 //- rjf: parent stack
 
 typedef struct E_CacheParentNode E_CacheParentNode;
@@ -1121,6 +1139,12 @@ struct E_Cache
   //- rjf: [types] unpacked type cache
   U64 type_cache_slots_count;
   E_TypeCacheSlot *type_cache_slots;
+  
+  //- rjf: [locals / members] locals/members map maps
+  E_LocalMapCacheSlot *locals_map_map_slots;
+  U64 locals_map_map_slots_count;
+  E_LocalMapCacheSlot *member_map_map_slots;
+  U64 member_map_map_slots_count;
   
   //- rjf: [ir] ir gen options
   B32 disallow_autohooks;
@@ -1277,6 +1301,10 @@ internal E_DbgInfo *e_dbg_info_from_type_key(E_TypeKey type_key);
 // So even though the primary API shape is based around singular keys, the
 // "parent key stack" also implicitly parameterizes all of these (partly
 // because it is not relevant in 99% of cases).
+
+//- rjf: locals/members maps
+internal E_String2NumMap *e_locals_map_from_dbgi_key_voff(DI_Key dbgi_key, U64 voff);
+internal E_String2NumMap *e_member_map_from_dbgi_key_voff(DI_Key dbgi_key, U64 voff);
 
 //- rjf: parent key stack
 internal E_Key e_parent_key_push(E_Key key);
