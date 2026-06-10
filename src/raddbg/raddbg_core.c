@@ -2091,6 +2091,11 @@ rd_view_ui(Rng2F32 rect)
         B32 implicit_root = (cfg_node_child_from_string(cfg_node_from_id(rd_regs()->view), str8_lit("explicit_root")) == &cfg_nil_node);
         
         //////////////////////////////
+        //- rjf: get root contextual expression
+        //
+        String8 ctx_expr = cfg_node_child_from_string(cfg_node_from_id(rd_regs()->view), s("context_expression"))->first->string;
+        
+        //////////////////////////////
         //- rjf: decide single-click-to-activate preference
         //
         B32 prefer_single_click_to_activate = (cfg_node_child_from_string(cfg_node_from_id(rd_regs()->view), str8_lit("activate_with_single_click")) != &cfg_nil_node);
@@ -2529,7 +2534,19 @@ rd_view_ui(Rng2F32 rect)
                       case RD_EvalSpaceKind_MetaCmd:
                       {
                         String8 cmd_name = rd_cmd_name_from_eval(eval);
-                        rd_cmd(RD_CmdKind_RunCommand, .cmd_name = cmd_name);
+                        RD_CmdKindInfo *cmd_kind_info = rd_cmd_kind_info_from_string(cmd_name);
+                        RD_RegsScope()
+                        {
+                          RD_RegSlot ctx_filled_reg_slot = rd_regs_fill_slot_from_cell_ctx(ctx_expr, row);
+                          if(ctx_filled_reg_slot == cmd_kind_info->query.slot || !(cmd_kind_info->query.flags & RD_QueryFlag_Required))
+                          {
+                            rd_push_cmd(cmd_name, rd_regs());
+                          }
+                          else
+                          {
+                            rd_cmd(RD_CmdKind_RunCommand, .cmd_name = cmd_name);
+                          }
+                        }
                       }break;
                       case RD_EvalSpaceKind_MetaCtrlEntity:
                       {
@@ -4319,6 +4336,7 @@ rd_view_ui(Rng2F32 rect)
                           selected_eval = cell->eval;
                           ewv->next_cursor = ewv->next_mark = cell_pt;
                           pressed = 1;
+                          D_Entity *entity = rd_ctrl_entity_from_eval_space(cell->eval.space);
                           if(cell->eval.space.kind == D_EvalSpaceKind_Entity)
                           {
                             rd_cmd(RD_CmdKind_PushQuery,
@@ -4328,6 +4346,17 @@ rd_view_ui(Rng2F32 rect)
                                    .activate_with_single_click = 1,
                                    .small_size = 1,
                                    .ui_key = cell_box->key);
+                          }
+                          else if(cell->eval.space.kind == RD_EvalSpaceKind_MetaCtrlEntity && entity->kind == D_EntityKind_Module)
+                          {
+                            rd_cmd(RD_CmdKind_PushQuery,
+                                   .expr = s("query:module_commands"),
+                                   .do_implicit_root = 1,
+                                   .do_lister = 1,
+                                   .activate_with_single_click = 1,
+                                   .small_size = 1,
+                                   .ui_key = cell_box->key,
+                                   .ctx_expr = cell->eval.string);
                           }
                         }
                         
@@ -4401,6 +4430,21 @@ rd_view_ui(Rng2F32 rect)
                           {
                             String8 cmd_name = cell_info.cmd_name;
                             RD_CmdKindInfo *cmd_kind_info = rd_cmd_kind_info_from_string(cmd_name);
+                            RD_RegsScope()
+                            {
+                              RD_RegSlot ctx_filled_reg_slot = rd_regs_fill_slot_from_cell_ctx(ctx_expr, row);
+                              if(ctx_filled_reg_slot == cmd_kind_info->query.slot || !(cmd_kind_info->query.flags & RD_QueryFlag_Required))
+                              {
+                                rd_push_cmd(cmd_name, rd_regs());
+                              }
+                              else
+                              {
+                                rd_cmd(RD_CmdKind_RunCommand, .cmd_name = cmd_name);
+                              }
+                            }
+#if 0
+                            String8 cmd_name = cell_info.cmd_name;
+                            RD_CmdKindInfo *cmd_kind_info = rd_cmd_kind_info_from_string(cmd_name);
                             D_Entity *entity = rd_ctrl_entity_from_eval_space(row->eval.space);
                             CFG_Node *cfg = rd_cfg_from_eval_space(row->eval.space);
                             if(cfg == &cfg_nil_node)
@@ -4433,6 +4477,7 @@ rd_view_ui(Rng2F32 rect)
                                 rd_cmd(RD_CmdKind_RunCommand, .cmd_name = cmd_name);
                               }
                             }
+#endif
                           }
                           
                           // rjf: row has callstack info? -> select unwind
@@ -10555,6 +10600,35 @@ rd_regs_fill_slot_from_string(RD_RegSlot slot, String8 query_expr, String8 strin
   }
 }
 
+internal RD_RegSlot
+rd_regs_fill_slot_from_ctx_eval(E_Eval eval)
+{
+  RD_RegSlot slot = RD_RegSlot_Null;
+  {
+    D_Entity *entity = rd_ctrl_entity_from_eval_space(eval.space);
+    CFG_Node *cfg = rd_cfg_from_eval_space(eval.space);
+    if(entity != &d_entity_nil)
+    {
+      rd_regs()->ctrl_entity = entity->handle;
+      slot = RD_RegSlot_CtrlEntity;
+    }
+    if(cfg != &cfg_nil_node)
+    {
+      rd_regs()->cfg = cfg->id;
+      slot = RD_RegSlot_Cfg;
+      Temp scratch = scratch_begin(0, 0);
+      CFG_PanelTree panels = cfg_panel_tree_from_cfg(scratch.arena, cfg);
+      CFG_PanelNode *parent_panel_node = cfg_panel_node_from_tree_cfg(panels.root, cfg->parent);
+      if(parent_panel_node != &cfg_nil_panel_node)
+      {
+        rd_regs()->tab = rd_regs()->view = cfg->id;
+      }
+      scratch_end(scratch);
+    }
+  }
+  return slot;
+}
+
 ////////////////////////////////
 //~ rjf: Commands
 
@@ -11924,6 +11998,7 @@ rd_frame(void)
           s("text_pt_commands"),
           s("text_range_commands"),
           s("memory_eval_commands"),
+          s("module_commands"),
         };
         for EachElement(idx, names)
         {
@@ -15825,6 +15900,8 @@ rd_frame(void)
               view = cfg_node_child_from_string_or_alloc(rd_state->cfg, window_query, str8_lit("watch"));
               CFG_Node *expr = cfg_node_child_from_string_or_alloc(rd_state->cfg, view, str8_lit("expression"));
               cfg_node_new_replace(rd_state->cfg, expr, rd_regs()->expr);
+              CFG_Node *ctx_expr = cfg_node_child_from_string_or_alloc(rd_state->cfg, view, s("context_expression"));
+              cfg_node_new_replace(rd_state->cfg, ctx_expr, rd_regs()->ctx_expr);
             }
             
             // rjf: non-floating -> embed in view

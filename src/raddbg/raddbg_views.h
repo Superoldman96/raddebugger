@@ -215,6 +215,9 @@ internal RD_WatchRowInfo rd_watch_row_info_from_row(Arena *arena, EV_Row *row);
 //- rjf: row * cell -> info
 internal RD_WatchRowCellInfo rd_info_from_watch_row_cell(Arena *arena, EV_Row *row, EV_StringFlags string_flags, RD_WatchRowInfo *row_info, RD_WatchCell *cell, FNT_Tag font, F32 font_size, F32 max_size_px);
 
+//- rjf: cell -> fill registers via context
+internal RD_RegSlot rd_regs_fill_slot_from_cell_ctx(String8 root_ctx_expr, EV_Row *row);
+
 //- rjf: table coordinates -> text edit state
 internal RD_WatchViewTextEditState *rd_watch_view_text_edit_state_from_pt(RD_WatchViewState *wv, RD_WatchPt pt);
 

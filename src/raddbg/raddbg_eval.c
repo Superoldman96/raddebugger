@@ -27,15 +27,13 @@ E_TYPE_EXPAND_INFO_FUNCTION_DEF(commands)
     Temp scratch = scratch_begin(&arena, 1);
     String8List cmd_names = {0};
     E_Type *type = e_type_from_key(eval.irtree.type_key);
+    String8 collection_name = type->name;
+    String8 collection_filter_tag = str8f(scratch.arena, "{%S}", collection_name);
     for EachNonZeroEnumVal(RD_CmdKind, k)
     {
       RD_CmdKindInfo *info = &rd_cmd_kind_info_table[k];
       B32 show = ((str8_match(type->name, s("commands"), 0) && info->flags & RD_CmdKindFlag_ListInUI) ||
-                  (str8_match(type->name, s("text_pt_commands"), 0) && info->flags & RD_CmdKindFlag_ListInTextPt) ||
-                  (str8_match(type->name, s("text_range_commands"), 0) && info->flags & RD_CmdKindFlag_ListInTextRng) ||
-                  (str8_match(type->name, s("tab_commands"), 0) && info->flags & RD_CmdKindFlag_ListInTab) ||
-                  (str8_match(type->name, s("memory_eval_commands"), 0) && info->flags & RD_CmdKindFlag_ListInMemoryEval) ||
-                  (str8_match(type->name, s("memory_commands"), 0) && info->flags & RD_CmdKindFlag_ListInMemory));
+                  (str8_find_needle(info->filter_tags, 0, collection_filter_tag, 0) < info->filter_tags.size));
       if(show)
       {
         String8 code_name = info->string;

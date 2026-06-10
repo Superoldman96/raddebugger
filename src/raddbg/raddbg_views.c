@@ -1972,6 +1972,25 @@ rd_info_from_watch_row_cell(Arena *arena, EV_Row *row, EV_StringFlags string_fla
   return result;
 }
 
+//- rjf: cell -> fill registers via context
+
+internal RD_RegSlot
+rd_regs_fill_slot_from_cell_ctx(String8 root_ctx_expr, EV_Row *row)
+{
+  RD_RegSlot ctx_filled_reg_slot = RD_RegSlot_Null;
+  if(ctx_filled_reg_slot == RD_RegSlot_Null) { ctx_filled_reg_slot = rd_regs_fill_slot_from_ctx_eval(row->eval); }
+  for(EV_Block *block = row->block; block != &ev_nil_block && ctx_filled_reg_slot == RD_RegSlot_Null; block = block->parent)
+  {
+    ctx_filled_reg_slot = rd_regs_fill_slot_from_ctx_eval(block->eval);
+  }
+  if(ctx_filled_reg_slot == RD_RegSlot_Null)
+  {
+    E_Eval root_ctx_eval = e_eval_from_string(root_ctx_expr);
+    ctx_filled_reg_slot = rd_regs_fill_slot_from_ctx_eval(root_ctx_eval);
+  }
+  return ctx_filled_reg_slot;
+}
+
 //- rjf: table coordinates -> text edit state
 
 internal RD_WatchViewTextEditState *
