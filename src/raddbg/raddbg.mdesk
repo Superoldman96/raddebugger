@@ -1667,95 +1667,76 @@ RD_ThemePresetTable:
   { DefaultLight     default_light    "Default (Light)",
     ```theme:
     {
-      theme_color:{  tags: background  , value: 0xffffffff }
-      theme_color:{  tags: "alt background"  , value: 0xf8f8f8ff }
-      theme_color:{  tags: "pop background"  , value: 0xcbe4f2ff }
-      theme_color:{  tags: "menu_bar pop background"  , value: 0x5aabd9ff }
-      theme_color:{  tags: "fresh background"  , value: 0xeaddceff }
-      theme_color:{  tags: "match background"  , value: 0xc1e9c4ff }
-      theme_color:{  tags: border  , value: 0xcbcbcbff }
-      theme_color:{  tags: text  , value: 0xff }
-      theme_color:{  tags: "weak text"  , value: 0x727272ff }
-      theme_color:{  tags: "good text"  , value: 0x217538ff }
-      theme_color:{  tags: "neutral text"  , value: 0x1a5b7cff }
-      theme_color:{  tags: "bad text"  , value: 0x972717ff }
-      theme_color:{  tags: hover  , value: 0xff }
-      theme_color:{  tags: "focus overlay"  , value: 0x67ff4b }
-      theme_color:{  tags: "focus border"  , value: 0x67ffff }
-      theme_color:{  tags: cursor  , value: 0xff }
-      theme_color:{  tags: selection  , value: 0x283d5166 }
-      theme_color:{  tags: "inactive background"  , value: 0x8 }
-      theme_color:{  tags: drop_shadow  , value: 0xb }
-      theme_color:{  tags: "good_pop background"  , value: 0x90c09aff }
-      theme_color:{  tags: "good_pop border"  , value: 0x1e7231ff }
-      theme_color:{  tags: "good_pop hover"  , value: 0xe3f5d3ff }
-      theme_color:{  tags: "good_pop weak text"  , value: 0xe3f5d3ff }
-      theme_color:{  tags: "good_pop text"  , value: 0xe3f5d3ff }
-      theme_color:{  tags: "bad_pop background"  , value: 0xa93620ff }
-      theme_color:{  tags: "bad_pop text"  , value: 0xffffffff }
-      theme_color:{  tags: "bad_pop text weak"  , value: 0xffffffff }
-      theme_color:{  tags: "menu_bar bad_pop background"  , value: 0xff2a00ff }
-      theme_color:{  tags: "menu_bar bad_pop text"  , value: 0xffffffff }
-      theme_color:{  tags: "bad_pop hover"  , value: 0xff825cff }
-      theme_color:{  tags: code_default  , value: 0x80808ff }
-      theme_color:{  tags: code_symbol  , value: 0x4ac3ff }
-      theme_color:{  tags: code_type  , value: 0xf46200ff }
-      theme_color:{  tags: code_local  , value: 0x317c00ff }
-      theme_color:{  tags: code_register  , value: 0x9a00ffff }
-      theme_color:{  tags: code_keyword  , value: 0xff0600ff }
-      theme_color:{  tags: code_delimiter_or_operator  , value: 0x8a8a8aff }
-      theme_color:{  tags: code_numeric  , value: 0x7d49ff }
-      theme_color:{  tags: code_numeric_alt_digit_group  , value: 0xb56aff }
-      theme_color:{  tags: code_string  , value: 0x63549fff }
-      theme_color:{  tags: code_meta  , value: 0xd96759ff }
-      theme_color:{  tags: code_comment  , value: 0x717171ff }
-      theme_color:{  tags: line_info_0  , value: 0xe6d5cdff }
-      theme_color:{  tags: line_info_1  , value: 0xdbcfb2ff }
-      theme_color:{  tags: line_info_2  , value: 0xddeac1ff }
-      theme_color:{  tags: line_info_3  , value: 0xddc4bdff }
-      theme_color:{  tags: line_info_4  , value: 0xba917eff }
-      theme_color:{  tags: thread_0  , value: 0xffa700ff }
-      theme_color:{  tags: thread_1  , value: 0xb41fff }
-      theme_color:{  tags: thread_2  , value: 0xff99e5ff }
-      theme_color:{  tags: thread_3  , value: 0x6598ffff }
-      theme_color:{  tags: thread_4  , value: 0x65ffcbff }
-      theme_color:{  tags: thread_5  , value: 0xff9819ff }
-      theme_color:{  tags: thread_6  , value: 0x9932ffff }
-      theme_color:{  tags: thread_7  , value: 0x65ff4cff }
-      theme_color:{  tags: thread_unwound  , value: 0xb2ccd8ff }
-      theme_color:{  tags: thread_error  , value: 0xb23219ff }
-      theme_color:{  tags: breakpoint  , value: 0xff2800ff }
-      theme_color:{  tags: "floating background"  , value: 0xffffffc7 }
-      theme_color:{  tags: "floating background alt"  , value: 0x23 }
-      theme_color:{  tags: "floating background fresh"  , value: 0xeaddceff }
-      theme_color:{  tags: "floating border"  , value: 0x88888884 }
-      theme_color:{  tags: "scroll_bar background"  , value: 0xe9e9e9ff }
-      theme_color:{  tags: "scroll_bar border"  , value: 0x5f5f5f5f }
-      theme_color:{  tags: "floating scroll_bar background"  , value: 0xe9e9e9ff }
-      theme_color:{  tags: "floating scroll_bar border"  , value: 0x5f5f5f5f }
-      theme_color:{  tags: "menu_bar background"  , value: 0x2b6b9aff }
-      theme_color:{  tags: "menu_bar border"  , value: 0x4d }
-      theme_color:{  tags: "menu_bar text"  , value: 0xffffffff }
-      theme_color:{  tags: "menu_bar text weak"  , value: 0xffffffff }
-      theme_color:{  tags: "good menu_bar text"  , value: 0x70db8dff }
-      theme_color:{  tags: "bad menu_bar text"  , value: 0xffa79bff }
-      theme_color:{  tags: "neutral menu_bar text"  , value: 0xc4dbe7ff }
-      theme_color:{  tags: "implicit background"  , value: 0x00000000 }
-      theme_color:{  tags: "implicit border"  , value: 0x00000000 }
-      theme_color:{  tags: "hollow background"  , value: 0x00000000 }
-      theme_color:{  tags: "hollow border"  , value: 0xffffff1f }
-      theme_color:{  tags: "tab text"  , value: 0xffffffff }
-      theme_color:{  tags: "tab text weak"  , value: 0xffffffff }
-      theme_color:{  tags: "tab background"  , value: 0xb67e48ff }
-      theme_color:{  tags: "tab border"  , value: 0x875b31ff }
-      theme_color:{  tags: "tab inactive background"  , value: 0xcacacaff }
-      theme_color:{  tags: "tab inactive border"  , value: 0xb5b5b5ff }
-      theme_color:{  tags: "tab auto background"  , value: 0xc41c69ff }
-      theme_color:{  tags: "tab auto border"  , value: 0x981039ff }
-      theme_color:{  tags: "tab auto inactive background"  , value: 0x9b88a3ff }
-      theme_color:{  tags: "tab auto inactive border"  , value: 0x373737ff }
-      theme_color:{  tags: "drop_site background"  , value: 0xffffff05 }
-      theme_color:{  tags: "drop_site border"  , value: 0xffffff0f }
+      theme_color:{tags: background , value: 0xf4f4f4ff}
+      theme_color:{tags: "alt background" , value: 0xe7e7e7ff}
+      theme_color:{tags: "pop background" , value: 0xe7b96bff}
+      theme_color:{tags: "fresh background" , value: 0xe7d7d0ff}
+      theme_color:{tags: "match background" , value: 0xcbd8deff}
+      theme_color:{tags: border , value: 0xb9b9b9ff}
+      theme_color:{tags: text , value: 0xff}
+      theme_color:{tags: "weak text" , value: 0x4d4d4dff}
+      theme_color:{tags: "good text" , value: 0x32a852ff}
+      theme_color:{tags: "neutral text" , value: 0x3a90bbff}
+      theme_color:{tags: "bad text" , value: 0xcf5242ff}
+      theme_color:{tags: hover , value: 0xff}
+      theme_color:{tags: "focus overlay" , value: 0x2192eb49}
+      theme_color:{tags: "focus border" , value: 0x2392ebff}
+      theme_color:{tags: cursor , value: 0xff}
+      theme_color:{tags: selection , value: 0x2170be51}
+      theme_color:{tags: "inactive background" , value: 0xb}
+      theme_color:{tags: drop_shadow , value: 0x183d8a53}
+      theme_color:{tags: "good_pop background" , value: 0x5c9368ff}
+      theme_color:{tags: "good_pop border" , value: 0x6616ff}
+      theme_color:{tags: "good_pop hover" , value: 0xe3f5d3ff}
+      theme_color:{tags: "good_pop weak text" , value: 0xe3f5d3ff}
+      theme_color:{tags: "bad_pop background" , value: 0xbd5946ff}
+      theme_color:{tags: "bad_pop hover" , value: 0xff825cff}
+      theme_color:{tags: code_default , value: 0xff}
+      theme_color:{tags: code_symbol , value: 0x976b00ff}
+      theme_color:{tags: code_type , value: 0x976b00ff}
+      theme_color:{tags: code_local , value: 0x7fa2ff}
+      theme_color:{tags: code_register , value: 0x6a50caff}
+      theme_color:{tags: code_keyword , value: 0x1f4253ff}
+      theme_color:{tags: code_delimiter_or_operator , value: 0x424b4fff}
+      theme_color:{tags: code_numeric , value: 0xb4500ff}
+      theme_color:{tags: code_numeric_alt_digit_group , value: 0x3c852fff}
+      theme_color:{tags: code_string , value: 0xb4500ff}
+      theme_color:{tags: code_meta , value: 0xe3609aff}
+      theme_color:{tags: code_comment , value: 0x648e5dff}
+      theme_color:{tags: line_info_0 , value: 0xcdb3a5ff}
+      theme_color:{tags: line_info_1 , value: 0xcac5a4ff}
+      theme_color:{tags: line_info_2 , value: 0xafcebaff}
+      theme_color:{tags: line_info_3 , value: 0xacc5d7ff}
+      theme_color:{tags: line_info_4 , value: 0x3c2d25ff}
+      theme_color:{tags: line_info_5 , value: 0x3c3925ff}
+      theme_color:{tags: line_info_6 , value: 0x2e4837ff}
+      theme_color:{tags: line_info_7 , value: 0x2e3d48ff}
+      theme_color:{tags: thread_0 , value: 0xde8e2aff}
+      theme_color:{tags: thread_1 , value: 0x7affff}
+      theme_color:{tags: thread_unwound , value: 0xb2ccd8ff}
+      theme_color:{tags: thread_error , value: 0xb23219ff}
+      theme_color:{tags: breakpoint , value: 0xa72911ff}
+      theme_color:{tags: "floating background" , value: 0xffffffff}
+      theme_color:{tags: "floating background alt" , value: 0xefefefff}
+      theme_color:{tags: "floating background fresh" , value: 0x31393d5f}
+      theme_color:{tags: "floating border" , value: 0xaeaeaeff}
+      theme_color:{tags: "floating scroll_bar background" , value: 0x3b3b3b5f}
+      theme_color:{tags: "floating scroll_bar border" , value: 0x5f5f5f5f}
+      theme_color:{tags: "scroll_bar background" , value: 0xefefefff}
+      theme_color:{tags: "scroll_bar border" , value: 0xb9b9b9ff}
+      theme_color:{tags: "implicit background" , value: 0x00000000}
+      theme_color:{tags: "implicit border" , value: 0x00000000}
+      theme_color:{tags: "hollow background" , value: 0x00000000}
+      theme_color:{tags: "hollow border" , value: 0x1f}
+      theme_color:{tags: "tab background" , value: 0xffffffff}
+      theme_color:{tags: "tab border" , value: 0x2392ebff}
+      theme_color:{tags: "tab inactive background" , value: 0}
+      theme_color:{tags: "tab inactive border" , value: 0x42494eff}
+      theme_color:{tags: "tab auto background" , value: 0xb9d0ffff}
+      theme_color:{tags: "tab auto inactive background" , value: 0xc4cde0ff}
+      theme_color:{tags: "drop_site background" , value: 0xffffff05}
+      theme_color:{tags: "drop_site border" , value: 0xffffff0f}
+      theme_color:{tags: "bad_pop weak text" , value: 0xffffffff}
     }
     ```
   }

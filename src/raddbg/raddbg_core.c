@@ -5780,7 +5780,7 @@ rd_window_frame(void)
             String8 thread_handle_string = d_string_from_handle(scratch.arena, ctrl_entity->handle);
             for(U64 idx = 0; idx < 16; idx += 1)
             {
-              E_Eval rip_eval = e_eval_from_stringf("query:control.%S.call_stack[%I64u]", thread_handle_string, idx);
+              E_Eval rip_eval = e_eval_from_stringf("query:control.%S.call_stack[%I64u].address", thread_handle_string, idx);
               if(rip_eval.irtree.mode != E_Mode_Value)
               {
                 break;

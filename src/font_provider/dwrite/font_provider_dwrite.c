@@ -163,6 +163,8 @@ fp_init(void)
 {
   ProfBeginFunction();
   HRESULT error = 0;
+  F32 default_gamma = 1.5f;
+  F32 default_enhanced_contrast = 1.f;
   
   //- rjf: initialize main state
   {
@@ -191,8 +193,9 @@ fp_init(void)
   //- rjf: make sharp-hinted rendering params
   {
     FLOAT gamma = IDWriteRenderingParams_GetGamma(fp_dwrite_state->base_rendering_params);
-    gamma = 1.f;
     FLOAT enhanced_contrast = IDWriteRenderingParams_GetEnhancedContrast(fp_dwrite_state->base_rendering_params);
+    gamma = default_gamma;
+    enhanced_contrast = default_enhanced_contrast;
     if(fp_dwrite_state->dwrite2_is_supported)
     {
       error = IDWriteFactory2_CreateCustomRenderingParams2((IDWriteFactory2 *)fp_dwrite_state->factory,
@@ -220,8 +223,9 @@ fp_init(void)
   //- rjf: make sharp-unhinted rendering params
   {
     FLOAT gamma = IDWriteRenderingParams_GetGamma(fp_dwrite_state->base_rendering_params);
-    gamma = 1.f;
     FLOAT enhanced_contrast = IDWriteRenderingParams_GetEnhancedContrast(fp_dwrite_state->base_rendering_params);
+    gamma = default_gamma;
+    enhanced_contrast = default_enhanced_contrast;
     if(fp_dwrite_state->dwrite2_is_supported)
     {
       error = IDWriteFactory2_CreateCustomRenderingParams2((IDWriteFactory2 *)fp_dwrite_state->factory,
@@ -249,8 +253,9 @@ fp_init(void)
   //- rjf: make smooth-hinted rendering params
   {
     FLOAT gamma = IDWriteRenderingParams_GetGamma(fp_dwrite_state->base_rendering_params);
-    gamma = 1.f;
     FLOAT enhanced_contrast = IDWriteRenderingParams_GetEnhancedContrast(fp_dwrite_state->base_rendering_params);
+    gamma = default_gamma;
+    enhanced_contrast = default_enhanced_contrast;
     if(fp_dwrite_state->dwrite2_is_supported)
     {
       error = IDWriteFactory2_CreateCustomRenderingParams2((IDWriteFactory2 *)fp_dwrite_state->factory,
@@ -277,7 +282,7 @@ fp_init(void)
   
   //- rjf: make smooth rendering params
   {
-    FLOAT gamma = 1.f;
+    FLOAT gamma = default_gamma;
     FLOAT enhanced_contrast = 0.f;
     if(fp_dwrite_state->dwrite2_is_supported)
     {
