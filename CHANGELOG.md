@@ -1,3 +1,56 @@
+# v0.9.27-alpha
+
+## Debugger Changes
+
+- Fixed an issue which would rarely cause steps to take a long time.
+- Drastically improved memory usage of PDB -> RDI conversion for some
+  workloads, notably PDBs with many small compilation units.
+- Added the ability to disambiguate symbol names by module name, debug info
+  name, or compilation unit name in expressions. This can be done using the
+  usual syntax, e.g. `my_module.dll!foo`, or `my_unit.obj!foo`. `:` can also be
+  used instead of `!`.
+- Added the ability to redirect debug string output to any label on a
+  per-target basis. Those labels can then be evaluated in any watch window or
+  text visualizer. By default, all targets write to `output`, which is
+  automatically visualized by an `Output` tab. But if you want different
+  targets to route their debug output to different buffers, you can name the
+  buffers differently, and then view those in separate text views.
+- Added a `Run To Name` command.
+- Added an `Auto Load Last Project` setting, which will automatically load the
+  most recently loaded project on startup (the old behavior pre-0.9.26). This
+  setting is off by default.
+- Added right-click menus for watch expressions, to easily find them in a
+  memory view, or to break when their value changes.
+- Added preliminary support for symbol servers. First, the debugger can attempt
+  to download debug info for any module via the `Download Module Debug Info`
+  command (also accessible by right-clicking a module). Second, the debugger
+  can be configured to automatically do this for all modules which don't have
+  debug info via the `Auto Download Debug Info` setting. The local cache path
+  and server URLs used by the debugger for downloading symbols are parsed from
+  the `_NT_SYMBOL_PATH` environment variable. If that environment variable is
+  not configured, then it falls back to the defaults of `C:/SymbolCache` and
+  `https://msdl.microsoft.com/download/symbols`.
+- Adjusted the default dark theme.
+- Made several UI visual improvements.
+- Fixed a few issues relating to offline symbol evaluation (evaluation of
+  symbols in debug info when not debugging); this was sometimes preventing
+  function listers (e.g. used in `Go To Name`) from working when not debugging.
+- Fixed the debugger's snap-to-code-location rule when a `Disassembly` tab is
+  occupying the same panel as source code tabs. Previously, the debugger would
+  overly aggressively switch back to source code tabs. Now, it should respect
+  the preference of disassembly correctly.
+- Improved the stability of the step-over-line operation. Our stepping
+  algorithm would sometimes cause spurious (and rarely, non-spurious)
+  access violation exceptions when a thread would try to execute at address
+  `0x38f`. This most regularly surfaced when an exception on one thread (like a
+  breakpoint being hit) would interrupt stepping on another thread. This has
+  been resolved, and stepping in such scenarios should be much more reliable.
+- Fixed some crashes in the PDB -> RDI converter. (#792, #803)
+- Fixed a bug which was sometimes causing a step-over operation to resume the
+  process without catching the target thread after its step completed. (#804)
+- Adjusted evaluation visualizations to include fully qualified symbol names.
+  (#809)
+
 # v0.9.26-alpha
 
 ## Debugger Changes
