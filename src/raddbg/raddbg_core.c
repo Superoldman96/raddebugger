@@ -6579,7 +6579,7 @@ rd_window_frame(void)
           }
           if(!ui_key_match(ui_key_zero(), ws->query_regs->ui_key))
           {
-            query_width_px = is_small ? (ui_top_font_size()*28.f) : (ui_top_font_size()*60.f);
+            query_width_px = is_small ? (ui_top_font_size()*30.f) : (ui_top_font_size()*60.f);
             max_query_height_px = is_small ? (ui_top_font_size()*40.f) : (ui_top_font_size()*80.f);
           }
           F32 query_height_px = max_query_height_px;
@@ -12000,6 +12000,7 @@ rd_frame(void)
           s("commands"),
           s("tab_commands"),
           s("text_pt_commands"),
+          s("disasm_pt_commands"),
           s("text_range_commands"),
           s("memory_eval_commands"),
           s("module_commands"),

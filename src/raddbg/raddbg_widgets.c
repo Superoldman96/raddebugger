@@ -2095,9 +2095,18 @@ rd_code_slice(RD_CodeSliceParams *params, TxtPt *cursor, TxtPt *mark, S64 *prefe
         vaddr = params->line_vaddrs[cursor->line - params->line_num_range.min];
         lines = params->line_infos[cursor->line - params->line_num_range.min];
       }
+      String8 commands_expr;
+      if(vaddr != 0)
+      {
+        commands_expr = txt_pt_match(*cursor, *mark) ? s("query:disasm_pt_commands") : s("query:disasm_range_commands");
+      }
+      else
+      {
+        commands_expr = txt_pt_match(*cursor, *mark) ? s("query:text_pt_commands") : s("query:text_range_commands");
+      }
       rd_cmd(RD_CmdKind_FocusPanel);
       rd_cmd(RD_CmdKind_PushQuery,
-             .expr = txt_pt_match(*cursor, *mark) ? s("query:text_pt_commands") : s("query:text_range_commands"),
+             .expr = commands_expr,
              .do_implicit_root = 1,
              .do_lister = 1,
              .activate_with_single_click = 1,
