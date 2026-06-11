@@ -2,14 +2,77 @@
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
 ////////////////////////////////
-//~ rjf: post-0.9.26 TODO notes
+//~ rjf: evaluation system pass TODO notes
+//
+// The first pass of the debugger's evaluation engine has some significant
+// problems, and sooner rather than later we need to do a pass which addresses
+// them. It's a complicated thing, so I am gathering unstructured notes &
+// comments here:
+//
+// - coupling of some evaluation things to running on the UI thread - for some
+//   things we don't care, e.g. I don't care to evaluate theme colors literally
+//   anywhere except for the UI thread. but, for something like a thread's
+//   call stack, that should pretty unambiguously be accessible via the control
+//   thread (and thus in conditional breakpoints etc.).
+//
+// - whether something is available on the control thread or not, we should be
+//   able to *know* that from the UI thread, so that we can display it clearly.
+//
+// - there is an uncomfortable bifurcation between establishing evaluation
+//   context on the UI thread vs. the control thread. ideally, the common
+//   things (like debug entities) are just common, and there is ~0 extra code.
+//
+// - currently we lump all sorts of "context" things into the same mechanism.
+//   the problem is that a lot of this stuff needs to change *mid-expression*.
+//   for example:
+//
+//   thread.call_stack[1].locals.foo + other_thread.call_stack[2].locals.bar
+//
+//   this requires changing all sorts of things about the context for different
+//   portions of expression bytecode! currently, the only context that we
+//   support changing like this is the 'space'. but there is a lot more
+//   'volatile context' than just the space. so I think instead of "set space"
+//   opcodes, we need (also, or to replace? unclear) a "set context" opcode.
+//
+//   this is all completely distinct from "base context", or whatever we want
+//   to call it, which includes unchanging things, like the set of loaded debug
+//   infos, modules, etc.
+//
+// - we need to be able to disambiguate between *processes* too in expressions.
+//   we can *sort of do this* with addresses, now that we can do
+//   process.memory + 0x1000. but for example if we had a foo.dll in two
+//   processes, we can't disambiguate between the two in identifier resolution.
+//   we can currently do foo.dll!bar, but we'd need to be able to do
+//   `<pid>!foo.dll!bar` too or something.
+//
+// - there are ambiguous cases in the expression language that we need to shake
+//   out, notably because of type views. this is because "$" is overloaded. the
+//   idea was to make it a *chain* of parent expressions, but this seems to be
+//   confusing and/or not working in some cases - the example that found this
+//   was `array(...)` used inside of `rows(...)`, e.g. this:
+//
+//     array(cast(char*)$.data, $.size)
+//
+//   working, but this:
+//
+//     rows($, array(cast(char*)$.data, $.size), some_other_member)
+//
+//   not.
+//
+// - the expression parser, to support C-style syntax, needs identifier
+//   resolution. I took this out before, but that was a mistake, because people
+//   just need to be able to do `(foo)&bar` and have it work. to a dumb
+//   parser without identifier resolution, there is no way to disambiguate that
+//   from a bitwise &. but that is why we need identifier resolution.
+
+////////////////////////////////
+//~ rjf: post-0.9.27 TODO notes
 //
 // [ ] debug info loading retry mechanism, in cases where the load failed, but settings/filesystem state changes -
 //     e.g. turn on automatic downloads, already tried to load symbol server cache file that doesn't exist ->
 //     need to retry
 // [ ] wassim memory bug
 //
-// [ ] symbol server
 // [ ] core dump saving/loading
 //
 // [ ] memory_size(...) view for quickly evaluating memory sizes
@@ -281,6 +344,7 @@
 //     (repro via LOTS of code on one line & halting)
 // [x] unit / module name qualification
 // [x] step-out-of-loop
+// [x] symbol server
 
 ////////////////////////////////
 //~ rjf: Build Options
