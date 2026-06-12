@@ -670,18 +670,20 @@ lnk_serialize_pe_resource_tree(COFF_ObjWriter *obj_writer, PE_ResourceDir *root_
         case PE_ResDataKind_COFF_RESOURCE: {
           // fill out resource header
           COFF_ResourceDataEntry *coff_res = push_array(obj_writer->arena, COFF_ResourceDataEntry, 1);
-          coff_res->data_size              = res->u.coff_res.data.size;
-          coff_res->data_voff              = 0; // relocated
-          coff_res->code_page              = 0; // TODO: whats this for? (lld-link writes zero)
+          coff_res->data_size = res->u.coff_res.data.size;
+          coff_res->data_voff = 0; // relocated
+          coff_res->code_page = 0; // TODO: whats this for?
 
-          // emit symbol for resource data
-          U32 resdat_off = safe_cast_u32(rsrc2->data.total_size);
-          COFF_ObjSymbol *resdat = coff_obj_writer_push_symbol_static(obj_writer, str8_lit("resdat"), resdat_off, rsrc2);
+          if (res->u.coff_res.data.size >= sizeof(U32)) {
+            // emit symbol for resource data
+            U32             resdat_off = safe_cast_u32(rsrc2->data.total_size);
+            COFF_ObjSymbol *resdat     = coff_obj_writer_push_symbol_static(obj_writer, str8_lit("resdat"), resdat_off, rsrc2);
 
-          // emit reloc for 'data_voff'
-          U64 apply_off   = rsrc1->data.total_size + OffsetOf(COFF_ResourceDataEntry, data_voff);
-          U32 apply_off32 = safe_cast_u32(apply_off);
-          coff_obj_writer_section_push_reloc(obj_writer, rsrc1, apply_off32, resdat, COFF_Reloc_X64_Addr32Nb);
+            // emit reloc for 'data_voff'
+            U64 apply_off   = rsrc1->data.total_size + OffsetOf(COFF_ResourceDataEntry, data_voff);
+            U32 apply_off32 = safe_cast_u32(apply_off);
+            coff_obj_writer_section_push_reloc_voff(obj_writer, rsrc1, apply_off32, resdat);
+          }
 
           // push resource entry & data
           str8_list_push(obj_writer->arena, &rsrc1->data, str8_struct(coff_res));
