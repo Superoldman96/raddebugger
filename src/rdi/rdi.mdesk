@@ -1202,7 +1202,7 @@ RDI_EvalOpTable:
   {Skip            3       2 0 0}
   {MemRead         4       1 1 1}
   {RegRead         5       4 0 1}
-  // NOTE(rjf): 6 is free
+  {Unused0         6       0 0 1}
   {FrameOff        7       8 0 1}
   {ModuleOff       8       4 0 1}
   {TLSOff          9       4 0 1}
@@ -1241,7 +1241,7 @@ RDI_EvalOpTable:
   {Convert         42      2 1 1}
   {Pick            43      1 0 1}
   {Pop             44      0 1 0}
-  // NOTE(rjf): 45 is free
+  {Unused1         45      0 0 1}
   {ValueRead       46      1 2 1}
   {ByteSwap        47      1 1 1}
   {CallSiteValue   48      4 0 0}

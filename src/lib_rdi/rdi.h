@@ -423,6 +423,7 @@ RDI_EvalOp_Cond                 = 2,
 RDI_EvalOp_Skip                 = 3,
 RDI_EvalOp_MemRead              = 4,
 RDI_EvalOp_RegRead              = 5,
+RDI_EvalOp_Unused0              = 6,
 RDI_EvalOp_FrameOff             = 7,
 RDI_EvalOp_ModuleOff            = 8,
 RDI_EvalOp_TLSOff               = 9,
@@ -461,6 +462,7 @@ RDI_EvalOp_TruncSigned          = 41,
 RDI_EvalOp_Convert              = 42,
 RDI_EvalOp_Pick                 = 43,
 RDI_EvalOp_Pop                  = 44,
+RDI_EvalOp_Unused1              = 45,
 RDI_EvalOp_ValueRead            = 46,
 RDI_EvalOp_ByteSwap             = 47,
 RDI_EvalOp_CallSiteValue        = 48,
@@ -937,6 +939,7 @@ X(Cond)\
 X(Skip)\
 X(MemRead)\
 X(RegRead)\
+X(Unused0)\
 X(FrameOff)\
 X(ModuleOff)\
 X(TLSOff)\
@@ -975,6 +978,7 @@ X(TruncSigned)\
 X(Convert)\
 X(Pick)\
 X(Pop)\
+X(Unused1)\
 X(ValueRead)\
 X(ByteSwap)\
 X(CallSiteValue)\
@@ -1476,6 +1480,6 @@ RDI_PROC RDI_S32 rdi_eval_op_typegroup_are_compatible(RDI_EvalOp op, RDI_EvalTyp
 RDI_PROC RDI_U8 *rdi_explanation_string_from_eval_conversion_kind(RDI_EvalConversionKind kind, RDI_U64 *size_out);
 
 extern RDI_U16 rdi_section_element_size_table[44];
-extern RDI_U16 rdi_eval_op_ctrlbits_table[52];
+extern RDI_U16 rdi_eval_op_ctrlbits_table[54];
 
 #endif // RDI_H
