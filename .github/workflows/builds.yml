@@ -66,6 +66,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          lfs: true
       - name: build (vs 2022)
         shell: cmd
         run: |
@@ -87,6 +89,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          lfs: true
       - name: Install Dependencies
         shell: bash
         run: |
@@ -126,6 +130,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          lfs: true
       - name: Run
         shell: cmd
         run: |
