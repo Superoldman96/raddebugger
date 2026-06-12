@@ -51,6 +51,15 @@
 - Adjusted evaluation visualizations to include fully qualified symbol names.
   (#809)
 
+## Linker Changes
+- /OPT:REF Fixed a race in the dead-code-elimination pass where the linker
+  sometimes erroneously removed live sections.
+- Fixed a bug where the linker emitted relocations for empty COFF resource entries,
+  which lead to "relocating against symbol that is in a removed section" errors.
+- Added the /RAD_TYPE_SERVER switch to run the type-dedup pass on object files,
+  producing RRT files that can be passed back on the next link to improve
+  linking speed.
+
 # v0.9.26-alpha
 
 ## Debugger Changes
