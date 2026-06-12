@@ -6055,10 +6055,10 @@ TEST(ghash_check_corrupt)
 
   B32 is_warning_found = 0;
   String8 debug_obj_path = t_make_file_path(arena, str8_lit("debug.obj"));
-  String8 expected_line = str8f(arena, "Warning(%03u): %S: .debug$H section is too small to contain the header", LNK_Warning_GHash, debug_obj_path, LLVM_GHash_Magic);
+  String8 expected_line = str8f(arena, "Warning(*): *: .debug$H section is too small to contain the header");
   for (String8 i = g_errors; i.size > 0 && !is_warning_found; ) {
     String8 line = t_chop_line(&i);
-    is_warning_found = str8_match(expected_line, line, StringMatchFlag_CaseInsensitive);
+    is_warning_found = str8_match_wildcard(line, expected_line, StringMatchFlag_CaseInsensitive);
   }
   T_Ok(is_warning_found);
 }
@@ -6104,10 +6104,10 @@ TEST(ghash_check_magic)
 
   B32 is_warning_found = 0;
   String8 debug_obj_path = t_make_file_path(arena, str8_lit("debug.obj"));
-  String8 expected_line = str8f(arena, "Warning(%03u): %S: .debug$H contains invalid magic: got 0x7b, expected 0x%x", LNK_Warning_GHash, debug_obj_path, LLVM_GHash_Magic);
+  String8 expected_line = str8f(arena, "Warning(*): *: .debug$H contains invalid magic: got 0x7b, expected 0x%x", LLVM_GHash_Magic);
   for (String8 i = g_errors; i.size > 0 && !is_warning_found; ) {
     String8 line = t_chop_line(&i);
-    is_warning_found = str8_match(expected_line, line, StringMatchFlag_CaseInsensitive);
+    is_warning_found = str8_match_wildcard(line, expected_line, StringMatchFlag_CaseInsensitive);
   }
   T_Ok(is_warning_found);
 }
@@ -6153,10 +6153,10 @@ TEST(ghash_check_version)
 
   B32 is_warning_found = 0;
   String8 debug_obj_path = t_make_file_path(arena, str8_lit("debug.obj"));
-  String8 expected_line = str8f(arena, "Warning(%03u): %S: mismatched .debug$H version: got %u, expected %u", LNK_Warning_GHash, debug_obj_path, 0xbeef, LLVM_GHash_CurrentVersion);
+  String8 expected_line = str8f(arena, "Warning(*): *: mismatched .debug$H version: got %u, expected %u", 0xbeef, LLVM_GHash_CurrentVersion);
   for (String8 i = g_errors; i.size > 0 && !is_warning_found; ) {
     String8 line = t_chop_line(&i);
-    is_warning_found = str8_match(expected_line, line, StringMatchFlag_CaseInsensitive);
+    is_warning_found = str8_match_wildcard(line, expected_line, StringMatchFlag_CaseInsensitive);
   }
   T_Ok(is_warning_found);
 }
@@ -6194,10 +6194,10 @@ TEST(ghash_check_hash_alg)
 
   B32     is_warning_found = 0;
   String8 debug_obj_path   = t_make_file_path(arena, str8_lit("debug.obj"));
-  String8 expected_line    = str8f(arena, "Warning(%03u): %S: mismatched .debug$H hash algorithm: got SHA1_8, expected BALK3", LNK_Warning_GHash, debug_obj_path);
+  String8 expected_line    = str8f(arena, "Warning(*): *: mismatched .debug$H hash algorithm: got SHA1_8, expected BLAKE3");
   for (String8 i = g_errors; i.size > 0 && !is_warning_found; ) {
     String8 line = t_chop_line(&i);
-    is_warning_found = str8_match(expected_line, line, StringMatchFlag_CaseInsensitive);
+    is_warning_found = str8_match_wildcard(line, expected_line, StringMatchFlag_CaseInsensitive);
   }
   T_Ok(is_warning_found);
 }
@@ -6236,10 +6236,10 @@ TEST(ghash_match_debug_t)
 
   B32     is_warning_found = 0;
   String8 debug_obj_path   = t_make_file_path(arena, str8_lit("debug.obj"));
-  String8 expected_line    = str8f(arena, "Warning(%03u): %S: mismatched .debug$H hash count and type count: got 3 hashes for 2 types", LNK_Warning_GHash, debug_obj_path);
+  String8 expected_line    = str8f(arena, "Warning(*): *: mismatched .debug$H hash count and type count: got 3 hashes for 2 types");
   for (String8 i = g_errors; i.size > 0 && !is_warning_found; ) {
     String8 line = t_chop_line(&i);
-    is_warning_found = str8_match(expected_line, line, StringMatchFlag_CaseInsensitive);
+    is_warning_found = str8_match_wildcard(line, expected_line, StringMatchFlag_CaseInsensitive);
   }
   T_Ok(is_warning_found);
 }

@@ -7,7 +7,7 @@ llvm_string_from_ghash_alg(LLVM_GHashAlg v)
   switch (v) {
   case LLVM_GHashAlg_SHA1:   return str8_lit("SHA1");
   case LLVM_GHashAlg_SHA1_8: return str8_lit("SHA1_8");
-  case LLVM_GHashAlg_BLAKE3: return str8_lit("BALK3");
+  case LLVM_GHashAlg_BLAKE3: return str8_lit("BLAKE3");
   }
   return str8_zero();
 }
