@@ -45,7 +45,7 @@ Test(p2r_determinism)
         String8 rdi_name = str8f(arena, "repeat_%I64u.rdi", repeat_idx);
         String8 rdi_path = str8f(arena, "%S/%S", ctx->artifacts_path, rdi_name);
         str8_list_push(arena, &rdi_paths, rdi_path);
-        String8 cmdl = str8f(arena, "radbin --rdi --deterministic %S --out:%S", pdb_path, rdi_path);
+        String8 cmdl = str8f(arena, "%S --rdi --deterministic %S --out:%S", t_radbin_path(), pdb_path, rdi_path);
         Process process = launch_cmd_line(cmdl);
         TestCheck(!process_match(process_zero(), process));
         process_list_push(arena, &processes, process);
@@ -64,7 +64,7 @@ Test(p2r_determinism)
         String8 rdi_path = n->string;
         String8 dump_path = str8f(arena, "%S.dump", rdi_path);
         str8_list_push(arena, &dump_paths, dump_path);
-        Process process_handle = launch_cmd_linef("radbin --dump --deterministic %S --out:%S", rdi_path, dump_path);
+        Process process_handle = launch_cmd_linef("%S --dump --deterministic %S --out:%S", t_radbin_path(), rdi_path, dump_path);
         TestCheck(!process_match(process_zero(), process_handle));
         process_list_push(arena, &processes, process_handle);
       }
