@@ -164,6 +164,7 @@ typedef enum
   LNK_Input_Lib,
   LNK_Input_Res,
   LNK_Input_Manifest,
+  LNK_Input_RRT,
   LNK_Input_Count
 } LNK_InputType;
 

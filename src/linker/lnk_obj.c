@@ -638,6 +638,15 @@ lnk_try_comdat_props_from_section_number(LNK_Obj *obj, U32 section_number, COFF_
   return 0;
 }
 
+internal COFF_SectionHeader *
+lnk_coff_section_header_from_section_number(LNK_Obj *obj, U64 section_number)
+{
+  Assert(section_number > 0);
+  U64 sect_idx = section_number - 1;
+  COFF_SectionHeader *section_table = str8_deserial_get_raw_ptr(obj->data, obj->header.section_table_range.min, dim_1u64(obj->header.section_table_range));
+  return &section_table[sect_idx];
+}
+
 internal COFF_ParsedSymbol
 lnk_parsed_symbol_from_coff_symbol_idx(LNK_Obj *obj, U64 symbol_idx)
 {

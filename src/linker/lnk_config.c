@@ -121,6 +121,7 @@ global read_only struct
   { "lib",  LNK_Input_Lib },
   { "rlib", LNK_Input_Lib }, // rust libs
   { "res",  LNK_Input_Res },
+  { "rrt",  LNK_Input_RRT },
 };
 
 global read_only struct

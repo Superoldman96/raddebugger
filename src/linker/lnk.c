@@ -5422,8 +5422,9 @@ lnk_run_linker(TP_Context *tp, TP_Arena *arena, LNK_Config *config)
     //
     // CodeView
     //
-    LNK_CodeViewInput cv       = lnk_make_code_view_input(tp, arena, config, debug_info_objs_count, debug_info_objs);
-    LNK_MergedTypes   cv_types = lnk_merge_types(tp, arena, &cv);
+    LNK_RRT_Array     rrt_input = lnk_rrt_array_from_config(arena->v[0], config);
+    LNK_CodeViewInput cv        = lnk_make_code_view_input(tp, arena, config, debug_info_objs_count, debug_info_objs, rrt_input);
+    LNK_MergedTypes   cv_types  = lnk_merge_types(tp, arena, &cv, 0);
 
     //
     // Debug Info
@@ -5659,8 +5660,8 @@ lnk_run_type_server(TP_Context *tp, TP_Arena *arena, LNK_Config *config)
 
   if (debug_t_total_size) {
     // merge & write types
-    LNK_CodeViewInput cv       = lnk_make_code_view_input(tp, arena, config, objs_count, objs);
-    LNK_MergedTypes   cv_types = lnk_merge_types(tp, arena, &cv);
+    LNK_CodeViewInput cv       = lnk_make_code_view_input(tp, arena, config, objs_count, objs, (LNK_RRT_Array){0});
+    LNK_MergedTypes   cv_types = lnk_merge_types(tp, arena, &cv, LNK_MergeTypeFlag_BuildObjTiMap|LNK_MergeTypeFlag_SkipSymbolTypeFixup|LNK_MergeTypeFlag_ExportHashes);
     String8List       pdb      = lnk_build_pdb(tp, arena, str8_zero(), config, 0, &cv, cv_types, LNK_PDB_BuilderFlag_Tpi|LNK_PDB_BuilderFlag_Ipi);
     lnk_write_data_list_to_file_path(config->pdb_name, config->temp_pdb_name, pdb);
 
