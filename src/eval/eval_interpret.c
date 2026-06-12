@@ -360,18 +360,6 @@ e_interpret(String8 bytecode)
         }
       }break;
       
-      case RDI_EvalOp_RegReadDyn:
-      {
-        U64 off  = svals[0].u64;
-        U64 size = bit_size_from_arch(e_interpret_ctx->reg_arch)/8;
-        B32 good_read = e_space_read(e_interpret_ctx->reg_space, &nval, 0, r1u64(off, off+size));
-        if(!good_read)
-        {
-          result.code = E_InterpretationCode_BadRegRead;
-          goto done;
-        }
-      }break;
-      
       case RDI_EvalOp_FrameOff:
       {
         if(e_interpret_ctx->frame_base != 0)
@@ -947,26 +935,6 @@ e_interpret(String8 bytecode)
       case RDI_EvalOp_Pop:
       {
         // do nothing - the pop is handled by the control bits
-      }break;
-      
-      case RDI_EvalOp_Insert:
-      {
-        if(stack_count > imm.u64)
-        {
-          if(imm.u64 > 0)
-          {
-            E_Value tval = stack[stack_count - 1];
-            E_Value *dst = stack + stack_count - 1 - imm.u64;
-            E_Value *shift = dst + 1;
-            MemoryCopy(shift, dst, imm.u64*sizeof(E_Value));
-            *dst = tval;
-          }
-        }
-        else
-        {
-          result.code = E_InterpretationCode_BadOp;
-          goto done;
-        }
       }break;
       
       case RDI_EvalOp_ValueRead:

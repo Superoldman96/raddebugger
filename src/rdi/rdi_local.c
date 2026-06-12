@@ -351,7 +351,6 @@ rdi_string_from_bytecode(Arena *arena, RDI_Arch arch, String8 bc)
         String8     reg_str   = rdi_string_from_reg_code(scratch.arena, arch, reg_code);
         imm_fmt = push_str8f(scratch.arena, "%S+%I64u, Size: %u", reg_str, byte_off, byte_size);
       } break;
-      case RDI_EvalOp_RegReadDyn: break;
       case RDI_EvalOp_FrameOff: {
         imm_fmt = push_str8f(scratch.arena, "%+lld", *(S64 *)imm.str);
       } break;
@@ -426,10 +425,6 @@ rdi_string_from_bytecode(Arena *arena, RDI_Arch arch, String8 bc)
         imm_fmt = push_str8f(scratch.arena, "%u", pick);
       } break;
       case RDI_EvalOp_Pop: break;
-      case RDI_EvalOp_Insert: {
-        U8 insert = *(U8 *)imm.str;
-        imm_fmt = push_str8f(scratch.arena, "%u", insert);
-      } break;
       case RDI_EvalOp_ValueRead: {
         U8 bytes_to_read = *(U8 *)imm.str;
         imm_fmt = push_str8f(scratch.arena, "%u", bytes_to_read);

@@ -1050,13 +1050,6 @@ struct E_CacheNode
   E_CacheBundle bundle;
 };
 
-typedef struct E_CacheLookup E_CacheLookup;
-struct E_CacheLookup
-{
-  E_CacheNode *node;
-  U64 hash;
-};
-
 typedef struct E_CacheSlot E_CacheSlot;
 struct E_CacheSlot
 {
