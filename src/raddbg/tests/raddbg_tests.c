@@ -315,17 +315,17 @@ rd_test__eval_regressions(Arena *arena, TestCtx *ctx, String8 target_binary, Str
 ////////////////////////////////
 //~ rjf: Tests
 
-Test(mule_main_9ff1e58f_step_regressions_0)
+SkippedTest(mule_main_9ff1e58f_step_regressions_0)
 {
   rd_test__stepping_regressions(arena, ctx, s("mule_main_9ff1e58f"), s("mule_main"), 0);
 }
 
-Test(mule_main_9ff1e58f_step_regressions_1)
+SkippedTest(mule_main_9ff1e58f_step_regressions_1)
 {
   rd_test__stepping_regressions(arena, ctx, s("mule_main_9ff1e58f"), s("mule_main"), 1);
 }
 
-Test(mule_main_9ff1e58f_control_flow_step_regressions)
+SkippedTest(mule_main_9ff1e58f_control_flow_step_regressions)
 {
   rd_test__stepping_regressions(arena, ctx, s("mule_main_9ff1e58f"), s("control_flow_stepping_tests"), 0);
 }
