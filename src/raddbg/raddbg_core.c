@@ -13206,9 +13206,9 @@ rd_frame(void)
               for EachNode(n, D_LineNode, lines.first)
               {
                 D_Line line = n->v;
-                String8 line_file_path_relative = path_relative_dst_from_absolute_dst_src(scratch.arena, line.file_path, module->string);
+                String8 line_file_name = str8_skip_last_slash(line.file_path);
                 str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "  {\n");
-                str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "   file_path:  \"%S\"\n", line_file_path_relative);
+                str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "   file_name:  \"%S\"\n", line_file_name);
                 str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "   line_num:   %I64d\n", line.pt.line);
                 str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "   column_num: %I64d\n", line.pt.column);
                 str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "   voff_range: [0x%I64x, 0x%I64x)\n", line.voff_range.min, line.voff_range.max);
