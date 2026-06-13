@@ -5073,6 +5073,193 @@ TEST(debug_p_sig_mismatch)
   T_Ok(found_error);
 }
 
+TEST(pch_sig_fallback)
+{
+  String8 a_obj_file_path = t_make_file_path(arena, str8_lit("a.obj"));
+  String8 b_obj_file_path = t_make_file_path(arena, str8_lit("b.obj"));
+  U32     a_sig           = 0xCAFEBABE;
+  U32     b_sig           = 0xCAFEBABE;
+
+  String8 a_debug_s;
+  {
+    String8List srl;
+    str8_serial_begin(arena, &srl);
+
+    CV_Signature sig = CV_Signature_C13;
+    str8_serial_push_struct(arena, &srl, &sig);
+
+    CV_C13SubSectionHeader *ss_header = str8_serial_push_size(arena, &srl, sizeof(*ss_header));
+    U64 ss_start_off = srl.total_size;
+
+    CV_SymObjName obj_name = {0};
+    obj_name.sig = a_sig;
+    String8 obj_name_string = a_obj_file_path;
+    str8_serial_push_u16(arena, &srl, sizeof(CV_SymKind) + sizeof(obj_name) + obj_name_string.size + 1);
+    str8_serial_push_u16(arena, &srl, CV_SymKind_OBJNAME);
+    str8_serial_push_struct(arena, &srl, &obj_name);
+    str8_serial_push_cstr(arena, &srl, obj_name_string);
+    str8_serial_push_align(arena, &srl, CV_SymbolAlign);
+
+    String8 comp3_data = cv_make_comp3(arena,
+                                       0,
+                                       CV_Language_C,
+                                       CV_Arch_X64,
+                                       /* ver_fe_major */ 0,
+                                       /* ver_fe_minor */ 0,
+                                       /* ver_fe_build */ 0,
+                                       /* ver_feqfe    */ 0,
+                                       /* ver_major    */ 14,
+                                       /* ver_minor    */ 36,
+                                       /* ver_build    */ 32537,
+                                       /* ver_qfe      */ 0,
+                                       str8_lit(BUILD_TITLE));
+    str8_serial_push_u16(arena, &srl, sizeof(CV_SymKind) + comp3_data.size);
+    str8_serial_push_u16(arena, &srl, CV_SymKind_COMPILE3);
+    str8_serial_push_string(arena, &srl, comp3_data);
+    str8_serial_push_align(arena, &srl, CV_SymbolAlign);
+
+    ss_header->kind = CV_C13SubSectionKind_Symbols;
+    ss_header->size = srl.total_size - ss_start_off;
+    str8_serial_push_align(arena, &srl, CV_C13SubSectionAlign);
+
+    a_debug_s = str8_serial_end(arena, &srl);
+  }
+  String8 a_debug_p;
+  {
+    String8List srl;
+    str8_serial_begin(arena, &srl);
+    
+    // signature
+    CV_Signature sig = CV_Signature_C13;
+    str8_serial_push_struct(arena, &srl, &sig);
+
+    // duplicate in a.obj
+    CV_LeafPointer ptr = { .itype = CV_BasicType_VOID };
+    str8_serial_push_u16(arena, &srl, sizeof(CV_LeafKind) + sizeof(ptr));
+    str8_serial_push_u16(arena, &srl, CV_LeafKind_POINTER);
+    str8_serial_push_struct(arena, &srl, &ptr);
+    str8_serial_push_align(arena, &srl, CV_LeafAlign);
+
+    // unique procedure type
+    CV_LeafProcedure proc = { .ret_itype = 0x1000, .call_kind = CV_CallKind_NearPascal };
+    str8_serial_push_u16(arena, &srl, sizeof(CV_LeafKind) + sizeof(proc));
+    str8_serial_push_u16(arena, &srl, CV_LeafKind_PROCEDURE);
+    str8_serial_push_struct(arena, &srl, &proc);
+    str8_serial_push_align(arena, &srl, CV_LeafAlign);
+
+    // PCH ender
+    CV_LeafEndPreComp endprecomp = { .sig = a_sig };
+    str8_serial_push_u16(arena, &srl, sizeof(CV_LeafKind) + sizeof(endprecomp));
+    str8_serial_push_u16(arena, &srl, CV_LeafKind_ENDPRECOMP);
+    str8_serial_push_struct(arena, &srl, &endprecomp);
+    str8_serial_push_align(arena, &srl, CV_LeafAlign);
+
+    a_debug_p = str8_serial_end(arena, &srl);
+  }
+
+  String8 b_debug_s;
+  {
+    String8List srl;
+    str8_serial_begin(arena, &srl);
+
+    CV_Signature sig = CV_Signature_C13;
+    str8_serial_push_struct(arena, &srl, &sig);
+
+    CV_C13SubSectionHeader *ss_header = str8_serial_push_size(arena, &srl, sizeof(*ss_header));
+    U64 ss_start_off = srl.total_size;
+
+    CV_SymObjName obj_name = {0};
+    obj_name.sig = b_sig;
+    String8 obj_name_string = a_obj_file_path;
+    str8_serial_push_u16(arena, &srl, sizeof(CV_SymKind) + sizeof(obj_name) + obj_name_string.size + 1);
+    str8_serial_push_u16(arena, &srl, CV_SymKind_OBJNAME);
+    str8_serial_push_struct(arena, &srl, &obj_name);
+    str8_serial_push_cstr(arena, &srl, obj_name_string);
+    str8_serial_push_align(arena, &srl, CV_SymbolAlign);
+
+    String8 comp3_data = cv_make_comp3(arena,
+                                       0,
+                                       CV_Language_C,
+                                       CV_Arch_X64,
+                                       /* ver_fe_major */ 0,
+                                       /* ver_fe_minor */ 0,
+                                       /* ver_fe_build */ 0,
+                                       /* ver_feqfe    */ 0,
+                                       /* ver_major    */ 14,
+                                       /* ver_minor    */ 36,
+                                       /* ver_build    */ 32537,
+                                       /* ver_qfe      */ 0,
+                                       str8_lit(BUILD_TITLE));
+    str8_serial_push_u16(arena, &srl, sizeof(CV_SymKind) + comp3_data.size);
+    str8_serial_push_u16(arena, &srl, CV_SymKind_COMPILE3);
+    str8_serial_push_string(arena, &srl, comp3_data);
+    str8_serial_push_align(arena, &srl, CV_SymbolAlign);
+
+    ss_header->kind = CV_C13SubSectionKind_Symbols;
+    ss_header->size = srl.total_size - ss_start_off;
+    str8_serial_push_align(arena, &srl, CV_C13SubSectionAlign);
+
+    b_debug_s = str8_serial_end(arena, &srl);
+  }
+
+  String8 b_debug_t;
+  {
+    String8List srl;
+    str8_serial_begin(arena, &srl);
+
+    CV_Signature sig = CV_Signature_C13;
+    str8_serial_push_struct(arena, &srl, &sig);
+
+    String8 corrupt_pch_path = str8_lit("corrupt-pch-file-path.obj");
+
+    CV_LeafPreComp precomp = { .start_index = CV_MinComplexTypeIndex, .count = 2, sig = b_sig };
+    str8_serial_push_u16(arena, &srl, sizeof(CV_LeafKind) + sizeof(precomp) + corrupt_pch_path.size + 1);
+    str8_serial_push_u16(arena, &srl, CV_LeafKind_PRECOMP);
+    str8_serial_push_struct(arena, &srl, &precomp);
+    str8_serial_push_cstr(arena, &srl, corrupt_pch_path);
+    str8_serial_push_align(arena, &srl, CV_LeafAlign);
+
+    CV_LeafPointer ptr = { .itype = CV_BasicType_VOID };
+    str8_serial_push_u16(arena, &srl, sizeof(CV_LeafKind) + sizeof(CV_LeafPointer));
+    str8_serial_push_u16(arena, &srl, CV_LeafKind_POINTER);
+    str8_serial_push_struct(arena, &srl, &ptr);
+    str8_serial_push_align(arena, &srl, CV_LeafAlign);
+
+    CV_LeafProcedure proc = { .ret_itype = 0x1000, .call_kind = CV_CallKind_NearC };
+    str8_serial_push_u16(arena, &srl, sizeof(CV_LeafKind) + sizeof(CV_LeafProcedure));
+    str8_serial_push_u16(arena, &srl, CV_LeafKind_PROCEDURE);
+    str8_serial_push_struct(arena, &srl, &proc);
+    str8_serial_push_align(arena, &srl, CV_LeafAlign);
+
+    b_debug_t = str8_serial_end(arena, &srl);
+  }
+
+  String8 a_obj = t_coff_from_def_obj(arena, (T_COFF_DefObj){
+    .machine = T_COFF_DefSetMachine(X64),
+    .sections = (T_COFF_DefSection[]){
+      { "debug_p", ".debug$P", a_debug_p, .flags = "r:data@1", .raw_flags = COFF_SectionFlag_MemDiscardable },
+      { "debug_s", ".debug$S", a_debug_s, .flags = "r:data@1", .raw_flags = COFF_SectionFlag_MemDiscardable },
+      {0}
+    }
+  });
+
+  String8 b_obj = t_coff_from_def_obj(arena, (T_COFF_DefObj){
+    .machine = T_COFF_DefSetMachine(X64),
+    .sections = (T_COFF_DefSection[]){
+      { "debug_t", ".debug$T", b_debug_t, .flags = "r:data@1", .raw_flags = COFF_SectionFlag_MemDiscardable },
+      { "debug_s", ".debug$S", b_debug_s, .flags = "r:data@1", .raw_flags = COFF_SectionFlag_MemDiscardable },
+      {0}
+    }
+  });
+
+  T_Ok(write_data_to_file_path(a_obj_file_path, a_obj));
+  T_Ok(write_data_to_file_path(b_obj_file_path, b_obj));
+  T_Ok(t_write_entry_obj());
+
+  t_invoke_linkerf("/subsystem:console /entry:entry /out:a.exe /debug:full a.obj b.obj entry.obj");
+  T_Ok(g_last_exit_code == 0);
+}
+
 TEST(debug_p_and_debug_t_in_obj)
 {
   U32     pch_sig      = 0xCAFEBABE;

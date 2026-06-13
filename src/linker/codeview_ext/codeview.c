@@ -84,7 +84,7 @@ internal U64
 cv_read_leaf(String8 raw_data, U64 off, U64 align, CV_Leaf *leaf_out)
 {
   // do we have enough bytes to read header?
-  Assert(raw_data.size >= sizeof(CV_LeafHeader));
+  if (raw_data.size < sizeof(CV_LeafHeader)) { return 0; }
 
   U8 *leaf_ptr = raw_data.str + off;
 
@@ -92,17 +92,18 @@ cv_read_leaf(String8 raw_data, U64 off, U64 align, CV_Leaf *leaf_out)
   CV_LeafHeader header = { .v = memory_read32(leaf_ptr) };
 
   // leaf size must have enough bytes for the kind enum
-  Assert(header.size >= sizeof(CV_LeafKind));
+  if (header.size < sizeof(CV_LeafKind)) { return 0; }
 
   // do we have enough bytes to read leaf data?
-  Assert(sizeof(CV_LeafSize) + header.size <= raw_data.size);
+  if (sizeof(CV_LeafSize) + header.size > raw_data.size) { return 0; }
 
   // fill out leaf
   leaf_out->kind = header.kind;
   leaf_out->data = str8(leaf_ptr + sizeof(CV_LeafHeader), header.size - sizeof(CV_LeafKind));
 
   U64 leaf_size = AlignPow2(sizeof(CV_LeafHeader) + leaf_out->data.size, align);
-  Assert(leaf_size <= raw_data.size);
+  if (leaf_size > raw_data.size) { return 0; }
+
   return leaf_size;
 }
 
@@ -1161,10 +1162,9 @@ count_stop:
 
   ProfBegin("store leaf offsets");
   debug_t.offsets = push_array_no_zero(arena, U32, debug_t.count);
-  for (U64 cursor = 0, idx = 0; cursor < data.size;) {
-    debug_t.offsets[idx++] = cursor;
-    CV_Leaf leaf;
-    TryRead(cv_read_leaf(data, cursor, align, &leaf), cursor, store_stop);
+  for (U64 cursor = 0, idx = 0; cursor < data.size && idx < debug_t.count; idx += 1) {
+    debug_t.offsets[idx] = cursor;
+    TryRead(cv_read_leaf(data, cursor, align, &(CV_Leaf){0}), cursor, store_stop);
   }
 store_stop:
 

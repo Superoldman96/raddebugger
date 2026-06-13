@@ -632,21 +632,6 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
     }
   }
 
-  // pre-build PCH obj hash map (obj_path, obj_idx)
-  String8 work_dir = get_current_path(scratch.arena);
-  HashMap debug_p_hm = {0};
-  for EachIndex(obj_idx, obj_count) {
-    LNK_Obj *obj = obj_arr[obj_idx];
-    if (obj->debug_p_sect_idx < obj->header.section_count_no_null) {
-      String8 obj_path = path_absolute_dst_from_relative_dst_src(scratch.arena, obj_arr[obj_idx]->path, work_dir);
-      if (hash_map_search_path_u64(&debug_p_hm, obj_path)) {
-        lnk_error_obj(LNK_Warning_DuplicateObjPath, obj_arr[obj_idx], "duplicate obj path %S", obj_path);
-      } else {
-        hash_map_push_path_u64(scratch.arena, &debug_p_hm, obj_path, obj_idx);
-      }
-    }
-  }
-
   ProfBegin("Apply RRT to Objs");
 
   // hash map (obj path, obj idx)
@@ -698,6 +683,7 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
   input.debug_s_list_arr = lnk_collect_obj_sections(tp, tp_arena, obj_count, obj_arr, str8_lit(".debug$S"), 0);
   ProfEnd();
 
+  // profiler info
   if (lnk_get_log_status(LNK_Log_Debug) || PROFILE_TELEMETRY) {
     U64 total_debug_s_size = 0, total_debug_t_size = 0, total_debug_p_size = 0, total_debug_h_size = 0;
     for EachIndex(obj_idx, obj_count) {
@@ -745,41 +731,48 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
   ProfBegin("Parse CodeView");
   CV_DebugT *debug_p_arr;
   {
+    // parse .debug$S
     input.debug_s_arr = push_array(tp_arena->v[0], CV_DebugS, input.obj_count);
     tp_for_parallel_prof(tp, tp_arena, obj_count, lnk_parse_debug_s_task, &input, "Parse .debug$S");
 
+    // collect .debug$P and .debug$T
     String8Array *raw_debug_p_arr = push_array(scratch.arena, String8Array, obj_count);
     String8Array *raw_debug_t_arr = push_array(scratch.arena, String8Array, obj_count);
     for EachIndex(obj_idx, obj_count) {
       LNK_Obj *obj = obj_arr[obj_idx];
 
       if (obj->debug_t_sect_idx < obj->header.section_count_no_null) {
-        LNK_ObjSection section = lnk_obj_section_from_sect_idx(obj, obj->debug_t_sect_idx);
+        LNK_ObjSection debug_t_sect = lnk_obj_section_from_sect_idx(obj, obj->debug_t_sect_idx);
         raw_debug_t_arr[obj_idx].count = 1;
         raw_debug_t_arr[obj_idx].v     = push_array(scratch.arena, String8, 1);
-        raw_debug_t_arr[obj_idx].v[0]  = str8_substr(obj->data, section.frange);
+        raw_debug_t_arr[obj_idx].v[0]  = str8_substr(obj->data, debug_t_sect.frange);
       }
+
       if (obj->debug_p_sect_idx < obj->header.section_count_no_null) {
-        LNK_ObjSection section = lnk_obj_section_from_sect_idx(obj, obj->debug_p_sect_idx);
+        LNK_ObjSection debug_p_sect = lnk_obj_section_from_sect_idx(obj, obj->debug_p_sect_idx);
         raw_debug_p_arr[obj_idx].count = 1;
         raw_debug_p_arr[obj_idx].v     = push_array(scratch.arena, String8, 1);
-        raw_debug_p_arr[obj_idx].v[0]  = str8_substr(obj->data, section.frange);
+        raw_debug_p_arr[obj_idx].v[0]  = str8_substr(obj->data, debug_p_sect.frange);
       }
     }
 
     LNK_ParseCvTypes parse_types = { .input = &input };
+
+    // parse .debug$P
     debug_p_arr = push_array(tp_arena->v[0], CV_DebugT, obj_count);
     parse_types.raw_types = raw_debug_p_arr;
     parse_types.out_types = debug_p_arr;
     tp_for_parallel_prof(tp, 0,        obj_count, lnk_strip_debug_t_sig_task, &parse_types, "Strip .debug$P");
     tp_for_parallel_prof(tp, tp_arena, obj_count, lnk_parse_debug_t_task,     &parse_types, "Parse .debug$P");
 
+    // parse .debug$T
     input.debug_t_arr     = push_array(tp_arena->v[0], CV_DebugT, obj_count);
     parse_types.raw_types = raw_debug_t_arr;
     parse_types.out_types = input.debug_t_arr;
     tp_for_parallel_prof(tp, 0,        obj_count, lnk_strip_debug_t_sig_task, &parse_types, "Strip .debug$T");
     tp_for_parallel_prof(tp, tp_arena, obj_count, lnk_parse_debug_t_task,     &parse_types, "Parse .debug$T");
 
+    // parse .debug$H
     input.debug_h_arr = push_array(tp_arena->v[0], CV_DebugH, input.obj_count);
     if (config->ghash) {
       tp_for_parallel_prof(tp, tp_arena, obj_count, lnk_parse_debug_h_task, &input, "Parse .debug$H");
@@ -961,6 +954,40 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
  
   ProfBegin("Set up PCH");
   {
+    // pre-build PCH obj hash map (obj_path, obj_idx)
+    HashMap debug_p_hm_path = {0};
+    HashMap debug_p_hm_sig  = {0};
+    for EachIndex(i, input.debug_p_indices.count) {
+      U64      obj_idx = input.debug_p_indices.v[i];
+      LNK_Obj *obj     = obj_arr[obj_idx];
+
+      // register PCH signature
+      CV_DebugT debug_p = input.debug_t_arr[obj_idx];
+      if (debug_p.count > 0) {
+        CV_Leaf lf = cv_debug_t_get_leaf(&debug_p, debug_p.count - 1);
+        if (lf.kind == CV_LeafKind_ENDPRECOMP && lf.data.size <= sizeof(CV_LeafEndPreComp)) {
+          CV_LeafEndPreComp *ender = str8_deserial_get_raw_ptr(lf.data, 0, sizeof(*ender));
+          if (ender->sig) {
+            U64 *extant_obj_idx = hash_map_search_u64_u64(&debug_p_hm_sig, ender->sig);
+            if (extant_obj_idx == 0) {
+              hash_map_push_u64_u64(scratch.arena, &debug_p_hm_sig, ender->sig, obj_idx);
+            } else {
+              LNK_Obj *extant_obj = obj_arr[*extant_obj_idx];
+              lnk_log(LNK_Log_Debug, "%S: PCH signature is already defined in %S", lnk_loc_from_obj(scratch.arena, obj), lnk_loc_from_obj(scratch.arena, extant_obj));
+            }
+          }
+        }
+      }
+
+      // register PCH path
+      String8 obj_path = path_absolute_dst_from_relative_dst_src(scratch.arena, obj_arr[obj_idx]->path, config->work_dir);
+      if (hash_map_search_path_u64(&debug_p_hm_path, obj_path)) {
+        lnk_error_obj(LNK_Warning_DuplicateObjPath, obj, "duplicate obj path %S", obj_path);
+      } else {
+        hash_map_push_path_u64(scratch.arena, &debug_p_hm_path, obj_path, obj_idx);
+      }
+    }
+
     for EachIndex(i, input.int_obj_indices.count) {
       U64        obj_idx = input.int_obj_indices.v[i];
       CV_DebugT *debug_t = &input.debug_t_arr[obj_idx];
@@ -970,15 +997,18 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
 
       // find PCH obj
       CV_PrecompInfo  precomp             = cv_precomp_info_from_leaf(cv_debug_t_get_leaf(debug_t, 0));
-      String8         obj_path            = path_absolute_dst_from_relative_dst_src(scratch.arena, precomp.obj_name, work_dir);
-      U64            *debug_p_obj_idx_ptr = hash_map_search_path_u64(&debug_p_hm, obj_path);
+      String8         obj_path            = path_absolute_dst_from_relative_dst_src(scratch.arena, precomp.obj_name, config->work_dir);
+      U64            *debug_p_obj_idx_ptr = hash_map_search_path_u64(&debug_p_hm_path, obj_path);
+      if (debug_p_obj_idx_ptr == 0) {
+        debug_p_obj_idx_ptr = hash_map_search_u64_u64(&debug_p_hm_sig, precomp.sig);
+      }
 
       // try alternative directory for the PCH
       if (debug_p_obj_idx_ptr == 0) {
         String8 obj_name = str8_skip_last_slash(obj_path);
         for EachNode(alt_dir_n, String8Node, config->alt_pch_dirs.first) {
           String8 alt_obj_path = str8f(scratch.arena, "%S/%S", alt_dir_n->string, obj_name);
-          debug_p_obj_idx_ptr = hash_map_search_path_u64(&debug_p_hm, alt_obj_path);
+          debug_p_obj_idx_ptr = hash_map_search_path_u64(&debug_p_hm_path, alt_obj_path);
           if (debug_p_obj_idx_ptr) { break; }
         }
       }
