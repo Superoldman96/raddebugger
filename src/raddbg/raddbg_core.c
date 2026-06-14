@@ -17451,6 +17451,7 @@ rd_frame(void)
     ////////////////////////////
     //- rjf: process debug engine events
     //
+    B32 did_session_start = 0;
     for(D_EventNode *n = engine_events.first; n != 0; n = n->next)
     {
       D_Event *evt = &n->v;
@@ -17462,8 +17463,9 @@ rd_frame(void)
           D_EntityArray all_processes = d_entity_array_from_kind(D_EntityKind_Process);
           
           // rjf: no processes before this one -> new session
-          if(process_count_pre_tick == 0 && all_processes.count != 0)
+          if(process_count_pre_tick == 0 && all_processes.count != 0 && !did_session_start)
           {
+            did_session_start = 1;
             D_Entity *process = all_processes.v[0];
             CFG_Node *target = cfg_node_from_id(process->src_msg_id);
             
