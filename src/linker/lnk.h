@@ -311,6 +311,13 @@ typedef struct
 
 typedef struct
 {
+  LNK_MergedTypes *cv_types;
+  String8         *type_data_out;
+  Rng1U64         *type_data_ranges_out;
+} LNK_RRTTypeDataSerializer;
+
+typedef struct
+{
   RDIM_BakeResults   bake_results;
   LNK_Config        *config;
   String8            pdb_data;

@@ -368,6 +368,7 @@ typedef struct LNK_Config
   String8                     temp_pdb_name;
   String8                     temp_rad_debug_name;
   String8                     temp_rad_chunk_map_name;
+  String8                     temp_type_server_name;
   String8                     delay_load_helper_name;
   String8List                 remove_sections;
   LNK_IO_Flags                io_flags;
@@ -384,8 +385,8 @@ typedef struct LNK_Config
   LNK_SwitchState             map_lines_for_unresolved_symbols;
   String8List                 alt_pch_dirs;
   LLVM_GHashAlg               type_hash_alg;
+  String8                     type_server_name;
   LNK_SwitchState             type_server;
-  String8List                 type_server_match_obj;
 } LNK_Config;
 
 // --- MSVC Error Codes --------------------------------------------------------

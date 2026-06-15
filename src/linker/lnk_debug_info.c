@@ -571,22 +571,22 @@ lnk_rrt_from_string(Arena *arena, String8 rrt_data, String8 path, LNK_RRT *rrt_o
 
   // fill out result
   if (rrt_out) {
-    rrt_out->path              = path;
-    rrt_out->type_data_raw     = type_data_raw;
-    rrt_out->type_hashes       = type_hashes;
+    rrt_out->path                = path;
+    rrt_out->type_data_raw       = type_data_raw;
+    rrt_out->type_hashes         = type_hashes;
     MemoryCopyArray(rrt_out->type_data_ranges, type_data_ranges);
     MemoryCopyArray(rrt_out->type_data,        type_data);
     MemoryCopyArray(rrt_out->ti_ranges,        ti_ranges);
-    rrt_out->obj_count         = obj_count;
-    rrt_out->obj_leaf_counts   = obj_leaf_counts;
-    rrt_out->obj_time_stamps   = obj_time_stamps;
-    rrt_out->obj_ti_ranges     = obj_ti_ranges;
-    rrt_out->obj_ti_maps       = obj_ti_maps;
-    rrt_out->obj_ti_ranges     = obj_ti_ranges;
-    rrt_out->obj_ti_maps       = obj_ti_maps;
-    rrt_out->obj_paths         = obj_paths;
-    rrt_out->obj_pch_ti_ranges = obj_pch_ti_ranges;
-    rrt_out->obj_pch_indices   = obj_pch_indices;
+    rrt_out->obj_count           = obj_count;
+    rrt_out->obj_leaf_counts     = obj_leaf_counts;
+    rrt_out->obj_time_stamps     = obj_time_stamps;
+    rrt_out->obj_ti_ranges       = obj_ti_ranges;
+    rrt_out->obj_ti_maps         = obj_ti_maps;
+    rrt_out->obj_ti_ranges       = obj_ti_ranges;
+    rrt_out->obj_ti_maps         = obj_ti_maps;
+    rrt_out->obj_paths           = obj_paths;
+    rrt_out->obj_pch_ti_ranges   = obj_pch_ti_ranges;
+    rrt_out->obj_pch_indices     = obj_pch_indices;
   }
 
   is_ok = 1;

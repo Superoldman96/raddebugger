@@ -73,7 +73,7 @@ global read_only LNK_CmdSwitch g_cmd_switch_map[] =
   { LNK_CmdSwitch_Rad_MemoryMapFiles,               0, "RAD_MEMORY_MAP_FILES",                 "[:{NO|READ_ONLY|READ_WRITE}]", "When enabled, files are memory-mapped instead of being read entirely on request." },
   { LNK_CmdSwitch_Rad_BootMode,                     0, "RAD_BOOT_MODE",                        "[:LINKER|TYPE_SERVER]", "Overrides default boot program."                                      },
   { LNK_CmdSwitch_Rad_Debug,                        0, "RAD_DEBUG",                            "[:NO]",     "Emit RAD debug info file."                                                        },
-  { LNK_CmdSwitch_Rad_DebugAltPath,                 0, "RAD_DEBUGALTPATH",                     ":PATH",     "Alternative output path fof the RDI."                                             },
+  { LNK_CmdSwitch_Rad_DebugAltPath,                 0, "RAD_DEBUGALTPATH",                     ":PATH",     "Alternative output path for the RDI."                                             },
   { LNK_CmdSwitch_Rad_DebugName,                    0, "RAD_DEBUG_NAME",                       ":FILENAME", "Set file name for RAD debug info file."                                           },
   { LNK_CmdSwitch_Rad_DelayBind,                    0, "RAD_DELAY_BIND",                       "[:NO]",     "Emit bindable imports."                                                           },
   { LNK_CmdSwitch_Rad_DoMerge,                      0, "RAD_DO_MERGE",                         "[:NO]",     "Set whether the linker should execute /MERGE."                                    },
@@ -104,8 +104,7 @@ global read_only LNK_CmdSwitch g_cmd_switch_map[] =
   { LNK_CmdSwitch_Rad_Workers,                      0, "RAD_WORKERS",                          ":#",        "Set number of workers created in the pool. Number is capped at 1024. When /RAD_SHARED_THREAD_POOL is specified this number cant exceed /RAD_SHARED_THREAD_POOL_MAX_WORKERS." },
   { LNK_CmdSwitch_Rad_WorkDir,                      0, "RAD_WORK_DIR",                         ":PATH",     "Working directory used for stable debug paths."                                   },
 
-  { LNK_CmdSwitch_RadTypeServer,                   0, "RAD_TYPE_SERVER",           "",          "Boot in type server mode." },
-  { LNK_CmdSwitch_RadTypeServer_MatchObj,          0, "RAD_TYPE_SERVER_MATCH_OBJ", ":OBJ_PATH", "Obj paths that match OBJ_PATH have their type server replaced." },
+  { LNK_CmdSwitch_RadTypeServer,                   0, "RAD_TYPE_SERVER", ":FILENAME", "Merge types and store them in the specified file. The filename must have the .rrt extension." },
 
   { LNK_CmdSwitch_Help, 0, "HELP", "", "" },
   { LNK_CmdSwitch_Help, 0, "?",    "", "" },
@@ -1119,13 +1118,16 @@ lnk_apply_write_temp_files(Arena *arena, LNK_Config *config)
     config->temp_rad_chunk_map_name = push_str8f(arena, "%S.tmp%x", config->rad_chunk_map_name, config->time_stamp);
   }
   if (config->out_path.size) {
-    config->temp_out_path = push_str8f(arena, "%S.tmp%x", config->out_path,           config->time_stamp);
+    config->temp_out_path = push_str8f(arena, "%S.tmp%x", config->out_path, config->time_stamp);
   }
   if (config->pdb_name.size) {
-  config->temp_pdb_name = push_str8f(arena, "%S.tmp%x", config->pdb_name,           config->time_stamp);
+    config->temp_pdb_name = push_str8f(arena, "%S.tmp%x", config->pdb_name, config->time_stamp);
   }
   if (config->rad_debug_name.size) {
-    config->temp_rad_debug_name = push_str8f(arena, "%S.tmp%x", config->rad_debug_name,     config->time_stamp);
+    config->temp_rad_debug_name = push_str8f(arena, "%S.tmp%x", config->rad_debug_name, config->time_stamp);
+  }
+  if (config->type_server_name.size) {
+    config->temp_type_server_name = push_str8f(arena, "%S.tmp%x", config->type_server_name, config->time_stamp); 
   }
 }
 
@@ -2168,16 +2170,18 @@ lnk_apply_cmd_option_to_config(LNK_Config *config, String8 cmd_name, String8List
   } break;
 
   case LNK_CmdSwitch_RadTypeServer: {
-    if (lnk_cmd_switch_parse_flag(obj, cmd_switch, value_strings, &config->type_server)) {
-      if (config->type_server == LNK_SwitchState_Yes) {
-        config->boot_mode = LNK_BootMode_TypeServer;
-      }
-    }
-  } break;
+    lnk_cmd_switch_parse_string_copy(config->arena, obj, cmd_switch, value_strings, &config->type_server_name);
 
-  case LNK_CmdSwitch_RadTypeServer_MatchObj: {
-    String8List value_strings_copy = str8_list_copy(config->arena, &value_strings);
-    str8_list_concat_in_place(&config->type_server_match_obj, &value_strings_copy);
+    if (config->type_server_name.size) {
+      String8 ext = str8_postfix(config->type_server_name, s("rrt").size);
+      if (str8_matchi(ext, s("rrt"))) {
+        config->boot_mode = LNK_BootMode_TypeServer;
+      } else {
+        lnk_error_cmd_switch(LNK_Error_Cmdl, obj, cmd_switch, "missing .rrt file extension after type server name %S", config->type_server_name);
+      }
+    } else {
+      lnk_error_cmd_switch(LNK_Error_Cmdl, obj, cmd_switch, "missing type server file path");
+    }
   } break;
   }
 
@@ -2415,10 +2419,7 @@ lnk_config_init(LNK_CmdLine cmd_line)
 
   // create temporary files names
   if (config->write_temp_files == LNK_SwitchState_Yes) {
-    config->temp_rad_chunk_map_name = push_str8f(arena, "%S.tmp%x", config->rad_chunk_map_name, config->time_stamp);
-    config->temp_out_path           = push_str8f(arena, "%S.tmp%x", config->out_path  ,         config->time_stamp);
-    config->temp_pdb_name           = push_str8f(arena, "%S.tmp%x", config->pdb_name,           config->time_stamp);
-    config->temp_rad_debug_name     = push_str8f(arena, "%S.tmp%x", config->rad_debug_name,     config->time_stamp);
+    lnk_apply_write_temp_files(arena, config);
   }
 
   scratch_end(scratch);

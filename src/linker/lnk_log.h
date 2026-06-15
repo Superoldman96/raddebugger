@@ -3,18 +3,24 @@
 
 #pragma once
 
+#define LNK_LogType_XList \
+  X(Debug)                \
+  X(Paranoid)             \
+  X(InputObj)             \
+  X(InputLib)             \
+  X(IO_Read)              \
+  X(IO_Write)             \
+  X(SizeBreakdown)        \
+  X(LinkStats)            \
+  X(Timers)               \
+  X(Links)
+
 typedef enum
 {
   LNK_Log_Null,
-  LNK_Log_Debug,
-  LNK_Log_InputObj,
-  LNK_Log_InputLib,
-  LNK_Log_IO_Read,
-  LNK_Log_IO_Write,
-  LNK_Log_SizeBreakdown,
-  LNK_Log_LinkStats,
-  LNK_Log_Timers,
-  LNK_Log_Links, 
+#define X(name, ...) LNK_Log_##name,
+  LNK_LogType_XList
+#undef X
   LNK_Log_Count
 } LNK_LogType;
 

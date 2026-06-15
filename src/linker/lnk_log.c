@@ -191,29 +191,9 @@ lnk_log(LNK_LogType type, char *fmt, ...)
 internal LNK_LogType
 lnk_log_type_from_string(String8 string)
 {
-  static struct {
-    char       *name;
-    LNK_LogType type;
-  } map[] = {
-    "Null",          LNK_Log_Null,
-    "Debug",         LNK_Log_Debug,
-    "InputObj",      LNK_Log_InputObj,
-    "InputLib",      LNK_Log_InputLib,
-    "IO_Read",       LNK_Log_IO_Read,
-    "IO_Write",      LNK_Log_IO_Write,
-    "SizeBreakdown", LNK_Log_SizeBreakdown,
-    "LinkStats",     LNK_Log_LinkStats,
-    "Timers",        LNK_Log_Timers,
-    "Links",         LNK_Log_Links,
-  };
-  Assert(ArrayCount(map) == LNK_Log_Count);
-
-  for EachElement(i, map) {
-    if (str8_match(str8_cstring(map[i].name), string, StringMatchFlag_CaseInsensitive)) {
-      return map[i].type;
-    }
-  }
-
+#define X(name, ...) if (str8_matchi(str8_lit(Stringify(name)), string)) { return LNK_Log_##name; }
+LNK_LogType_XList
+#undef X
   return LNK_Log_Null;
 }
 

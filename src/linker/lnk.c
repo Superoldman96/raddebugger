@@ -1864,7 +1864,7 @@ lnk_link_inputs(TP_Context      *tp,
                 is_addr_import   = hash_map_search_stringf_raw(&imports_hm, "__imp_%S", member_ref->link_symbol->name);
               }
               if (is_thunk_import != 0 || is_addr_import != 0) {
-                lnk_log(LNK_Log_Debug, "duplicate import %S member queue detected", member_ref->link_symbol->name);
+                lnk_log(LNK_Log_Paranoid, "duplicate import member queue detected: %S", member_ref->link_symbol->name);
                 break;
               }
             }
@@ -2739,17 +2739,16 @@ THREAD_POOL_TASK_FUNC(lnk_walk_relocs_and_mark_ref_sections_task)
     }
 
     if (lnk_get_log_status(LNK_Log_Debug)) {
-      U64 total_vsize = 0, total_fsize = 0, total_section_count = 0;
+      U64 total_fsize = 0, total_section_count = 0;
       for EachElement(i, stats) {
-        total_vsize         += stats[i].vsize;
         total_fsize         += stats[i].fsize;
         total_section_count += stats[i].section_count;
       }
       String8List stat_list = {0};
-      str8_list_pushf(scratch.arena, &stat_list, "Code : vsize: %M, fsize: %M, section count %llu", stats[Stat_Code].vsize,  stats[Stat_Code].fsize,  (unsigned long long)stats[Stat_Code].section_count );
-      str8_list_pushf(scratch.arena, &stat_list, "Data : vsize: %M, fsize: %M, section count %llu", stats[Stat_Data].vsize,  stats[Stat_Data].fsize,  (unsigned long long)stats[Stat_Data].section_count );
-      str8_list_pushf(scratch.arena, &stat_list, "Debug: vsize: %M, fsize: %M, section count %llu", stats[Stat_Debug].vsize, stats[Stat_Debug].fsize, (unsigned long long)stats[Stat_Debug].section_count);
-      str8_list_pushf(scratch.arena, &stat_list, "Total: vsize: %M, fsize: %M, section count %llu", total_vsize, total_fsize, total_section_count);
+      str8_list_pushf(scratch.arena, &stat_list, "Code : %M, %S sections", stats[Stat_Code].fsize,  str8_from_count(scratch.arena, stats[Stat_Code].section_count ));
+      str8_list_pushf(scratch.arena, &stat_list, "Data : %M, %S sections", stats[Stat_Data].fsize,  str8_from_count(scratch.arena, stats[Stat_Data].section_count ));
+      str8_list_pushf(scratch.arena, &stat_list, "Debug: %M, %S sections", stats[Stat_Debug].fsize, str8_from_count(scratch.arena, stats[Stat_Debug].section_count));
+      str8_list_pushf(scratch.arena, &stat_list, "Total: %M, %S sections", total_fsize,             str8_from_count(scratch.arena, total_section_count));
       String8 stat_str = str8_list_join(scratch.arena, &stat_list, &(StringJoin){.pre = str8_lit("  "), .sep = str8_lit("\n  ")});
       lnk_log(LNK_Log_Debug, "/OPT:REF Stats:\n%S", stat_str);
     }
@@ -5557,29 +5556,112 @@ lnk_run_linker(TP_Context *tp, TP_Arena *arena, LNK_Config *config)
   ProfEnd();
 }
 
+internal
+THREAD_POOL_TASK_FUNC(lnk_serialize_rrt_type_data_task)
+{
+  Temp scratch = scratch_begin(&arena, 1);
+
+  LNK_RRTTypeDataSerializer *task     = raw_task;
+  LNK_MergedTypes           *cv_types = task->cv_types;
+
+  // set up per task size array
+  U64     **source_sizes = 0;
+  Rng1U64  *ranges[CV_TypeIndexSource_COUNT];
+  if (task_id == 0) {
+    source_sizes = push_array(scratch.arena, U64 *, CV_TypeIndexSource_COUNT);
+    for EachIndex(i, CV_TypeIndexSource_COUNT) {
+      source_sizes[i] = push_array(scratch.arena, U64, tp->worker_count);
+    }
+
+    for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
+      ranges[ti_source] = tp_divide_work(scratch.arena, cv_types->count[ti_source], tp->worker_count);
+    }
+  }
+  tp_broadcast(&source_sizes);
+  tp_broadcast(&ranges);
+
+  // compute size of each source per task
+  for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
+    for EachInRange(i, ranges[ti_source][task_id]) {
+      CV_LeafHeader *leaf      = (CV_LeafHeader *)cv_types->v[ti_source][i];
+      String8        leaf_data = str8((U8 *)(leaf + 1), leaf->size - sizeof(leaf->kind));
+      U64            leaf_size = cv_size_from_leaf(leaf_data, PDB_LEAF_ALIGN);
+      source_sizes[ti_source][task_id] += leaf_size;
+    }
+  }
+  barrier_wait(tp->barrier);
+
+  // alloc buffer & set up buffer offsets for each task
+  U64 *chunk_sizes        = 0;
+  U64 *source_base_offsets = 0;
+  U64 *source_task_offsets = 0;
+  if (task_id == 0) {
+    // compute chunk sizes per task
+    chunk_sizes = push_array(scratch.arena, U64, tp->worker_count);
+    for EachIndex(i, tp->worker_count) {
+      for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
+        chunk_sizes[i] += source_sizes[ti_source][i];
+      }
+    }
+
+    // alloc output buffer for the serializer
+    U64 total_type_size = sum_array_u64(tp->worker_count, chunk_sizes);
+    *task->type_data_out = str8(push_array_no_zero(arena, U8, total_type_size), total_type_size);
+
+    // output data ranges and source base offsets
+    source_base_offsets = push_array(scratch.arena, U64, CV_TypeIndexSource_COUNT);
+    U64 prev_off = 0;
+    for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
+      source_base_offsets[ti_source] = prev_off;
+      U64 source_size = sum_array_u64(tp->worker_count, source_sizes[ti_source]);
+      task->type_data_ranges_out[ti_source] = r1u64(prev_off, prev_off + source_size);
+      prev_off += source_size;
+    }
+
+    // compute per-source, per-task offsets into the output buffer
+    source_task_offsets = push_array(scratch.arena, U64, CV_TypeIndexSource_COUNT*tp->worker_count);
+    for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
+      U64 source_cursor = source_base_offsets[ti_source];
+      for EachIndex(worker_idx, tp->worker_count) {
+        source_task_offsets[ti_source*tp->worker_count + worker_idx] = source_cursor;
+        source_cursor += source_sizes[ti_source][worker_idx];
+      }
+    }
+  }
+  tp_broadcast(&chunk_sizes);
+  tp_broadcast(&source_task_offsets);
+
+  // serialize types
+  U64 chunk_cursor = 0;
+  U8 *type_data_ptr = task->type_data_out->str;
+  U64 type_data_max = task->type_data_out->size;
+  for EachIndex(ti_source, CV_TypeIndexSource_COUNT) {
+    U64 cursor = source_task_offsets[ti_source*tp->worker_count + task_id];
+    for EachInRange(i, ranges[ti_source][task_id]) {
+      CV_LeafHeader *leaf      = (CV_LeafHeader *)cv_types->v[ti_source][i];
+      String8        leaf_data = str8((U8 *)(leaf + 1), leaf->size - sizeof(leaf->kind));
+      U64 write_size = cv_write_leaf(type_data_ptr, cursor, type_data_max, leaf->kind, leaf_data, PDB_LEAF_ALIGN);
+      cursor += write_size;
+      chunk_cursor += write_size;
+    }
+    Assert(cursor == source_task_offsets[ti_source*tp->worker_count + task_id] + source_sizes[ti_source][task_id]);
+  }
+  Assert(chunk_cursor == chunk_sizes[task_id]);
+  barrier_wait(tp->barrier);
+
+  scratch_end(scratch);
+}
+
 internal void
 lnk_run_type_server(TP_Context *tp, TP_Arena *arena, LNK_Config *config)
 {
   ProfBeginFunction();
   Temp scratch = scratch_begin(arena->v, arena->count);
 
-  // generate GUID
-  Guid type_server_guid = {0};
-  {
-    blake3_hasher hasher = {0};
-    blake3_hasher_init(&hasher);
-    blake3_hasher_update(&hasher, config->pdb_name.str, config->pdb_name.size);
-    blake3_hasher_update(&hasher, (U8*)&config->time_stamp, sizeof(config->time_stamp));
-    blake3_hasher_finalize(&hasher, type_server_guid.v, sizeof(type_server_guid.v));
-  }
-
   // push default type-server switches
-  lnk_config_pushf(config, "/PDB:\"%S.type_server.pdb\"", str8_chop_last_dot(config->pdb_name));
-  lnk_config_pushf(config, "/DEBUG:FULL");
+  lnk_config_pushf(config, "/DEBUG:GHASH");
   lnk_config_pushf(config, "/NOD");
   lnk_config_pushf(config, "/RAD_WRITE_TEMP_FILES");
-  lnk_config_pushf(config, "/RAD_MEMORY_MAP_FILES:READ_WRITE");
-  lnk_config_pushf(config, "/RAD_GUID:%S", string_from_guid(scratch.arena, type_server_guid));
 
   // load objs
   U64       objs_count = 0;
@@ -5602,177 +5684,122 @@ lnk_run_type_server(TP_Context *tp, TP_Arena *arena, LNK_Config *config)
     for EachIndex(obj_idx, objs_count) { objs[obj_idx] = &obj_nodes[obj_idx].data; }
   }
 
-  // obj filters
+  // obj filter
+  objs = lnk_debug_filter_objs(scratch.arena, objs, objs_count, &objs_count);
+
+  // parse & merge types
+  LNK_CodeViewInput cv       = lnk_make_code_view_input(tp, arena, config, objs_count, objs, (LNK_RRT_Array){0});
+  LNK_MergedTypes   cv_types = lnk_merge_types(tp, arena, &cv, LNK_MergeTypeFlag_SkipSymbolTypeFixup | LNK_MergeTypeFlag_BuildObjTiMap | LNK_MergeTypeFlag_ExportHashes);
+
+  U64Array include_objs = {0};
   {
-    // internal filter
-    objs = lnk_debug_filter_objs(scratch.arena, objs, objs_count, &objs_count);
-
-    // command line filter
-    {
-      U64       result_count = 0;
-      LNK_Obj **result       = push_array(scratch.arena, LNK_Obj *, objs_count);
-      for EachIndex(obj_idx, objs_count) {
-        LNK_Obj *obj = objs[obj_idx];
-
-        B32 skip = 0;
-        if (config->type_server_match_obj.node_count) {
-          skip = 1;
-          for EachNode(filter_n, String8Node, config->type_server_match_obj.first) {
-            if (str8_match_wildcard(obj->path, filter_n->string, StringMatchFlag_CaseInsensitive|StringMatchFlag_SlashInsensitive)) {
-              skip = 0;
-              break;
-            }
-          }
-        }
-        if (skip) { continue; }
-
-        result[result_count++] = obj;
-      }
-      objs_count = result_count;
-      objs       = result;
-    }
-  }
-
-  // compute size of objs compiled with /Z7
-  U64 debug_t_total_size = 0;
-  {
-    for EachIndex(obj_idx, objs_count) {
-      LNK_Obj *obj = objs[obj_idx];
-
-      // register debug info sections
-      U64 type_sect_indices_count = 0;
-      U32 type_sect_indices[4]    = {0};
-      if      (obj->debug_t_sect_idx < obj->header.section_count_no_null) { type_sect_indices[type_sect_indices_count++] = obj->debug_t_sect_idx; }
-      else if (obj->debug_p_sect_idx < obj->header.section_count_no_null) { type_sect_indices[type_sect_indices_count++] = obj->debug_p_sect_idx; }
-
-      for EachIndex(i, type_sect_indices_count) {
-        U64                 section_idx    = type_sect_indices[i];
-        COFF_SectionHeader *section_table  = lnk_coff_section_table_from_obj(obj);
-        COFF_SectionHeader *debug_t_header = &section_table[section_idx];
-        String8             debug_t_data   = str8_substr(obj->data, r1u64(debug_t_header->foff, debug_t_header->foff + debug_t_header->fsize));
-        CV_Leaf             first_leaf     = {0};
-        if (cv_read_leaf(debug_t_data, sizeof(CV_Signature), CV_LeafAlign, &first_leaf) >= sizeof(CV_LeafHeader)) {
-          if ( ! cv_is_leaf_type_server(first_leaf.kind)) {
-            debug_t_total_size += debug_t_data.size;
-          }
-        }
-      }
-    }
-  }
-
-  if (debug_t_total_size) {
-    // merge & write types
-    LNK_CodeViewInput cv       = lnk_make_code_view_input(tp, arena, config, objs_count, objs, (LNK_RRT_Array){0});
-    LNK_MergedTypes   cv_types = lnk_merge_types(tp, arena, &cv, LNK_MergeTypeFlag_BuildObjTiMap|LNK_MergeTypeFlag_SkipSymbolTypeFixup|LNK_MergeTypeFlag_ExportHashes);
-    String8List       pdb      = lnk_build_pdb(tp, arena, str8_zero(), config, 0, &cv, cv_types, LNK_PDB_BuilderFlag_Tpi|LNK_PDB_BuilderFlag_Ipi);
-    lnk_write_data_list_to_file_path(config->pdb_name, config->temp_pdb_name, pdb);
-
-    typedef struct Edit {
-      struct Edit *next;
-      String8  data;
-      U64      offset;
-      LNK_Obj *obj;
-    } Edit;
-    Edit *edits = 0;
-
+    U64List include_obj_list = {0};
     for EachIndex(obj_idx, objs_count) {
       LNK_Obj *obj = objs[obj_idx];
 
       // skip objs in libraries
       if (obj->link_member) { continue; }
 
-      if (obj->debug_t_sect_idx < obj->header.section_count_no_null) {
-        COFF_SectionHeader *section_table  = lnk_coff_section_table_from_obj(obj);
-        COFF_SectionHeader *section_header = &section_table[obj->debug_t_sect_idx];
-
-        // skip type servers
-        if (cv_debug_t_is_type_server_ref(&cv.debug_t_arr[obj_idx])) { continue; }
-
-        CV_LeafTypeServer2 ts_info = { .sig70 = config->guid, .age = 1 };
-        String8List ts_srl = {0};
-        str8_list_push(scratch.arena, &ts_srl, str8_struct(&ts_info));
-        str8_list_push(scratch.arena, &ts_srl, push_cstr(scratch.arena, config->pdb_name));
-
-        // type server srl -> CodeView leaf
-        String8 ts_string = str8_list_join(scratch.arena, &ts_srl, 0);
-        String8 ts_leaf   = cv_make_leaf(scratch.arena, CV_LeafKind_TYPESERVER2, ts_string, CV_LeafAlign);
-
-        // make type server .debug$T
-        String8List debug_t_list = {0};
-        str8_list_push(scratch.arena, &debug_t_list, str8_struct((&(CV_Signature){ CV_Signature_C13 })));
-        str8_list_push(scratch.arena, &debug_t_list, ts_leaf);
-        String8 debug_t = str8_list_join(scratch.arena, &debug_t_list, 0);
-
-        // realloc seciton if there is not enough room in the section header
-        if (debug_t.size > section_header->fsize) {
-          section_header->foff  = obj->data.size;
-          section_header->fsize = debug_t.size;
-
-          // append to the obj
-          struct Edit *e = push_array(scratch.arena, struct Edit, 1);
-          e->data   = debug_t;
-          e->offset = obj->data.size;
-          e->obj    = obj;
-          SLLStackPush(edits, e);
-        } else {
-          section_header->fsize = debug_t.size;
-
-          Rng1U64 section_frange = rng_1u64(section_header->foff, section_header->foff + section_header->fsize);
-          String8 section_data   = str8_substr(obj->data, section_frange);
-          MemoryCopyStr8(section_data.str, debug_t);
-        }
-      }
-
-      // discard precompiled headers types, they are already in the type server
+      // does obj have debug types?
       if (obj->debug_p_sect_idx < obj->header.section_count_no_null) {
-        COFF_SectionHeader *section_table  = lnk_coff_section_table_from_obj(obj);
-        COFF_SectionHeader *section_header = &section_table[obj->debug_p_sect_idx];
-        section_header->flags |= COFF_SectionFlag_LnkRemove;
-      }
+        u64_list_push(scratch.arena, &include_obj_list, obj_idx);
+      } else if (obj->debug_t_sect_idx < obj->header.section_count_no_null) {
+        // read first leaf
+        LNK_ObjSection section     = lnk_obj_section_from_sect_idx(obj, obj->debug_t_sect_idx);
+        String8        raw_debug_t = str8_substr(obj->data, section.frange);
+        CV_Leaf             leaf           = {0};
+        cv_read_leaf(raw_debug_t, 0, 1, &leaf);
 
-      // discard type hashes sectiosn, there is no /Z7 sections in the file
-      if (obj->debug_h_sect_idx < obj->header.section_count_no_null) {
-        COFF_SectionHeader *section_table  = lnk_coff_section_table_from_obj(obj);
-        COFF_SectionHeader *section_header = &section_table[obj->debug_h_sect_idx];
-        section_header->flags |= COFF_SectionFlag_LnkRemove;
-      }
-
-      // edit obj
-      if (edits) {
-        #if OS_WINDOWS
-        AssertAlways(UnmapViewOfFile(obj->data.str));
-        #else
-        NotImplemented;
-        #endif
-        File handle = file_open(AccessFlag_Append|AccessFlag_Read|AccessFlag_Write, obj->path);
-        for EachNode(e, struct Edit, edits) {
-          AssertAlways(file_write(handle, r1u64(e->offset, e->offset + e->data.size), e->data.str) == e->data.size);
+        // is this /Z7 obj?
+        if ( ! cv_is_leaf_type_server(leaf.kind)) {
+          u64_list_push(scratch.arena, &include_obj_list, obj_idx);
         }
-        file_close(handle);
       }
     }
+    include_objs = u64_array_from_list(scratch.arena, &include_obj_list);
   }
 
-#if 0
-  // relaunch the binary with the same command line, but with boot mode set to LINKER
-  if (config->type_server == LNK_SwitchState_Yes) {
-    String8 curr_cmdl   = str8_list_join(scratch.arena, &config->raw_cmd_line, &(StringJoin){.sep=str8_lit(" ")});
-    String8 linker_cmdl = str8f(scratch.arena, "%S %S /RAD_TYPE_SERVER:NO /RAD_BOOT_MODE:LINKER", get_process_info()->binary_file_path, curr_cmdl);
+  LNK_RRT rrt = {0};
+  ProfScope("Pack Type Data & Data Ranges")
+  {
+    LNK_RRTTypeDataSerializer task = { &cv_types, &rrt.type_data_raw, rrt.type_data_ranges };
+    tp_for_parallel(tp, arena, tp->worker_count, lnk_serialize_rrt_type_data_task, &task);
 
-    ProcessLaunchParams launch_opts = {
-      .path        = get_process_info()->binary_path,
-      .inherit_env = 1,
-      .consoleless = 1,
-      .cmd_line    = lnk_arg_list_parse_windows_rules(scratch.arena, linker_cmdl),
-    };
-    Process process_handle = process_launch(&launch_opts);
+    // pack type index ranges
+    for EachIndex(i, CV_TypeIndexSource_COUNT) {
+      rrt.ti_ranges[i] = r1u64(cv_types.min_type_indices[i], cv_types.min_type_indices[i] + cv_types.count[i]);
+    }
 
-    if (process_match(process_handle, process_zero())) {
-      String8 e = str8f(scratch.arena, "failed to launch radlink(%S) after type server step\n");
-      lnk_invalid_path((char*)e.str);
+    // copy pointers to type hashes
+    MemoryCopyArray(rrt.type_hashes_unpacked, cv_types.hashes);
+  }
+
+  rrt.obj_count = include_objs.count;
+
+  // copy per object leaf counts
+  rrt.obj_leaf_counts = push_array(scratch.arena, U64, include_objs.count);
+  for EachIndex(i, include_objs.count) {
+    U64        obj_idx = include_objs.v[i];
+    CV_DebugT *debug_t = &cv.debug_t_arr[obj_idx];
+    rrt.obj_leaf_counts[i] = debug_t->count;
+  }
+
+  // copy per object type index ranges
+  rrt.obj_ti_ranges = push_array(scratch.arena, Rng1U64, include_objs.count);
+  for EachIndex(i, include_objs.count) {
+    U64        obj_idx = include_objs.v[i];
+    LNK_Obj   *obj     = objs[obj_idx];
+    CV_DebugT *debug_t = &cv.debug_t_arr[obj_idx];
+    rrt.obj_ti_ranges[i] = debug_t->ti_ranges[CV_TypeIndexSource_TPI];
+  }
+
+  // copy obj time stamps
+  rrt.obj_time_stamps = push_array(scratch.arena, U64, include_objs.count);
+  for EachIndex(i, include_objs.count) {
+    U64             obj_idx        = include_objs.v[i];
+    LNK_Obj        *obj            = objs[obj_idx];
+    FileProperties  obj_file_props = properties_from_file_path(obj->path);
+    rrt.obj_time_stamps[i] = obj_file_props.modified;
+  }
+
+  // copy obj file paths
+  rrt.obj_paths = str8_array_reserve(scratch.arena, include_objs.count);
+  for EachIndex(i, include_objs.count) {
+    U64     obj_idx = include_objs.v[i];
+    LNK_Obj *obj    = objs[obj_idx];
+    rrt.obj_paths.v[rrt.obj_paths.count++] = obj->path;
+  }
+
+  // wire per object file type index map
+  rrt.obj_ti_maps = push_array(scratch.arena, CV_TypeIndex *, include_objs.count);
+  for EachIndex(i, include_objs.count) {
+    U64 obj_idx = include_objs.v[i];
+    rrt.obj_ti_maps[i] = cv_types.obj_ti_maps[obj_idx];
+  }
+
+  // obj idx -> RRT obj idx hash map
+  HashMap obj_to_rrt_obj_hm = {0};
+  for EachIndex(i, include_objs.count) {
+    hash_map_push_u64_u64(scratch.arena, &obj_to_rrt_obj_hm, include_objs.v[i], i);
+  }
+
+  // pack PCH info
+  rrt.obj_pch_indices   = push_array(scratch.arena, U32,     include_objs.count);
+  rrt.obj_pch_ti_ranges = push_array(scratch.arena, Rng1U64, include_objs.count);
+  for EachIndex(i, include_objs.count) {
+    U64        obj_idx         = include_objs.v[i];
+    CV_DebugT *debug_t         = &cv.debug_t_arr[obj_idx];
+    if (dim_1u64(debug_t->pch_ti_range[CV_TypeIndexSource_TPI]) > 0) {
+      rrt.obj_pch_indices  [i] = safe_cast_u32(*hash_map_search_u64_u64(&obj_to_rrt_obj_hm, debug_t->pch_obj_idx));
+      rrt.obj_pch_ti_ranges[i] = debug_t->pch_ti_range[CV_TypeIndexSource_TPI];
+    } else {
+      rrt.obj_pch_indices  [i] = max_U32;
+      rrt.obj_pch_ti_ranges[i] = r1u64(0,0);
     }
   }
-#endif
+
+  String8List rrt_data = lnk_string_list_from_rrt(scratch.arena, &rrt);
+  lnk_write_data_list_to_file_path(config->type_server_name, config->temp_type_server_name, rrt_data);
 
   scratch_end(scratch);
   ProfEnd();
