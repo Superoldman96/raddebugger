@@ -758,6 +758,7 @@ rng1u64_list_concat(Rng1U64List *list, Rng1U64List *to_concat)
       list->first = to_concat->first;
       list->last  = to_concat->last;
     }
+    list->count += to_concat->count;
     MemoryZeroStruct(to_concat);
   }
 }
