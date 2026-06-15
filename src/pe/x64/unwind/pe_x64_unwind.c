@@ -359,7 +359,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
               PE_UnwindGprRegX64 gpr_reg = (inst_byte - 0x58) + (rex & 1)*8;
               X64_RegCode reg_code = pe_x64_uwnd_reg_code_from_pe_gpr_reg(gpr_reg);
               Rng1U16 reg_rng = x64_reg_code_rng_table[reg_code];
-              U64 *reg_ptr = (U64 *)((U8 *)&regs + reg_rng.min);
+              U64 *reg_ptr = (U64 *)((U8 *)regs + reg_rng.min);
               reg_ptr[0] = value;
               regs->rsp = sp + 8;
             }
@@ -428,7 +428,7 @@ pe_x64_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info,
             PE_UnwindGprRegX64 gpr_reg = (modrm & 7) + (rex & 1)*8;
             X64_RegCode reg_code = pe_x64_uwnd_reg_code_from_pe_gpr_reg(gpr_reg);
             Rng1U16 reg_rng = x64_reg_code_rng_table[reg_code];
-            U64 *reg_ptr = (U64 *)((U8 *)&regs + reg_rng.min);
+            U64 *reg_ptr = (U64 *)((U8 *)regs + reg_rng.min);
             U64 reg_value = reg_ptr[0];
             
             // rjf: read immediate
