@@ -1,6 +1,49 @@
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
+@table(name parse_kind precedence pre sep pos chain)
+E2_OpTable:
+{
+  {Deref   UnaryPrefix 2 "*"  ""   "" ""}
+  {Address UnaryPrefix 2 "&"  ""   "" ""}
+  {Pos     UnaryPrefix 2 "+"  ""   "" ""}
+  {Neg     UnaryPrefix 2 "-"  ""   "" ""}
+  {LogNot  UnaryPrefix 2 "!"  ""   "" ""}
+  {BitNot  UnaryPrefix 2 "~"  ""   "" ""}
+  {Mul     Binary      3 ""   "*"  "" ""}
+  {Div     Binary      3 ""   "/"  "" ""}
+  {Mod     Binary      3 ""   "%"  "" ""}
+  {Add     Binary      4 ""   "+"  "" ""}
+  {Sub     Binary      4 ""   "-"  "" ""}
+  {LShift  Binary      5 ""   "<<" "" ""}
+  {RShift  Binary      5 ""   ">>" "" ""}
+  {Less    Binary      6 ""   "<"  "" ""}
+  {LtEq    Binary      6 ""   "<=" "" ""}
+  {Grtr    Binary      6 ""   ">"  "" ""}
+  {GrEq    Binary      6 ""   ">=" "" ""}
+  {EqEq    Binary      7 ""   "==" "" ""}
+  {NtEq    Binary      7 ""   "!=" "" ""}
+  {BitAnd  Binary      8 ""   "&"  "" ""}
+  {BitXor  Binary      9 ""   "^"  "" ""}
+  {BitOr   Binary     10 ""   "|"  "" ""}
+  {LogAnd  Binary     11 ""   "&&" "" ""}
+  {LogOr   Binary     12 ""   "||" "" ""}
+  {Define  Binary     13 ""   "="  "" ""}
+}
+
+@enum E2_OpKind:
+{
+  Null,
+  @expand(E2_OpTable a) `$(a.name)`,
+  COUNT,
+}
+
+@data(E2_OpInfo) e2_op_kind_info_table:
+{
+  `{0}`,
+  @expand(E2_OpTable a) `{E2_OpParseKind_$(a.parse_kind), $(a.precedence), str8_lit_comp("$(a.pre)"), str8_lit_comp("$(a.sep)"), str8_lit_comp("$(a.pos)"), str8_lit_comp("$(a.chain)")}`
+}
+
 @table(name                 basic_string          basic_byte_size)
 // NOTE(rjf): basic_byte_size == 0xFF? => address sized
 E2_TypeKindTable:

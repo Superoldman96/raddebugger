@@ -114,12 +114,409 @@ e2_expr_from_name(E2_ExprMap *map, String8 name)
 }
 
 ////////////////////////////////
+//~ rjf: Messages
+
+internal E2_Msg *
+e2_msg(Arena *arena, E2_MsgList *msgs, U64 src_off, String8 string)
+{
+  E2_Msg *msg = push_array(arena, E2_Msg, 1);
+  SLLQueuePush(msgs->first, msgs->last, msg);
+  msgs->count += 1;
+  msg->src_off = src_off;
+  msg->string = str8_copy(arena, string);
+  return msg;
+}
+
+internal E2_Msg *
+e2_msgf(Arena *arena, E2_MsgList *msgs, U64 src_off, char *fmt, ...)
+{
+  Temp scratch = scratch_begin(&arena, 1);
+  va_list args;
+  va_start(args, fmt);
+  String8 string = str8fv(scratch.arena, fmt, args);
+  E2_Msg *msg = e2_msg(arena, msgs, src_off, string);
+  va_end(args);
+  scratch_end(scratch);
+  return msg;
+}
+
+////////////////////////////////
+//~ rjf: Types
+
+internal E2_TypeKey
+e2_type_key_basic(E2_TypeKind kind)
+{
+  E2_TypeKey key = {E2_TypeKeyKind_Basic};
+  key.u32[0] = (U32)kind;
+  return key;
+}
+
+////////////////////////////////
 //~ rjf: String -> Expression
+
+internal E2_Token
+e2_token_from_string(String8 string)
+{
+  E2_Token token = {E2_TokenKind_Null};
+  B32 identifier_tick_mode = 0;
+  B32 comment_is_explicit_ender = 0;
+  B32 numeric_exponent = 0;
+  B32 escaped = 0;
+  B32 done = 0;
+  for(U64 off = 0; !done && off <= string.size; off += 1)
+  {
+    U8 next_byte = (off < string.size ? string.str[off] : 0);
+    U8 next2_byte = (off+1 < string.size ? string.str[off+1] : 0);
+    U8 next3_byte = (off+2 < string.size ? string.str[off+2] : 0);
+    switch(token.kind)
+    {
+      //- rjf: no set token kind => look for starters
+      default:
+      {
+        if(next_byte <= 32)
+        {
+          token.kind = E2_TokenKind_Whitespace;
+          token.range.min = token.range.max = off;
+        }
+        else if(next_byte == '$' || next_byte == '_' || next_byte == '`' ||
+                ('A' <= next_byte && next_byte <= 'Z') ||
+                ('a' <= next_byte && next_byte <= 'z'))
+        {
+          token.kind = E2_TokenKind_Identifier;
+          token.range.min = token.range.max = off;
+          identifier_tick_mode = (next_byte == '`');
+        }
+        else if(('0' <= next_byte && next_byte <= '9') ||
+                (next_byte == '.' && '0' <= next2_byte && next2_byte <= '9'))
+        {
+          token.kind = E2_TokenKind_Numeric;
+          token.range.min = token.range.max = off;
+        }
+        else if(next_byte == '\'')
+        {
+          token.kind = E2_TokenKind_CharLiteral;
+          token.range.min = token.range.max = off;
+        }
+        else if(next_byte == '"')
+        {
+          token.kind = E2_TokenKind_StringLiteral;
+          token.range.min = token.range.max = off;
+        }
+        else if(next_byte == '/' && next2_byte == '/')
+        {
+          token.kind = E2_TokenKind_Comment;
+          token.range.min = token.range.max = off;
+        }
+        else if(next_byte == '/' && next2_byte == '*')
+        {
+          token.kind = E2_TokenKind_Comment;
+          token.range.min = token.range.max = off;
+          comment_is_explicit_ender = 1;
+        }
+        else if(next_byte == '~' || next_byte == '!' || next_byte == '%' ||
+                next_byte == '^' || next_byte == '&' || next_byte == '*' ||
+                next_byte == '(' || next_byte == ')' || next_byte == '[' ||
+                next_byte == ']' || next_byte == '{' || next_byte == '}' ||
+                next_byte == '-' || next_byte == '=' || next_byte == '+' ||
+                next_byte == ':' || next_byte == ';' || next_byte == ',' ||
+                next_byte == '.' || next_byte == '<' || next_byte == '>' ||
+                next_byte == '/' || next_byte == '?' || next_byte == '#' ||
+                next_byte == '@' || next_byte == '|')
+        {
+          token.kind = E2_TokenKind_Symbol;
+          token.range.min = token.range.max = off;
+        }
+      }break;
+      
+      //- rjf: active tokens -> seek enders
+      case E2_TokenKind_Whitespace:
+      if(next_byte > 32)
+      {
+        done = 1;
+      }break;
+      case E2_TokenKind_Comment:
+      if(comment_is_explicit_ender && next_byte == '*' && next2_byte == '/')
+      {
+        done = 1;
+        token.range.max = off+2;
+      }break;
+      case E2_TokenKind_Identifier:
+      {
+        if(identifier_tick_mode && (next_byte == '`' || next_byte == '\''))
+        {
+          identifier_tick_mode = 0;
+        }
+        else if(!identifier_tick_mode &&
+                (next_byte < 'a' || 'z' < next_byte) &&
+                (next_byte < 'A' || 'Z' < next_byte) &&
+                (next_byte < '0' || '9' < next_byte) &&
+                next_byte != '$' &&
+                next_byte != '_' &&
+                next_byte != '@')
+        {
+          done = 1;
+          token.range.max = off;
+        }
+      }break;
+      case E2_TokenKind_Numeric:
+      {
+        if(numeric_exponent && (next_byte == '+' || next_byte == '-')){}
+        else if((next_byte < 'a' || 'z' < next_byte) &&
+                (next_byte < 'A' || 'Z' < next_byte) &&
+                next_byte != '.' &&
+                next_byte != ':')
+        {
+          done = 1;
+          token.range.max = off;
+        }
+        else
+        {
+          numeric_exponent = (next_byte == 'e');
+        }
+      }break;
+      case E2_TokenKind_Symbol:
+      if(next_byte != '~' && next_byte != '!' && next_byte != '%' &&
+         next_byte != '^' && next_byte != '&' && next_byte != '*' &&
+         next_byte != '(' && next_byte != ')' && next_byte != '[' &&
+         next_byte != ']' && next_byte != '{' && next_byte != '}' &&
+         next_byte != '-' && next_byte != '=' && next_byte != '+' &&
+         next_byte != ':' && next_byte != ';' && next_byte != ',' &&
+         next_byte != '.' && next_byte != '<' && next_byte != '>' &&
+         next_byte != '/' && next_byte != '?' && next_byte != '#' &&
+         next_byte != '@' && next_byte != '|')
+      {
+        done = 1;
+        token.range.max = off;
+      }break;
+      case E2_TokenKind_CharLiteral:
+      case E2_TokenKind_StringLiteral:
+      {
+        if(!escaped && next_byte == '\\')
+        {
+          escaped = 1;
+        }
+        else if(escaped)
+        {
+          escaped = 0;
+        }
+        else if(!escaped && ((next_byte == '"' && token.kind == E2_TokenKind_StringLiteral) ||
+                             (next_byte == '\'' && token.kind == E2_TokenKind_CharLiteral)))
+        {
+          done = 1;
+          token.range.max = off+1;
+        }
+      }break;
+    }
+    if(token.range.max > off+1)
+    {
+      off += (token.range.max - (off+1));
+    }
+    if(!done && off == string.size)
+    {
+      done = 1;
+      token.range.max = off;
+    }
+  }
+  return token;
+}
+
+internal U64
+e2_read_token(String8 string, U64 off, E2_Token *token_out)
+{
+  E2_Token token = e2_token_from_string(str8_skip(string, off));
+  if(token_out != 0)
+  {
+    token_out[0] = token;
+  }
+  U64 result = dim_1u64(token.range);
+  return result;
+}
+
+internal B32
+e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *off_out, E2_Token *token_out)
+{
+  B32 result = 0;
+  U64 off = off_out[0];
+  for(;;)
+  {
+    E2_Token next_token = {E2_TokenKind_Null};
+    off += e2_read_token(string, off, &next_token);
+    if(next_token.kind == kind && (expected_string.size == 0 || str8_match(str8_substr(string, next_token.range), expected_string, 0)))
+    {
+      result = 1;
+      break;
+    }
+    else if(next_token.kind != E2_TokenKind_Comment && next_token.kind != E2_TokenKind_Whitespace)
+    {
+      break;
+    }
+  }
+  if(result)
+  {
+    off_out[0] = off;
+  }
+  return result;
+}
 
 internal E2_Parse
 e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map, E2_ExprMap *expr_map, String8 string)
 {
+  U64 off = state->string_off;
+  E2_Parse parse = {E2_Status_Error, .expr = &e2_expr_nil, .access_expr = &e2_expr_nil};
   
+  //- rjf: parse & attach to top parsing task - if we don't have a top task
+  // then it is just the result
+  for(B32 done = 0; !done;)
+  {
+    E2_Expr *expr = &e2_expr_nil;
+    E2_Token token = {0};
+    
+    //- rjf: nested sub-expressions
+    if(e2_try_token(string, E2_TokenKind_Symbol, s("("), &off, 0))
+    {
+      E2_ParseTask *task = state->free_task;
+      if(task != 0)
+      {
+        SLLStackPop(state->free_task);
+      }
+      else
+      {
+        task = push_array(arena, E2_ParseTask, 1);
+      }
+      task->parent = push_array(arena, E2_Expr, 1);
+      MemoryCopyStruct(task->parent, &e2_expr_nil);
+      task->expected_closer = s(")");
+      task->child_count_target = 1;
+      SLLStackPush(state->top_task, task);
+    }
+    
+    //- rjf: prefix unaries
+    else if(e2_try_token(string, E2_TokenKind_Symbol, s(""), &off, &token))
+    {
+      E2_ParseTask *task = state->free_task;
+      if(task != 0)
+      {
+        SLLStackPop(state->free_task);
+      }
+      else
+      {
+        task = push_array(arena, E2_ParseTask, 1);
+      }
+      task->parent = push_array(arena, E2_Expr, 1);
+      MemoryCopyStruct(task->parent, &e2_expr_nil);
+      task->child_count_target = 1;
+      SLLStackPush(state->top_task, task);
+    }
+    
+    //- rjf: leaf identifiers
+    else if(e2_try_token(string, E2_TokenKind_Identifier, s(""), &off, &token))
+    {
+      String8 identifier = str8_substr(string, token.range);
+      expr = e2_expr_from_name(expr_map, identifier);
+      if(expr == &e2_expr_nil)
+      {
+        done = 1;
+        parse.status = E2_Status_MissedIdentifierResolution;
+        parse.missed_identifier = identifier;
+      }
+    }
+    
+    //- rjf: leaf numerics
+    else if(e2_try_token(string, E2_TokenKind_Numeric, s(""), &off, &token))
+    {
+      String8 numeric_string = str8_substr(string, token.range);
+      expr = push_array(arena, E2_Expr, 1);
+      MemoryCopyStruct(expr, &e2_expr_nil);
+      U64 dot_pos = str8_find_needle(numeric_string, 0, s("."), 0); 
+      B32 f_suffix = str8_match(str8_postfix(numeric_string, 1), s("f"), 0);
+      U64 colon_pos = str8_find_needle(numeric_string, 0, s(":"), 0);
+      if(dot_pos < numeric_string.size && f_suffix)
+      {
+        expr->val.f32 = (F32)f64_from_str8(numeric_string);
+        expr->type_key = e2_type_key_basic(E2_TypeKind_F32);
+      }
+      else if(dot_pos < numeric_string.size && !f_suffix)
+      {
+        expr->val.f64 = f64_from_str8(numeric_string);
+        expr->type_key = e2_type_key_basic(E2_TypeKind_F64);
+      }
+      else if(colon_pos < numeric_string.size)
+      {
+        Temp scratch = scratch_begin(&arena, 1);
+        String8List parts = str8_split(scratch.arena, numeric_string, (U8 *)":", 1, 0);
+        U64 u64_idx = 0;
+        for EachNode(n, String8Node, parts.first)
+        {
+          if(u64_idx >= ArrayCount(expr->val.u512.u64))
+          {
+            break;
+          }
+          try_u64_from_str8_c_rules(n->string, &expr->val.u512.u64[u64_idx]);
+          u64_idx += 1;
+        }
+        switch(u64_idx)
+        {
+          case 1:{expr->op = RDI_EvalOp_ConstU64; expr->type_key = e2_type_key_basic(E2_TypeKind_U64);}break;
+          case 2:{expr->op = RDI_EvalOp_ConstU128; expr->type_key = e2_type_key_basic(E2_TypeKind_U128);}break;
+          case 4:{expr->op = RDI_EvalOp_ConstU256; expr->type_key = e2_type_key_basic(E2_TypeKind_U256);}break;
+          case 8:{expr->op = RDI_EvalOp_ConstU512; expr->type_key = e2_type_key_basic(E2_TypeKind_U512);}break;
+          default:
+          {
+            e2_msgf(arena, &parse.msgs, token.range.min, "Invalid number of numeric portions specified (%I64u; must be 2, 4, or 8).", u64_idx);
+          }break;
+        }
+        scratch_end(scratch);
+      }
+      else if(try_u64_from_str8_c_rules(numeric_string, &expr->val.u64))
+      {
+        if(expr->val.u64 <= 0xff)
+        {
+          expr->op = RDI_EvalOp_ConstU8;
+          expr->type_key = e2_type_key_basic(E2_TypeKind_U8);
+        }
+        else if(expr->val.u64 <= 0xffff)
+        {
+          expr->op = RDI_EvalOp_ConstU16;
+          expr->type_key = e2_type_key_basic(E2_TypeKind_U16);
+        }
+        else if(expr->val.u64 <= 0xffffffff)
+        {
+          expr->op = RDI_EvalOp_ConstU32;
+          expr->type_key = e2_type_key_basic(E2_TypeKind_U32);
+        }
+        else
+        {
+          expr->op = RDI_EvalOp_ConstU64;
+          expr->type_key = e2_type_key_basic(E2_TypeKind_U64);
+        }
+      }
+    }
+    
+    //- rjf: attach formed expressions to task
+    if(expr != &e2_expr_nil && state->top_task != 0)
+    {
+      SLLQueuePush(state->top_task->parent->first, state->top_task->parent->last, expr);
+      state->top_task->child_count += 1;
+      if(state->top_task->child_count == state->top_task->child_count_target)
+      {
+        // TODO(rjf): pop task, insert to parent, or decay to result - should naturally express below block too
+      }
+    }
+    
+    //- rjf: no task -> formed expr is result
+    if(expr != &e2_expr_nil && state->top_task == 0)
+    {
+      parse.expr = expr;
+      break;
+    }
+  }
+  
+  //- rjf: advance offset if successful
+  if(parse.status == E2_Status_Good)
+  {
+    state->string_off += off;
+  }
+  return parse;
 }
 
 ////////////////////////////////

@@ -6,6 +6,37 @@
 #ifndef EVAL2_META_H
 #define EVAL2_META_H
 
+typedef enum E2_OpKind
+{
+E2_OpKind_Null,
+E2_OpKind_Deref,
+E2_OpKind_Address,
+E2_OpKind_Pos,
+E2_OpKind_Neg,
+E2_OpKind_LogNot,
+E2_OpKind_BitNot,
+E2_OpKind_Mul,
+E2_OpKind_Div,
+E2_OpKind_Mod,
+E2_OpKind_Add,
+E2_OpKind_Sub,
+E2_OpKind_LShift,
+E2_OpKind_RShift,
+E2_OpKind_Less,
+E2_OpKind_LtEq,
+E2_OpKind_Grtr,
+E2_OpKind_GrEq,
+E2_OpKind_EqEq,
+E2_OpKind_NtEq,
+E2_OpKind_BitAnd,
+E2_OpKind_BitXor,
+E2_OpKind_BitOr,
+E2_OpKind_LogAnd,
+E2_OpKind_LogOr,
+E2_OpKind_Define,
+E2_OpKind_COUNT,
+} E2_OpKind;
+
 typedef enum E2_TypeKind
 {
 E2_TypeKind_Null,
@@ -83,5 +114,10 @@ E2_TypeKind_LastIncomplete  = E2_TypeKind_IncompleteEnum,
 E2_TypeKind_FirstMeta       = E2_TypeKind_MetaExpr,
 E2_TypeKind_LastMeta        = E2_TypeKind_MetaDescription,
 } E2_TypeKind;
+
+C_LINKAGE_BEGIN
+extern E2_OpInfo e2_op_kind_info_table[26];
+
+C_LINKAGE_END
 
 #endif // EVAL2_META_H

@@ -67,7 +67,7 @@ union RDI_GUID {RDI_U8 u8[16]; RDI_U64 u64[2];};
 
 // "raddbg\0\0"
 #define RDI_MAGIC_CONSTANT   0x0000676264646172
-#define RDI_ENCODING_VERSION 22
+#define RDI_ENCODING_VERSION 23
 
 ////////////////////////////////////////////////////////////////
 //~ Format Types & Functions
@@ -423,46 +423,46 @@ RDI_EvalOp_Cond                 = 2,
 RDI_EvalOp_Skip                 = 3,
 RDI_EvalOp_MemRead              = 4,
 RDI_EvalOp_RegRead              = 5,
-RDI_EvalOp_Unused0              = 6,
-RDI_EvalOp_FrameOff             = 7,
-RDI_EvalOp_ModuleOff            = 8,
-RDI_EvalOp_TLSOff               = 9,
-RDI_EvalOp_ObjectOff            = 10,
-RDI_EvalOp_CFA                  = 11,
-RDI_EvalOp_ConstU8              = 12,
-RDI_EvalOp_ConstU16             = 13,
-RDI_EvalOp_ConstU32             = 14,
-RDI_EvalOp_ConstU64             = 15,
-RDI_EvalOp_ConstU128            = 16,
-RDI_EvalOp_ConstString          = 17,
-RDI_EvalOp_Abs                  = 18,
-RDI_EvalOp_Neg                  = 19,
-RDI_EvalOp_Add                  = 20,
-RDI_EvalOp_Sub                  = 21,
-RDI_EvalOp_Mul                  = 22,
-RDI_EvalOp_Div                  = 23,
-RDI_EvalOp_Mod                  = 24,
-RDI_EvalOp_LShift               = 25,
-RDI_EvalOp_RShift               = 26,
-RDI_EvalOp_BitAnd               = 27,
-RDI_EvalOp_BitOr                = 28,
-RDI_EvalOp_BitXor               = 29,
-RDI_EvalOp_BitNot               = 30,
-RDI_EvalOp_LogAnd               = 31,
-RDI_EvalOp_LogOr                = 32,
-RDI_EvalOp_LogNot               = 33,
-RDI_EvalOp_EqEq                 = 34,
-RDI_EvalOp_NtEq                 = 35,
-RDI_EvalOp_LsEq                 = 36,
-RDI_EvalOp_GrEq                 = 37,
-RDI_EvalOp_Less                 = 38,
-RDI_EvalOp_Grtr                 = 39,
-RDI_EvalOp_Trunc                = 40,
-RDI_EvalOp_TruncSigned          = 41,
-RDI_EvalOp_Convert              = 42,
-RDI_EvalOp_Pick                 = 43,
-RDI_EvalOp_Pop                  = 44,
-RDI_EvalOp_Unused1              = 45,
+RDI_EvalOp_FrameOff             = 6,
+RDI_EvalOp_ModuleOff            = 7,
+RDI_EvalOp_TLSOff               = 8,
+RDI_EvalOp_ObjectOff            = 9,
+RDI_EvalOp_CFA                  = 10,
+RDI_EvalOp_ConstU8              = 11,
+RDI_EvalOp_ConstU16             = 12,
+RDI_EvalOp_ConstU32             = 13,
+RDI_EvalOp_ConstU64             = 14,
+RDI_EvalOp_ConstU128            = 15,
+RDI_EvalOp_ConstU256            = 16,
+RDI_EvalOp_ConstU512            = 17,
+RDI_EvalOp_ConstString          = 18,
+RDI_EvalOp_Abs                  = 19,
+RDI_EvalOp_Neg                  = 20,
+RDI_EvalOp_Add                  = 21,
+RDI_EvalOp_Sub                  = 22,
+RDI_EvalOp_Mul                  = 23,
+RDI_EvalOp_Div                  = 24,
+RDI_EvalOp_Mod                  = 25,
+RDI_EvalOp_LShift               = 26,
+RDI_EvalOp_RShift               = 27,
+RDI_EvalOp_BitAnd               = 28,
+RDI_EvalOp_BitOr                = 29,
+RDI_EvalOp_BitXor               = 30,
+RDI_EvalOp_BitNot               = 31,
+RDI_EvalOp_LogAnd               = 32,
+RDI_EvalOp_LogOr                = 33,
+RDI_EvalOp_LogNot               = 34,
+RDI_EvalOp_EqEq                 = 35,
+RDI_EvalOp_NtEq                 = 36,
+RDI_EvalOp_LsEq                 = 37,
+RDI_EvalOp_GrEq                 = 38,
+RDI_EvalOp_Less                 = 39,
+RDI_EvalOp_Grtr                 = 40,
+RDI_EvalOp_Trunc                = 41,
+RDI_EvalOp_TruncSigned          = 42,
+RDI_EvalOp_Convert              = 43,
+RDI_EvalOp_Pick                 = 44,
+RDI_EvalOp_Pop                  = 45,
 RDI_EvalOp_ValueRead            = 46,
 RDI_EvalOp_ByteSwap             = 47,
 RDI_EvalOp_CallSiteValue        = 48,
@@ -939,7 +939,6 @@ X(Cond)\
 X(Skip)\
 X(MemRead)\
 X(RegRead)\
-X(Unused0)\
 X(FrameOff)\
 X(ModuleOff)\
 X(TLSOff)\
@@ -950,6 +949,8 @@ X(ConstU16)\
 X(ConstU32)\
 X(ConstU64)\
 X(ConstU128)\
+X(ConstU256)\
+X(ConstU512)\
 X(ConstString)\
 X(Abs)\
 X(Neg)\
@@ -978,7 +979,6 @@ X(TruncSigned)\
 X(Convert)\
 X(Pick)\
 X(Pop)\
-X(Unused1)\
 X(ValueRead)\
 X(ByteSwap)\
 X(CallSiteValue)\

@@ -77,7 +77,7 @@
   "";
   "// \"raddbg\\0\\0\"";
   "#define RDI_MAGIC_CONSTANT   0x0000676264646172";
-  "#define RDI_ENCODING_VERSION 22";
+  "#define RDI_ENCODING_VERSION 23";
   "";
   "////////////////////////////////////////////////////////////////";
   "//~ Format Types & Functions";
@@ -1202,46 +1202,46 @@ RDI_EvalOpTable:
   {Skip            3       2 0 0}
   {MemRead         4       1 1 1}
   {RegRead         5       4 0 1}
-  {Unused0         6       0 0 1}
-  {FrameOff        7       8 0 1}
-  {ModuleOff       8       4 0 1}
-  {TLSOff          9       4 0 1}
-  {ObjectOff       10      0 0 0}
-  {CFA             11      0 0 0}
-  {ConstU8         12      1 0 1}
-  {ConstU16        13      2 0 1}
-  {ConstU32        14      4 0 1}
-  {ConstU64        15      8 0 1}
-  {ConstU128       16     16 0 1}
-  {ConstString     17      1 0 1}
-  {Abs             18      1 1 1}
-  {Neg             19      1 1 1}
-  {Add             20      1 2 1}
-  {Sub             21      1 2 1}
-  {Mul             22      1 2 1}
-  {Div             23      1 2 1}
-  {Mod             24      1 2 1}
-  {LShift          25      2 2 1}
-  {RShift          26      2 2 1}
-  {BitAnd          27      1 2 1}
-  {BitOr           28      1 2 1}
-  {BitXor          29      1 2 1}
-  {BitNot          30      1 1 1}
-  {LogAnd          31      1 2 1}
-  {LogOr           32      1 2 1}
-  {LogNot          33      1 1 1}
-  {EqEq            34      1 2 1}
-  {NtEq            35      1 2 1}
-  {LsEq            36      1 2 1}
-  {GrEq            37      1 2 1}
-  {Less            38      1 2 1}
-  {Grtr            39      1 2 1}
-  {Trunc           40      1 1 1}
-  {TruncSigned     41      1 1 1}
-  {Convert         42      2 1 1}
-  {Pick            43      1 0 1}
-  {Pop             44      0 1 0}
-  {Unused1         45      0 0 1}
+  {FrameOff        6       8 0 1}
+  {ModuleOff       7       4 0 1}
+  {TLSOff          8       4 0 1}
+  {ObjectOff       9       0 0 0}
+  {CFA             10      0 0 0}
+  {ConstU8         11      1 0 1}
+  {ConstU16        12      2 0 1}
+  {ConstU32        13      4 0 1}
+  {ConstU64        14      8 0 1}
+  {ConstU128       15     16 0 1}
+  {ConstU256       16     32 0 1}
+  {ConstU512       17     64 0 1}
+  {ConstString     18      1 0 1}
+  {Abs             19      1 1 1}
+  {Neg             20      1 1 1}
+  {Add             21      1 2 1}
+  {Sub             22      1 2 1}
+  {Mul             23      1 2 1}
+  {Div             24      1 2 1}
+  {Mod             25      1 2 1}
+  {LShift          26      2 2 1}
+  {RShift          27      2 2 1}
+  {BitAnd          28      1 2 1}
+  {BitOr           29      1 2 1}
+  {BitXor          30      1 2 1}
+  {BitNot          31      1 1 1}
+  {LogAnd          32      1 2 1}
+  {LogOr           33      1 2 1}
+  {LogNot          34      1 1 1}
+  {EqEq            35      1 2 1}
+  {NtEq            36      1 2 1}
+  {LsEq            37      1 2 1}
+  {GrEq            38      1 2 1}
+  {Less            39      1 2 1}
+  {Grtr            40      1 2 1}
+  {Trunc           41      1 1 1}
+  {TruncSigned     42      1 1 1}
+  {Convert         43      2 1 1}
+  {Pick            44      1 0 1}
+  {Pop             45      0 1 0}
   {ValueRead       46      1 2 1}
   {ByteSwap        47      1 1 1}
   {CallSiteValue   48      4 0 0}

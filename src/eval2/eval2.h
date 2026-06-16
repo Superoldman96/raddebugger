@@ -5,6 +5,28 @@
 #define EVAL2_H
 
 ////////////////////////////////
+//~ rjf: Operator Info Tables
+
+typedef enum E2_OpParseKind
+{
+  E2_OpParseKind_Null,
+  E2_OpParseKind_UnaryPrefix,
+  E2_OpParseKind_Binary,
+}
+E2_OpParseKind;
+
+typedef struct E2_OpInfo E2_OpInfo;
+struct E2_OpInfo
+{
+  E2_OpParseKind parse_kind;
+  S64 precedence;
+  String8 pre;
+  String8 sep;
+  String8 post;
+  String8 chain;
+};
+
+////////////////////////////////
 //~ rjf: Generated Code
 
 #include "eval2/generated/eval2.meta.h"
@@ -243,6 +265,31 @@ struct E2_Ctx
 };
 
 ////////////////////////////////
+//~ rjf: Tokens
+
+typedef enum E2_TokenKind
+{
+  E2_TokenKind_Null,
+  E2_TokenKind_Whitespace,
+  E2_TokenKind_Comment,
+  E2_TokenKind_Identifier,
+  E2_TokenKind_Numeric,
+  E2_TokenKind_Symbol,
+  E2_TokenKind_CharLiteral,
+  E2_TokenKind_StringLiteral,
+  E2_TokenKind_COUNT
+}
+E2_TokenKind;
+
+typedef struct E2_Token E2_Token;
+struct E2_Token
+{
+  E2_TokenKind kind;
+  U32 unused;
+  Rng1U64 range;
+};
+
+////////////////////////////////
 //~ rjf: Expression Tree Building
 
 typedef struct E2_Expr E2_Expr;
@@ -273,10 +320,38 @@ struct E2_ExprMap
   U64 slots_count;
 };
 
+typedef struct E2_ParseTask E2_ParseTask;
+struct E2_ParseTask
+{
+  E2_ParseTask *next;
+  E2_Expr *parent;
+  U64 child_count;
+  U64 child_count_target;
+  String8 expected_closer;
+};
+
 typedef struct E2_ParseState E2_ParseState;
 struct E2_ParseState
 {
   U64 string_off;
+  E2_ParseTask *top_task;
+  E2_ParseTask *free_task;
+};
+
+typedef struct E2_Msg E2_Msg;
+struct E2_Msg
+{
+  E2_Msg *next;
+  U64 src_off;
+  String8 string;
+};
+
+typedef struct E2_MsgList E2_MsgList;
+struct E2_MsgList
+{
+  E2_Msg *first;
+  E2_Msg *last;
+  U64 count;
 };
 
 typedef struct E2_Parse E2_Parse;
@@ -287,8 +362,10 @@ struct E2_Parse
   Rng1U64 missed_read_space_addr_range;
   E2_CtxID ctx_id;
   E2_CtxFlags missing_ctx_flags;
+  String8 missed_identifier;
   E2_Expr *expr;
   E2_Expr *access_expr;
+  E2_MsgList msgs;
 };
 
 ////////////////////////////////
@@ -354,8 +431,22 @@ internal void e2_expr_map_push(Arena *arena, E2_ExprMap *map, String8 name, E2_E
 internal E2_Expr *e2_expr_from_name(E2_ExprMap *map, String8 name);
 
 ////////////////////////////////
+//~ rjf: Messages
+
+internal E2_Msg *e2_msg(Arena *arena, E2_MsgList *msgs, U64 src_off, String8 string);
+internal E2_Msg *e2_msgf(Arena *arena, E2_MsgList *msgs, U64 src_off, char *fmt, ...);
+
+////////////////////////////////
+//~ rjf: Types
+
+internal E2_TypeKey e2_type_key_basic(E2_TypeKind kind);
+
+////////////////////////////////
 //~ rjf: String -> Expression
 
+internal E2_Token e2_token_from_string(String8 string);
+internal U64 e2_read_token(String8 string, U64 off, E2_Token *token_out);
+internal B32 e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *off_out, E2_Token *token_out);
 internal E2_Parse e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map, E2_ExprMap *expr_map, String8 string);
 
 ////////////////////////////////
