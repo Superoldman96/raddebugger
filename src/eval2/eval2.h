@@ -205,33 +205,6 @@ struct E2_Val
 
 typedef U64 E2_SpaceID;
 
-typedef struct E2_DbgInfo E2_DbgInfo;
-struct E2_DbgInfo
-{
-  DI_Key dbgi_key;
-  RDI_Parsed *rdi;
-  String8 name;
-};
-
-typedef struct E2_Module E2_Module;
-struct E2_Module
-{
-  E2_SpaceID space_id;
-  Rng1U64 addr_range;
-  E2_DbgInfo *dbg_info;
-  Arch arch;
-  String8 name;
-};
-
-typedef struct E2_Assets E2_Assets;
-struct E2_Assets
-{
-  E2_Module *modules;
-  U64 modules_count;
-  E2_DbgInfo *dbg_infos;
-  U64 dbg_infos_count;
-};
-
 ////////////////////////////////
 //~ rjf: Evaluation Contexts
 
@@ -298,6 +271,7 @@ struct E2_Expr
   E2_Expr *first;
   E2_Expr *last;
   E2_Expr *next;
+  Rng1U64 src_range;
   String8 string;
   RDI_EvalOp op;
   E2_TypeKey type_key;
@@ -327,6 +301,8 @@ struct E2_ParseTask
   E2_Expr *parent;
   U64 child_count;
   U64 child_count_target;
+  S64 max_precedence;
+  E2_OpKind op_kind;
   String8 expected_closer;
 };
 
@@ -342,7 +318,7 @@ typedef struct E2_Msg E2_Msg;
 struct E2_Msg
 {
   E2_Msg *next;
-  U64 src_off;
+  Rng1U64 src_range;
   String8 string;
 };
 
@@ -358,10 +334,6 @@ typedef struct E2_Parse E2_Parse;
 struct E2_Parse
 {
   E2_Status status;
-  E2_SpaceID space_id;
-  Rng1U64 missed_read_space_addr_range;
-  E2_CtxID ctx_id;
-  E2_CtxFlags missing_ctx_flags;
   String8 missed_identifier;
   E2_Expr *expr;
   E2_Expr *access_expr;
@@ -433,8 +405,8 @@ internal E2_Expr *e2_expr_from_name(E2_ExprMap *map, String8 name);
 ////////////////////////////////
 //~ rjf: Messages
 
-internal E2_Msg *e2_msg(Arena *arena, E2_MsgList *msgs, U64 src_off, String8 string);
-internal E2_Msg *e2_msgf(Arena *arena, E2_MsgList *msgs, U64 src_off, char *fmt, ...);
+internal E2_Msg *e2_msg(Arena *arena, E2_MsgList *msgs, Rng1U64 src_range, String8 string);
+internal E2_Msg *e2_msgf(Arena *arena, E2_MsgList *msgs, Rng1U64 src_range, char *fmt, ...);
 
 ////////////////////////////////
 //~ rjf: Types
@@ -444,7 +416,7 @@ internal E2_TypeKey e2_type_key_basic(E2_TypeKind kind);
 ////////////////////////////////
 //~ rjf: String -> Expression
 
-internal E2_Token e2_token_from_string(String8 string);
+internal E2_Token e2_token_from_string_off(String8 string, U64 start_off);
 internal U64 e2_read_token(String8 string, U64 off, E2_Token *token_out);
 internal B32 e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *off_out, E2_Token *token_out);
 internal E2_Parse e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map, E2_ExprMap *expr_map, String8 string);

@@ -37,13 +37,18 @@ global read_only ARCH_Info arch_info_nil = {0, 0, 0, 0, {0}, &arch_reg_code_rng_
 
 internal ARCH_Info *arch_info_from_arch(Arch arch);
 internal ARCH_RegCode arch_reg_code_from_name(ARCH_Info *arch_info, String8 name);
-internal ARCH_RegCode arch_reg_code_from_rdi(Arch arch, RDI_RegCode code);
-internal ARCH_RegCode arch_reg_code_from_dw(Arch arch, DW_RegCode code);
 internal B32 arch_reg_block_read_range(ARCH_Info *arch_info, void *block, Rng1U16 range, void *dst);
 internal B32 arch_reg_block_write_range(ARCH_Info *arch_info, void *block, Rng1U16 range, void *src);
 internal U64 arch_ip_from_reg_block(ARCH_Info *arch_info, void *block);
 internal U64 arch_sp_from_reg_block(ARCH_Info *arch_info, void *block);
 internal B32 arch_reg_block_write_ip(ARCH_Info *arch_info, void *block, U64 ip);
 internal B32 arch_reg_block_write_sp(ARCH_Info *arch_info, void *block, U64 sp);
+
+#if defined(RDI_H)
+internal ARCH_RegCode arch_reg_code_from_rdi(Arch arch, RDI_RegCode code);
+#endif
+#if defined(DWARF_H)
+internal ARCH_RegCode arch_reg_code_from_dw(Arch arch, DW_RegCode code);
+#endif
 
 #endif // REGS_H

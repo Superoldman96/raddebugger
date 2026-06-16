@@ -391,6 +391,7 @@ struct RD_State
   U64 frame_eval_memread_endt_us;
   
   // rjf: update checker
+  B32 sent_update_check;
   B32 got_update_check;
   B32 newer_update_available;
   Arena *update_check_arena;

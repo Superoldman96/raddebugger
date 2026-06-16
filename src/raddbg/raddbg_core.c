@@ -10771,14 +10771,6 @@ rd_init(CmdLine *cmdln)
   {
     rd_state->update_check_arena = arena_alloc();
     rd_state->update_check_http_ring = guarded_ring_alloc(rd_state->update_check_arena, KB(8));
-    HTTP_RequestParams p =
-    {
-      .id = 1,
-      .method = HTTP_Method_Get,
-      .url = s("https://api.github.com/repos/EpicGamesExt/raddebugger/releases/latest"),
-      .user_agent = s("raddebugger"),
-    };
-    http_push_request(rd_state->update_check_http_ring, &p, 0);
   }
   
   // rjf: set up schemas
@@ -11181,50 +11173,6 @@ rd_frame(void)
   {
     arena_clear(rd_state->cmd_output_arena);
     MemoryZeroStruct(&rd_state->cmd_outputs);
-  }
-  
-  //////////////////////////////
-  //- rjf: check for updates
-  //
-  if(!rd_state->got_update_check)
-  {
-    // rjf: pop all responses that we can
-    B32 done = 0;
-    for(HTTP_Response response = {0}; http_pop_response(rd_state->update_check_arena, rd_state->update_check_http_ring, &response, 0);)
-    {
-      str8_list_push(rd_state->update_check_arena, &rd_state->update_check_response_body_pieces, response.body);
-      if(!response.has_more)
-      {
-        done = 1;
-      }
-    }
-    
-    // rjf: if we're done -> parse response & determine if there is a new version
-    if(done)
-    {
-      rd_state->got_update_check = 1;
-      Temp scratch = scratch_begin(0, 0);
-      String8 response_body = str8_list_join(rd_state->update_check_arena, &rd_state->update_check_response_body_pieces, 0);
-      MD_Node *root = md_tree_from_string(scratch.arena, response_body)->first;
-      MD_Node *html_url = md_child_from_string(root, s("html_url"), 0);
-      String8 newest_release_url = html_url->first->string;
-      U64 tag_pos = str8_find_needle(newest_release_url, 0, s("tag/v"), 0);
-      String8 tag_name = str8_skip(newest_release_url, tag_pos);
-      U64 suffix_pos = str8_find_needle(tag_name, 0, s("-"), 0);
-      String8 version_name = str8_prefix(tag_name, suffix_pos);
-      U64 release_version = version_from_str8(version_name);
-      U64 current_version = Version(BUILD_VERSION_MAJOR, BUILD_VERSION_MINOR, BUILD_VERSION_PATCH);
-      if(current_version < release_version)
-      {
-        rd_state->newer_update_available = 1;
-      }
-      guarded_ring_release(rd_state->update_check_http_ring);
-      arena_release(rd_state->update_check_arena);
-      rd_state->update_check_arena = 0;
-      rd_state->update_check_http_ring = 0;
-      MemoryZeroStruct(&rd_state->update_check_response_body_pieces);
-      scratch_end(scratch);
-    }
   }
   
   //////////////////////////////
@@ -12865,6 +12813,91 @@ rd_frame(void)
     if(!d_user_state->ctrl_is_running)
     {
       rd_state->eval_viz_base_string_flags |= EV_StringFlag_DisplayAddressUnmappedStatus;
+    }
+    
+    ////////////////////////////
+    //- rjf: send update check if needed
+    //
+    if(!rd_state->sent_update_check && !rd_state->got_update_check && rd_setting_b32_from_name(s("check_for_updates")))
+    {
+      rd_state->sent_update_check = 1;
+      Temp scratch = scratch_begin(0, 0);
+      String8 cached_version_check_path = str8f(scratch.arena, "%S/raddbg/last_version_check", get_process_info()->user_program_config_data_path);
+      String8 cached_version_check_data = data_from_file_path(scratch.arena, cached_version_check_path);
+      MD_Node *root = md_tree_from_string(scratch.arena, cached_version_check_data)->first;
+      U64 cached_dense_time = u64_from_str8(root->string, 10);
+      DateTime cached_date_time = date_time_from_dense_time(cached_dense_time);
+      DateTime now_date_time = now_time_universal();
+      B32 should_rerequest = 0;
+      if(now_date_time.day != cached_date_time.day ||
+         now_date_time.month != cached_date_time.month ||
+         now_date_time.year != cached_date_time.year)
+      {
+        should_rerequest = 1;
+      }
+      if(should_rerequest)
+      {
+        HTTP_RequestParams p =
+        {
+          .id = 1,
+          .method = HTTP_Method_Get,
+          .url = s("https://api.github.com/repos/EpicGamesExt/raddebugger/releases/latest"),
+          .user_agent = s("raddebugger"),
+        };
+        http_push_request(rd_state->update_check_http_ring, &p, 0);
+      }
+      else
+      {
+        rd_state->got_update_check = 1;
+        rd_state->newer_update_available = (B32)u64_from_str8(root->first->string, 10);
+      }
+      scratch_end(scratch);
+    }
+    
+    //////////////////////////////
+    //- rjf: check for updates
+    //
+    if(rd_state->sent_update_check && !rd_state->got_update_check)
+    {
+      // rjf: pop all responses that we can
+      B32 done = 0;
+      for(HTTP_Response response = {0}; http_pop_response(rd_state->update_check_arena, rd_state->update_check_http_ring, &response, 0);)
+      {
+        str8_list_push(rd_state->update_check_arena, &rd_state->update_check_response_body_pieces, response.body);
+        if(!response.has_more)
+        {
+          done = 1;
+        }
+      }
+      
+      // rjf: if we're done -> parse response & determine if there is a new version
+      if(done)
+      {
+        rd_state->got_update_check = 1;
+        Temp scratch = scratch_begin(0, 0);
+        String8 response_body = str8_list_join(rd_state->update_check_arena, &rd_state->update_check_response_body_pieces, 0);
+        MD_Node *root = md_tree_from_string(scratch.arena, response_body)->first;
+        MD_Node *html_url = md_child_from_string(root, s("html_url"), 0);
+        String8 newest_release_url = html_url->first->string;
+        U64 tag_pos = str8_find_needle(newest_release_url, 0, s("tag/v"), 0);
+        String8 tag_name = str8_skip(newest_release_url, tag_pos);
+        U64 suffix_pos = str8_find_needle(tag_name, 0, s("-"), 0);
+        String8 version_name = str8_prefix(tag_name, suffix_pos);
+        U64 release_version = version_from_str8(version_name);
+        U64 current_version = Version(BUILD_VERSION_MAJOR, BUILD_VERSION_MINOR, BUILD_VERSION_PATCH);
+        if(current_version < release_version)
+        {
+          rd_state->newer_update_available = 1;
+        }
+        String8 cached_version_check_path = str8f(scratch.arena, "%S/raddbg/last_version_check", get_process_info()->user_program_config_data_path);
+        write_data_to_file_path(cached_version_check_path, str8f(scratch.arena, "%I64u: %i", dense_time_from_date_time(now_time_universal()), !!rd_state->newer_update_available));
+        guarded_ring_release(rd_state->update_check_http_ring);
+        arena_release(rd_state->update_check_arena);
+        rd_state->update_check_arena = 0;
+        rd_state->update_check_http_ring = 0;
+        MemoryZeroStruct(&rd_state->update_check_response_body_pieces);
+        scratch_end(scratch);
+      }
     }
     
     ////////////////////////////

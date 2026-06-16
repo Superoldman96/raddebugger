@@ -117,24 +117,24 @@ e2_expr_from_name(E2_ExprMap *map, String8 name)
 //~ rjf: Messages
 
 internal E2_Msg *
-e2_msg(Arena *arena, E2_MsgList *msgs, U64 src_off, String8 string)
+e2_msg(Arena *arena, E2_MsgList *msgs, Rng1U64 src_range, String8 string)
 {
   E2_Msg *msg = push_array(arena, E2_Msg, 1);
   SLLQueuePush(msgs->first, msgs->last, msg);
   msgs->count += 1;
-  msg->src_off = src_off;
+  msg->src_range = src_range;
   msg->string = str8_copy(arena, string);
   return msg;
 }
 
 internal E2_Msg *
-e2_msgf(Arena *arena, E2_MsgList *msgs, U64 src_off, char *fmt, ...)
+e2_msgf(Arena *arena, E2_MsgList *msgs, Rng1U64 src_range, char *fmt, ...)
 {
   Temp scratch = scratch_begin(&arena, 1);
   va_list args;
   va_start(args, fmt);
   String8 string = str8fv(scratch.arena, fmt, args);
-  E2_Msg *msg = e2_msg(arena, msgs, src_off, string);
+  E2_Msg *msg = e2_msg(arena, msgs, src_range, string);
   va_end(args);
   scratch_end(scratch);
   return msg;
@@ -155,7 +155,7 @@ e2_type_key_basic(E2_TypeKind kind)
 //~ rjf: String -> Expression
 
 internal E2_Token
-e2_token_from_string(String8 string)
+e2_token_from_string_off(String8 string, U64 start_off)
 {
   E2_Token token = {E2_TokenKind_Null};
   B32 identifier_tick_mode = 0;
@@ -163,7 +163,7 @@ e2_token_from_string(String8 string)
   B32 numeric_exponent = 0;
   B32 escaped = 0;
   B32 done = 0;
-  for(U64 off = 0; !done && off <= string.size; off += 1)
+  for(U64 off = start_off; !done && off <= string.size; off += 1)
   {
     U8 next_byte = (off < string.size ? string.str[off] : 0);
     U8 next2_byte = (off+1 < string.size ? string.str[off+1] : 0);
@@ -173,7 +173,11 @@ e2_token_from_string(String8 string)
       //- rjf: no set token kind => look for starters
       default:
       {
-        if(next_byte <= 32)
+        if(next_byte == 0)
+        {
+          done = 1;
+        }
+        else if(next_byte <= 32)
         {
           token.kind = E2_TokenKind_Whitespace;
           token.range.min = token.range.max = off;
@@ -263,6 +267,7 @@ e2_token_from_string(String8 string)
         if(numeric_exponent && (next_byte == '+' || next_byte == '-')){}
         else if((next_byte < 'a' || 'z' < next_byte) &&
                 (next_byte < 'A' || 'Z' < next_byte) &&
+                (next_byte < '0' || '9' < next_byte) &&
                 next_byte != '.' &&
                 next_byte != ':')
         {
@@ -323,7 +328,7 @@ e2_token_from_string(String8 string)
 internal U64
 e2_read_token(String8 string, U64 off, E2_Token *token_out)
 {
-  E2_Token token = e2_token_from_string(str8_skip(string, off));
+  E2_Token token = e2_token_from_string_off(string, off);
   if(token_out != 0)
   {
     token_out[0] = token;
@@ -344,6 +349,10 @@ e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *of
     if(next_token.kind == kind && (expected_string.size == 0 || str8_match(str8_substr(string, next_token.range), expected_string, 0)))
     {
       result = 1;
+      if(token_out != 0)
+      {
+        token_out[0] = next_token;
+      }
       break;
     }
     else if(next_token.kind != E2_TokenKind_Comment && next_token.kind != E2_TokenKind_Whitespace)
@@ -351,7 +360,7 @@ e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *of
       break;
     }
   }
-  if(result)
+  if(result && off_out != 0)
   {
     off_out[0] = off;
   }
@@ -368,6 +377,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
   // then it is just the result
   for(B32 done = 0; !done;)
   {
+    S64 max_precedence = state->top_task ? state->top_task->max_precedence : max_S64;
     E2_Expr *expr = &e2_expr_nil;
     E2_Token token = {0};
     
@@ -387,25 +397,48 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
       MemoryCopyStruct(task->parent, &e2_expr_nil);
       task->expected_closer = s(")");
       task->child_count_target = 1;
+      task->max_precedence = max_S64;
       SLLStackPush(state->top_task, task);
     }
     
     //- rjf: prefix unaries
     else if(e2_try_token(string, E2_TokenKind_Symbol, s(""), &off, &token))
     {
-      E2_ParseTask *task = state->free_task;
-      if(task != 0)
+      // rjf: string -> operator kind
+      E2_OpKind op_kind = E2_OpKind_Null;
       {
-        SLLStackPop(state->free_task);
+        String8 token_string = str8_substr(string, token.range);
+        for EachNonZeroEnumVal(E2_OpKind, k)
+        {
+          if(e2_op_kind_info_table[k].parse_kind == E2_OpParseKind_UnaryPrefix &&
+             e2_op_kind_info_table[k].precedence <= max_precedence &&
+             str8_match(token_string, e2_op_kind_info_table[k].pre, 0))
+          {
+            op_kind = k;
+            break;
+          }
+        }
       }
-      else
+      
+      // rjf: push task for operand
+      if(op_kind != E2_OpKind_Null)
       {
-        task = push_array(arena, E2_ParseTask, 1);
+        E2_ParseTask *task = state->free_task;
+        if(task != 0)
+        {
+          SLLStackPop(state->free_task);
+        }
+        else
+        {
+          task = push_array(arena, E2_ParseTask, 1);
+        }
+        task->parent = push_array(arena, E2_Expr, 1);
+        MemoryCopyStruct(task->parent, &e2_expr_nil);
+        task->child_count_target = 1;
+        task->op_kind = op_kind;
+        task->max_precedence = e2_op_kind_info_table[op_kind].precedence;
+        SLLStackPush(state->top_task, task);
       }
-      task->parent = push_array(arena, E2_Expr, 1);
-      MemoryCopyStruct(task->parent, &e2_expr_nil);
-      task->child_count_target = 1;
-      SLLStackPush(state->top_task, task);
     }
     
     //- rjf: leaf identifiers
@@ -462,7 +495,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
           case 8:{expr->op = RDI_EvalOp_ConstU512; expr->type_key = e2_type_key_basic(E2_TypeKind_U512);}break;
           default:
           {
-            e2_msgf(arena, &parse.msgs, token.range.min, "Invalid number of numeric portions specified (%I64u; must be 2, 4, or 8).", u64_idx);
+            e2_msgf(arena, &parse.msgs, token.range, "Invalid number of numeric portions specified (%I64u; must be 2, 4, or 8).", u64_idx);
           }break;
         }
         scratch_end(scratch);
@@ -492,29 +525,149 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
       }
     }
     
-    //- rjf: attach formed expressions to task
-    if(expr != &e2_expr_nil && state->top_task != 0)
+    //- rjf: extend parsed expression tree with trailing binary operators
+    if(expr != &e2_expr_nil)
     {
-      SLLQueuePush(state->top_task->parent->first, state->top_task->parent->last, expr);
-      state->top_task->child_count += 1;
-      if(state->top_task->child_count == state->top_task->child_count_target)
+      U64 trailing_symbol_off = off;
+      if(e2_try_token(string, E2_TokenKind_Symbol, s(""), &trailing_symbol_off, &token))
       {
-        // TODO(rjf): pop task, insert to parent, or decay to result - should naturally express below block too
+        // rjf: token string -> operator kind
+        E2_OpKind op_kind = E2_OpKind_Null;
+        {
+          String8 token_string = str8_substr(string, token.range);
+          for EachNonZeroEnumVal(E2_OpKind, k)
+          {
+            if(e2_op_kind_info_table[k].parse_kind == E2_OpParseKind_Binary &&
+               e2_op_kind_info_table[k].precedence <= max_precedence &&
+               str8_match(token_string, e2_op_kind_info_table[k].pre, 0))
+            {
+              op_kind = k;
+              break;
+            }
+          }
+        }
+        
+        // rjf: non-null operator kind -> build binary expression node, push task to fill other child
+        if(op_kind != E2_OpKind_Null)
+        {
+          E2_ParseTask *task = state->free_task;
+          if(task != 0)
+          {
+            SLLStackPop(state->free_task);
+          }
+          else
+          {
+            task = push_array(arena, E2_ParseTask, 1);
+          }
+          task->parent = push_array(arena, E2_Expr, 1);
+          MemoryCopyStruct(task->parent, &e2_expr_nil);
+          SLLQueuePush_NZ(&e2_expr_nil, task->parent->first, task->parent->last, expr, next);
+          task->child_count = 1;
+          task->child_count_target = 2;
+          task->op_kind = op_kind;
+          task->max_precedence = e2_op_kind_info_table[op_kind].precedence;
+          SLLStackPush(state->top_task, task);
+        }
       }
     }
     
-    //- rjf: no task -> formed expr is result
-    if(expr != &e2_expr_nil && state->top_task == 0)
+    //- rjf: attach formed expressions to parent task exprs; pop tasks when they're done.
+    // if we have no parent task, then we just fill the result, and we're done with the parse.
+    if(expr != &e2_expr_nil)
     {
-      parse.expr = expr;
-      break;
+      //- rjf: pop finished expressions
+      E2_Expr *finished_expr = expr;
+      for(;state->top_task != 0;)
+      {
+        //- rjf: add finished expression to current parent; increase task child count
+        E2_Expr *finished_expr_parent = state->top_task->parent;
+        SLLQueuePush_NZ(&e2_expr_nil, finished_expr_parent->first, finished_expr_parent->last, finished_expr, next);
+        state->top_task->child_count += 1;
+        
+        //- rjf: task child count hits limit -> complete this child
+        if(state->top_task->child_count >= state->top_task->child_count_target)
+        {
+          //- rjf: release task; iterate to this finished expression next
+          E2_ParseTask *completed_task = state->top_task;
+          SLLStackPop(state->top_task);
+          SLLStackPush(state->free_task, completed_task);
+          
+          //- rjf: finish expression with operator info, if applicable
+          {
+            E2_Expr *root = completed_task->parent;
+            switch(completed_task->op_kind)
+            {
+              default:{}break;
+              
+              //- rjf: dereference
+              case E2_OpKind_Deref:
+              {
+                // rjf: unpack operand
+                E2_Expr *rhs = root->first;
+                // E2_TypeKey rhs_type_key = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_AllDecorative & ~E2_TypeUnwrapFlag_Enums);
+                // E2_TypeKind rhs_type_kind = e2_type_kind_from_key(rhs_type_key);
+                // E2_TypeKey dereferenced_type = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_All & ~E2_TypeUnwrapFlag_Enums);
+                // U64 dereferenced_type_size = e2_byte_size_from_type_key(dereferenced_type);
+                
+                // rjf: collect info about malformed situations
+                B32 malformed = 0;
+                // if(dereferenced_type_size == 0 && e2_type_kind_is_ptr_or_ref(rhs_type_kind))
+                {
+                  malformed = 1;
+                  // e2_msgf(arena, &parse.msgs, src->root_range, "");
+                }
+              }break;
+              
+              case E2_OpKind_Address:{}break;
+              case E2_OpKind_Pos:{}break;
+              case E2_OpKind_Neg:{}break;
+              case E2_OpKind_LogNot:{}break;
+              case E2_OpKind_BitNot:{}break;
+              case E2_OpKind_Mul:{}break;
+              case E2_OpKind_Div:{}break;
+              case E2_OpKind_Mod:{}break;
+              case E2_OpKind_Add:{}break;
+              case E2_OpKind_Sub:{}break;
+              case E2_OpKind_LShift:{}break;
+              case E2_OpKind_RShift:{}break;
+              case E2_OpKind_Less:{}break;
+              case E2_OpKind_LtEq:{}break;
+              case E2_OpKind_Grtr:{}break;
+              case E2_OpKind_GrEq:{}break;
+              case E2_OpKind_EqEq:{}break;
+              case E2_OpKind_NtEq:{}break;
+              case E2_OpKind_BitAnd:{}break;
+              case E2_OpKind_BitXor:{}break;
+              case E2_OpKind_BitOr:{}break;
+              case E2_OpKind_LogAnd:{}break;
+              case E2_OpKind_LogOr:{}break;
+              case E2_OpKind_Define:{}break;
+            }
+          }
+          
+          //- rjf: iterate to the completed task's expression node next, to try & finish it for *its* parent
+          finished_expr = completed_task->parent;
+        }
+      }
+      
+      //- rjf: for the last finished expression, if we do not have any further tasks,
+      // this is our result.
+      if(finished_expr != &e2_expr_nil && state->top_task == 0)
+      {
+        parse.expr = finished_expr;
+        if(parse.status == E2_Status_Error)
+        {
+          parse.status = E2_Status_Good;
+        }
+        break;
+      }
     }
   }
   
   //- rjf: advance offset if successful
   if(parse.status == E2_Status_Good)
   {
-    state->string_off += off;
+    state->string_off = off;
   }
   return parse;
 }
