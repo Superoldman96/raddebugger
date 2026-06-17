@@ -205,6 +205,20 @@ struct E2_Val
 
 typedef U64 E2_SpaceID;
 
+typedef struct E2_DbgInfo E2_DbgInfo;
+struct E2_DbgInfo
+{
+  DI_Key dbgi_key;
+  RDI_Parsed *rdi;
+};
+
+typedef struct E2_Assets E2_Assets;
+struct E2_Assets
+{
+  U32 dbg_infos_count;
+  E2_DbgInfo *dbg_infos;
+};
+
 ////////////////////////////////
 //~ rjf: Evaluation Contexts
 
@@ -279,6 +293,13 @@ struct E2_Expr
   E2_Val val;
 };
 
+typedef struct E2_ExprNode E2_ExprNode;
+struct E2_ExprNode
+{
+  E2_ExprNode *next;
+  E2_Expr *v;
+};
+
 typedef struct E2_ExprMapNode E2_ExprMapNode;
 struct E2_ExprMapNode
 {
@@ -299,6 +320,8 @@ struct E2_ParseTask
 {
   E2_ParseTask *next;
   E2_Expr *parent;
+  E2_ExprNode *first_child;
+  E2_ExprNode *last_child;
   U64 child_count;
   U64 child_count_target;
   S64 max_precedence;
@@ -409,7 +432,7 @@ internal E2_Msg *e2_msg(Arena *arena, E2_MsgList *msgs, Rng1U64 src_range, Strin
 internal E2_Msg *e2_msgf(Arena *arena, E2_MsgList *msgs, Rng1U64 src_range, char *fmt, ...);
 
 ////////////////////////////////
-//~ rjf: Types
+//~ rjf: Type Keys
 
 internal E2_TypeKey e2_type_key_basic(E2_TypeKind kind);
 

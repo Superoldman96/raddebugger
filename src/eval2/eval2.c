@@ -141,7 +141,7 @@ e2_msgf(Arena *arena, E2_MsgList *msgs, Rng1U64 src_range, char *fmt, ...)
 }
 
 ////////////////////////////////
-//~ rjf: Types
+//~ rjf: Type Keys
 
 internal E2_TypeKey
 e2_type_key_basic(E2_TypeKind kind)
@@ -579,9 +579,10 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
       E2_Expr *finished_expr = expr;
       for(;state->top_task != 0;)
       {
-        //- rjf: add finished expression to current parent; increase task child count
-        E2_Expr *finished_expr_parent = state->top_task->parent;
-        SLLQueuePush_NZ(&e2_expr_nil, finished_expr_parent->first, finished_expr_parent->last, finished_expr, next);
+        //- rjf: gather finished expression to current task; increase task child count
+        E2_ExprNode *n = push_array(arena, E2_ExprNode, 1);
+        SLLQueuePush(state->top_task->first_child, state->top_task->last_child, n);
+        n->v = finished_expr;
         state->top_task->child_count += 1;
         
         //- rjf: task child count hits limit -> complete this child
@@ -593,8 +594,11 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
           SLLStackPush(state->free_task, completed_task);
           
           //- rjf: finish expression with operator info, if applicable
+          finished_expr = completed_task->parent;
+          E2_Expr *lhs = completed_task->first_child ? completed_task->first_child->v : &e2_expr_nil;
+          E2_Expr *rhs = completed_task->last_child ? completed_task->last_child->v : &e2_expr_nil;
           {
-            E2_Expr *root = completed_task->parent;
+            E2_Expr *root = finished_expr;
             switch(completed_task->op_kind)
             {
               default:{}break;
@@ -602,20 +606,38 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
               //- rjf: dereference
               case E2_OpKind_Deref:
               {
+#if 0
                 // rjf: unpack operand
-                E2_Expr *rhs = root->first;
-                // E2_TypeKey rhs_type_key = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_AllDecorative & ~E2_TypeUnwrapFlag_Enums);
-                // E2_TypeKind rhs_type_kind = e2_type_kind_from_key(rhs_type_key);
-                // E2_TypeKey dereferenced_type = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_All & ~E2_TypeUnwrapFlag_Enums);
-                // U64 dereferenced_type_size = e2_byte_size_from_type_key(dereferenced_type);
+                E2_TypeKey rhs_type_key = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_AllDecorative & ~E2_TypeUnwrapFlag_Enums);
+                E2_TypeKind rhs_type_kind = e2_type_kind_from_key(rhs_type_key);
+                E2_TypeKey dereferenced_type = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_All & ~E2_TypeUnwrapFlag_Enums);
+                U64 dereferenced_type_size = e2_byte_size_from_type_key(dereferenced_type);
                 
                 // rjf: collect info about malformed situations
                 B32 malformed = 0;
-                // if(dereferenced_type_size == 0 && e2_type_kind_is_ptr_or_ref(rhs_type_kind))
+                if(dereferenced_type_size == 0 && e2_type_kind_is_ptr_or_ref(rhs_type_kind))
                 {
                   malformed = 1;
-                  // e2_msgf(arena, &parse.msgs, src->root_range, "");
+                  e2_msgf(arena, &parse.msgs, src->root_range, "Cannot dereference pointers to zero-sized types.");
                 }
+                else if(dereferenced_type_size == 0 && rhs_type_kind == E2_TypeKind_Array)
+                {
+                  malformed = 1;
+                  e2_msgf(arena, &parse.msgs, src->root_range, "Cannot dereference arrays of zero-sized types.");
+                }
+                else if(!e2_type_kind_is_ptr_or_ref(rhs_type_kind) && rhs_type_kind != E2_TypeKind_Array)
+                {
+                  malformed = 1;
+                  e2_msgf(arena, &parse.msgs, src->root_range, "Cannot dereference this type.");
+                }
+                
+                // rjf: not malformed -> equip info
+                if(!malformed)
+                {
+                  E2_Expr *addr_value_tree = e2_expr_resolve_to_value(arena, rhs);
+                  SLLQueuePush_NZ(&e2_expr_nil, finished_expr->first, finished_expr->last, addr_value_tree, next);
+                }
+#endif
               }break;
               
               case E2_OpKind_Address:{}break;
@@ -644,9 +666,6 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
               case E2_OpKind_Define:{}break;
             }
           }
-          
-          //- rjf: iterate to the completed task's expression node next, to try & finish it for *its* parent
-          finished_expr = completed_task->parent;
         }
       }
       

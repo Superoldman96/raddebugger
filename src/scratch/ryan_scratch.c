@@ -13,14 +13,22 @@
 //- rjf: [h]
 #include "base/base_inc.h"
 #include "x64/x64.h"
+#include "http/http_inc.h"
+#include "artifact_cache/artifact_cache.h"
+#include "symbol_server/symbol_server_inc.h"
 #include "rdi/rdi_local.h"
+#include "dbg_info/dbg_info.h"
 #include "arch/arch_inc.h"
 #include "eval2/eval2.h"
 
 //- rjf: [c]
 #include "base/base_inc.c"
 #include "x64/x64.c"
+#include "http/http_inc.c"
+#include "artifact_cache/artifact_cache.c"
+#include "symbol_server/symbol_server_inc.c"
 #include "rdi/rdi_local.c"
+#include "dbg_info/dbg_info.c"
 #include "arch/arch_inc.c"
 #include "eval2/eval2.c"
 
