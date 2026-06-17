@@ -185,7 +185,6 @@ internal String16 str16_cstring(U16 *c);
 internal String32 str32_cstring(U32 *c);
 internal String8  str8_cstring_capped(void *cstr, void *cap);
 internal String16 str16_cstring_capped(void *cstr, void *cap);
-internal String8  str8_cstring_capped_reverse(void *raw_start, void *raw_cap);
 
 ////////////////////////////////
 //~ rjf: String Stylization

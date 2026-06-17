@@ -142,18 +142,16 @@ cv_type_server_info_from_leaf(CV_Leaf leaf)
   CV_TypeServerInfo result = {0};
   switch (leaf.kind) {
   case CV_LeafKind_TYPESERVER: {
-    CV_LeafTypeServer *ts   = (CV_LeafTypeServer *) leaf.data.str;
-
-    result.name      = str8_cstring_capped_reverse(ts + 1, leaf.data.str + leaf.data.size);
+    CV_LeafTypeServer *ts = (CV_LeafTypeServer *) leaf.data.str;
+    result.name      = str8_cstring_capped(ts + 1, leaf.data.str + leaf.data.size);
     result.sig.data1 = ts->sig;
     result.age       = ts->age;
   } break;
   case CV_LeafKind_TYPESERVER2: {
     CV_LeafTypeServer2 *ts = (CV_LeafTypeServer2 *) leaf.data.str;
-    
     Assert(sizeof(result.sig) == sizeof(ts->sig70));
     MemoryCopy(&result.sig, &ts->sig70, sizeof(ts->sig70));
-    result.name = str8_cstring_capped_reverse(ts + 1, leaf.data.str + leaf.data.size);
+    result.name = str8_cstring_capped(ts + 1, leaf.data.str + leaf.data.size);
     result.age  = ts->age;
   } break;
   case CV_LeafKind_TYPESERVER_ST: {

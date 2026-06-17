@@ -2,6 +2,13 @@
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
 ////////////////////////////////
+
+#if !defined(MEM_STATIC)
+# define MEM_STATIC
+# include "third_party/martins_memfun/memfun.h"
+#endif
+
+////////////////////////////////
 //~ rjf: Character Classification & Conversion Functions
 
 internal B32
@@ -211,12 +218,9 @@ str32_cstring(U32 *c)
 internal String8
 str8_cstring_capped(void *cstr, void *cap)
 {
-  char *ptr = (char *)cstr;
-  char *opl = (char *)cap;
-  for (;ptr < opl && *ptr != 0; ptr += 1);
-  U64 size = (U64)(ptr - (char *)cstr);
-  String8 result = str8((U8*)cstr, size);
-  return result;
+  U64 cap_size = (U64)((U8 *)cap - (U8 *)cstr);
+  U64 size     = MemFind(cstr, cap_size, 0);
+  return str8(cstr, size);
 }
 
 internal String16
@@ -227,24 +231,6 @@ str16_cstring_capped(void *cstr, void *cap)
   for (;ptr < opl && *ptr != 0; ptr += 1);
   U64 size = (U64)(ptr - (U16 *)cstr);
   String16 result = str16(cstr, size);
-  return result;
-}
-
-internal String8
-str8_cstring_capped_reverse(void *raw_start, void *raw_cap)
-{
-  U8 *start = raw_start;
-  U8 *ptr   = raw_cap;
-  for(; ptr > start; )
-  {
-    ptr -= 1;
-    if (*ptr == '\0')
-    {
-      break;
-    }
-  }
-  U64 size = (U64)(ptr - start);
-  String8 result  = str8(start, size);
   return result;
 }
 
@@ -293,7 +279,11 @@ str8_match(String8 a, String8 b, StringMatchFlags flags)
   B32 result = 0;
   if(a.size == b.size && flags == 0)
   {
-    result = MemoryMatch(a.str, b.str, b.size);
+    result = MemIsEqual(a.str, b.str, b.size);
+  }
+  else if(a.size == b.size && flags == StringMatchFlag_CaseInsensitive)
+  {
+    result = MemCompareI(a.str, b.str, a.size) == 0;
   }
   else if(a.size == b.size || (flags & StringMatchFlag_RightSideSloppy))
   {
@@ -3088,45 +3078,28 @@ str8_deserial_read_sleb128(String8 string, U64 off, S64 *value_out)
 internal int
 str8_compar(String8 a, String8 b, B32 ignore_case)
 {
-  int cmp = 0;
+  int cmp  = 0;
   U64 size = Min(a.size, b.size);
-  if (ignore_case) {
-    for (U64 i = 0; i < size; ++i) {
-      U8 la = lower_from_char(a.str[i]);
-      U8 lb = lower_from_char(b.str[i]);
-      if (la < lb) {
-        cmp = -1;
-        break;
-      } else if (la > lb) {
-        cmp = +1;
-        break;
-      }
-    } 
-  } else {
-    for (U64 i = 0; i < size; ++i) {
-      if (a.str[i] < b.str[i]) {
-        cmp = -1;
-        break;
-      } else if (a.str[i] > b.str[i]) {
-        cmp = +1;
-        break;
-      }
-    } 
+  if (ignore_case)
+  {
+    cmp = MemCompareI(a.str, b.str, size);
+  }
+  else
+  {
+    cmp = MemCompare(a.str, b.str, size);
   }
   
-  if (cmp == 0) {
-    // shorter prefix must precede longer prefixes
-    if (a.size > b.size) {
-      cmp = +1;
-    } else if (b.size > a.size) {
-      cmp = -1;
-    }
+  // shorter prefix must precede longer prefixes
+  if (cmp == 0)
+  {
+    cmp = (a.size > b.size) - (b.size - a.size);
   }
   
   return cmp;
 }
 
-internal int str8_compar_ignore_case(const void *a, const void *b)
+internal int
+str8_compar_ignore_case(const void *a, const void *b)
 {
   return str8_compar(*(String8*)a, *(String8*)b, 1);
 }

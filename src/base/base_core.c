@@ -692,6 +692,26 @@ u64_array_bsearch(U64 *arr, U64 count, U64 value)
 
 ////////////////////////////////
 
+internal U32
+idx_of_zero_byte64(U8 *ptr, U64 size)
+{
+  Assert(size == 8);
+#if ARCH_X64
+  __m128i v = _mm_loadl_epi64((__m128i*)ptr);
+  __m128i m = _mm_cmpeq_epi8(v, _mm_setzero_si128());
+  U32 bits = _mm_movemask_epi8(m);
+  return ctz32(bits);
+#else
+  U64 x;
+  MemoryCopyStruct(&x, ptr);
+  U64 splat    = ~0ULL / 255;
+  U64 mask_lsb = 0x01 * splat;
+  U64 mask_msb = 0x80 * splat;
+  U64 t = (x - mask_lsb) & (~x & mask_msb);
+  return ctz64(t) / 8;
+#endif
+}
+
 internal U64
 index_of_zero_u32(U32 *ptr, U64 count)
 {

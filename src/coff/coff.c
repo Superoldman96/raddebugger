@@ -92,13 +92,8 @@ coff_read_symbol_name(String8 string_table, COFF_SymbolName *name)
   if (name->long_name.zeroes == 0) {
     str8_deserial_read_cstr(string_table, name->long_name.string_table_offset, &name_str);
   } else {
-    U32 i;
-    for (i = 0; i < sizeof(name->short_name); ++i) {
-      if (name->short_name[i] == '\0') {
-        break;
-      }
-    }
-    name_str = str8(name->short_name, i);
+    U32 name_size = idx_of_zero_byte64(name->short_name, sizeof(name->short_name));
+    name_str = str8(name->short_name, name_size);
   }
   return name_str;
 }
