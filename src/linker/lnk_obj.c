@@ -351,12 +351,12 @@ THREAD_POOL_TASK_FUNC(lnk_obj_find_debug_t)
 {
   LNK_Obj *obj = &((LNK_ObjNode *)raw_task)[task_id].data;
   for EachIndex(sect_idx, obj->header.section_count_no_null) {
-    LNK_ObjSection section = lnk_obj_section_from_sect_idx(obj, sect_idx);
-    if (str8_match(section.name, str8_lit(".debug$T"), 0)) {
+    String8 section_name = lnk_obj_section_name_from_sect_idx(obj, sect_idx);
+    if (str8_match(section_name, str8_lit(".debug$T"), 0)) {
       obj->debug_t_sect_idx = sect_idx;
-    } else if (str8_match(section.name, str8_lit(".debug$P"), 0)) {
+    } else if (str8_match(section_name, str8_lit(".debug$P"), 0)) {
       obj->debug_p_sect_idx = sect_idx;
-    } else if (str8_match(section.name, str8_lit(".debug$H"), 0)) {
+    } else if (str8_match(section_name, str8_lit(".debug$H"), 0)) {
       obj->debug_h_sect_idx = sect_idx;
     }
   }
@@ -570,6 +570,20 @@ lnk_obj_section_number_from_sect_idx(LNK_Obj *obj, U64 sect_idx)
   return sect_idx+1;
 }
 
+internal String8
+lnk_obj_section_name_from_sect_idx(LNK_Obj *obj, U64 sect_idx)
+{
+  COFF_SectionHeader *section_header = &lnk_coff_section_table_from_obj(obj)[sect_idx];
+  return coff_name_from_section_header(lnk_coff_string_table_from_obj(obj), section_header);
+}
+
+internal String8
+lnk_obj_section_name_from_section_number(LNK_Obj *obj, U64 section_number)
+{
+  Assert(section_number > 0);
+  return lnk_obj_section_name_from_sect_idx(obj, section_number-1);
+}
+
 internal LNK_ObjSection
 lnk_obj_section_from_sect_idx(LNK_Obj *obj, U64 sect_idx)
 {
@@ -580,7 +594,6 @@ lnk_obj_section_from_sect_idx(LNK_Obj *obj, U64 sect_idx)
   section.section_number = sect_idx+1;
   section.header         = &lnk_coff_section_table_from_obj(obj)[sect_idx];
   section.flags          = &obj->section_flags[sect_idx];
-  section.name           = coff_name_from_section_header(lnk_coff_string_table_from_obj(obj), section.header);
   section.vrange         = rng_1u64(section.header->voff, section.header->voff + section.header->vsize);
   section.frange         = rng_1u64(section.header->foff, section.header->foff + section.header->fsize);
   section.reloc_count    = section.header->reloc_count;
@@ -669,16 +682,15 @@ THREAD_POOL_TASK_FUNC(lnk_collect_obj_chunks_task)
   LNK_SectionCollector *task = raw_task;
   LNK_Obj              *obj  = task->objs[task_id];
 
-  for (U32 sect_idx = 0; sect_idx < obj->header.section_count_no_null; sect_idx += 1) {
+  for EachIndex(sect_idx, obj->header.section_count_no_null) {
     LNK_ObjSection section = lnk_obj_section_from_sect_idx(obj, sect_idx);
 
-    if (*section.flags & COFF_SectionFlag_LnkRemove) {
-      if (!task->collect_discarded) {
-        continue;
-      }
+    if (*section.flags & COFF_SectionFlag_LnkRemove && !task->collect_discarded) {
+      continue;
     }
 
-    if (str8_match(section.name, task->name, 0)) {
+    String8 section_name = lnk_obj_section_name_from_sect_idx(obj, sect_idx);
+    if (str8_match(section_name, task->name, 0)) {
       String8 section_data = str8_substr(obj->data, section.frange);
       str8_list_push(arena, &task->out_lists[task_id], section_data);
     }
@@ -758,7 +770,8 @@ lnk_raw_directives_from_obj(Arena *arena, LNK_Obj *obj)
   for (U64 sect_idx = 0; sect_idx < obj->header.section_count_no_null; sect_idx += 1) {
     LNK_ObjSection section = lnk_obj_section_from_sect_idx(obj, sect_idx);
     if (*section.flags & COFF_SectionFlag_LnkInfo) {
-      if (str8_match(section.name, str8_lit(".drectve"), 0)) {
+      String8 section_name = lnk_obj_section_name_from_sect_idx(obj, sect_idx);
+      if (str8_match(section_name, str8_lit(".drectve"), 0)) {
         if (*section.flags & COFF_SectionFlag_CntUninitializedData) {
           lnk_error_obj(LNK_Error_IllData, obj, ".drectve section header has flag COFF_SectionFlag_CntUninitializedData");
           break;
@@ -796,8 +809,9 @@ lnk_debug_s_from_obj(Arena *arena, LNK_Obj *obj)
   String8List raw_debug_s = {0};
   {
     for EachIndex(sect_idx, obj->header.section_count_no_null) {
-      LNK_ObjSection section = lnk_obj_section_from_sect_idx(obj, sect_idx);
-      if (str8_match(section.name, str8_lit(".debug$S"), 0)) {
+      LNK_ObjSection section      = lnk_obj_section_from_sect_idx(obj, sect_idx);
+      String8        section_name = lnk_obj_section_name_from_sect_idx(obj, sect_idx);
+      if (str8_match(section_name, str8_lit(".debug$S"), 0)) {
         String8 debug_s = str8_substr(obj->data, section.frange);
         str8_list_push(scratch.arena, &raw_debug_s, debug_s);
       }

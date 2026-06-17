@@ -47,7 +47,6 @@ typedef struct LNK_ObjSection
   U64                 section_number;
   COFF_SectionHeader *header;
   COFF_SectionFlags  *flags;
-  String8             name;
   Rng1U64             vrange;
   Rng1U64             frange;
   U32                 reloc_count;
@@ -148,6 +147,8 @@ internal COFF_SectionHeader * lnk_coff_section_header_from_section_number(LNK_Ob
 internal COFF_ParsedSymbol    lnk_parsed_symbol_from_coff_symbol_idx(LNK_Obj *obj, U64 symbol_idx);
 internal U64                  lnk_obj_sect_idx_from_section_number(LNK_Obj *obj, U64 section_number);
 internal U64                  lnk_obj_section_number_from_sect_idx(LNK_Obj *obj, U64 sect_idx);
+internal String8              lnk_obj_section_name_from_section_number(LNK_Obj *obj, U64 section_number);
+internal String8              lnk_obj_section_name_from_sect_idx(LNK_Obj *obj, U64 sect_idx);
 internal LNK_ObjSection       lnk_obj_section_from_sect_idx(LNK_Obj *obj, U64 sect_idx);
 internal LNK_ObjSection       lnk_obj_section_from_section_number(LNK_Obj *obj, U64 section_number);
 internal COFF_RelocArray      lnk_coff_relocs_from_section_header(LNK_Obj *obj, COFF_SectionHeader *section_header);

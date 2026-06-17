@@ -3074,14 +3074,15 @@ THREAD_POOL_TASK_FUNC(lnk_push_dbi_sec_contrib_task)
   PDB_DbiSectionContribNode *sc_arr   = push_array_no_zero(arena, PDB_DbiSectionContribNode, obj->header.section_count_no_null);
   U64                        sc_count = 0;
   
-  for (U64 sect_idx = 0; sect_idx < obj->header.section_count_no_null; sect_idx += 1) {
+  for EachIndex(sect_idx, obj->header.section_count_no_null) {
     LNK_ObjSection section = lnk_obj_section_from_sect_idx(obj, sect_idx);
 
     if (*section.flags & COFF_SectionFlag_LnkInfo)   { continue; }
     if (*section.flags & COFF_SectionFlag_LnkRemove) { continue; }
     if (*section.flags & LNK_SECTION_FLAG_DEBUG)     { continue; }
 
-    if (str8_match(section.name, str8_lit(".pdata"), 0)) { continue; }
+    String8 section_name = lnk_obj_section_name_from_sect_idx(obj, sect_idx);
+    if (str8_match(section_name, str8_lit(".pdata"), 0)) { continue; }
 
     U64     sect_number;
     String8 sect_data;
