@@ -8,9 +8,9 @@ lnk_make_symbol(Arena *arena, String8 name, LNK_Obj *obj, U32 symbol_idx)
   ref->v.obj                = obj;
   ref->v.symbol_idx         = symbol_idx;
 
-  LNK_Symbol *symbol     = push_array(arena, LNK_Symbol, 1);
-  symbol->name           = name;
-  symbol->refs           = ref;
+  LNK_Symbol *symbol = push_array(arena, LNK_Symbol, 1);
+  symbol->name       = name;
+  SLLQueuePush(symbol->first_ref, symbol->last_ref, ref);
 
   return symbol;
 }
@@ -351,9 +351,8 @@ lnk_on_symbol_replace(LNK_Symbol *dst, LNK_Symbol *src)
   }
 
   // merge symbol refs
-  LNK_ObjSymbolRefNode *src_last_ref;
-  for (src_last_ref = src->refs; src_last_ref->next != 0; src_last_ref = src_last_ref->next);
-  src_last_ref->next = dst->refs;
+  src->last_ref->next = dst->first_ref;
+  src->last_ref = dst->last_ref;
 
   // assert leader section is live
 #if BUILD_DEBUG
@@ -494,14 +493,14 @@ lnk_array_from_symbol_hash_trie_chunk_list(Arena *arena, LNK_SymbolHashTrieChunk
 internal LNK_ObjSymbolRef
 lnk_ref_from_symbol(LNK_Symbol *symbol)
 {
-  return symbol->refs->v;
+  return symbol->first_ref->v;
 }
 
 internal U64
 lnk_ref_count_from_symbol(LNK_Symbol *symbol)
 {
   U64 count = 0;
-  for (LNK_ObjSymbolRefNode *node = symbol->refs; node != 0; node = node->next, count += 1);
+  for (LNK_ObjSymbolRefNode *node = symbol->first_ref; node != 0; node = node->next, count += 1);
   return count;
 }
 
@@ -512,7 +511,7 @@ lnk_ref_from_symbol_many(Arena *arena, LNK_Symbol *symbol, U64 *count_out)
   U64                refs_count = lnk_ref_count_from_symbol(symbol);
   LNK_ObjSymbolRef **refs       = push_array(arena, LNK_ObjSymbolRef *, refs_count);
   U64                i          = 0;
-  for (LNK_ObjSymbolRefNode *node = symbol->refs; node != 0; node = node->next, i += 1) {
+  for (LNK_ObjSymbolRefNode *node = symbol->first_ref; node != 0; node = node->next, i += 1) {
     refs[i] = &node->v;
   }
   radsort(refs, refs_count, lnk_obj_symbol_ref_ptr_is_before);
@@ -785,7 +784,7 @@ THREAD_POOL_TASK_FUNC(lnk_replace_weak_with_default_symbol_task)
               symbol16->storage_class  = COFF_SymStorageClass_External;
             }
           } else {
-            symbol->refs->v = resolve;
+            symbol->first_ref->v = resolve;
           }
         }
       }

@@ -1782,9 +1782,9 @@ lnk_link_inputs(TP_Context      *tp,
         if (link_whole_archive) {
           local_persist LNK_Symbol *null_symbol = 0;
           if (null_symbol == 0) {
-            null_symbol              = push_array(inputer->arena, LNK_Symbol, 1);
-            null_symbol->refs        = push_array(inputer->arena, LNK_ObjSymbolRefNode, 1);
-            null_symbol->refs->v.obj = &link->objs.first->data;
+            null_symbol                   = push_array(inputer->arena, LNK_Symbol, 1);
+            null_symbol->first_ref        = push_array(inputer->arena, LNK_ObjSymbolRefNode, 1);
+            null_symbol->first_ref->v.obj = &link->objs.first->data;
           }
           LNK_LibMemberRef *member_refs = push_array(scratch.arena, LNK_LibMemberRef, lib->member_count);
           for EachIndex(member_idx, lib->member_count) {
@@ -1876,10 +1876,11 @@ lnk_link_inputs(TP_Context      *tp,
             LNK_Symbol *import_stub = lnk_symbol_table_search(symtab, str8_lit(LNK_IMPORT_STUB));
 
             // same import symbol must never be queued more than once, if it is, there is a bug in the link set logic
-            AssertAlways(member_ref->link_symbol->refs != import_stub->refs);
+            AssertAlways(member_ref->link_symbol->first_ref != import_stub->first_ref);
 
             // replace the import symbol with a stub, which is later replaced with the real import symbol once import obj is ready.
-            member_ref->link_symbol->refs = import_stub->refs;
+            member_ref->link_symbol->first_ref = import_stub->first_ref;
+            member_ref->link_symbol->last_ref = import_stub->last_ref;
 
             // push import member for import obj generation
             lnk_lib_member_ref_list_push_node(&link->imports, member_ref);

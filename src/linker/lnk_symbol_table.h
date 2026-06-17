@@ -20,7 +20,8 @@ typedef struct LNK_ObjSymbolRefNode
 typedef struct LNK_Symbol
 {
   String8               name;
-  LNK_ObjSymbolRefNode *refs;
+  LNK_ObjSymbolRefNode *first_ref;
+  LNK_ObjSymbolRefNode *last_ref;
 } LNK_Symbol;
 
 // --- Symbol Containers -------------------------------------------------------
