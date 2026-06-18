@@ -1,6 +1,11 @@
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
+// TODO(rjf): eliminate redundant null checks, just always allocate
+// empty results, and have nulls gracefully fall through
+//
+// (search for != 0 instances, inserted to prevent prior crashes)
+
 ////////////////////////////////
 //~ rjf: Basic Helpers
 
@@ -1134,7 +1139,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
             SLLStackPush(src_file_map->slots[src_file_slot], src_file_node);
             src_file_node->src_file = rdim_src_file_chunk_list_push(arena, all_src_files__sequenceless, total_path_count);
             src_file_node->src_file->path = str8_copy(arena, file_path_sanitized);
-            src_file_node->src_file->checksum_kind = p2r_rdi_from_cv_c13_checksum_kind(c13_checksum_kind);
+            src_file_node->src_file->checksum_kind = cv2r_rdi_from_cv_c13_checksum_kind(c13_checksum_kind);
             src_file_node->src_file->checksum = str8_copy(arena, checksum);
           }
         }
@@ -2360,7 +2365,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
             RDIM_Type *basic_type = itype_type_ptrs[cv_basic_type_code];
             if(basic_type == 0)
             {
-              RDI_TypeKind type_kind = p2r_rdi_type_kind_from_cv_basic_type(cv_basic_type_code);
+              RDI_TypeKind type_kind = cv2r_rdi_type_kind_from_cv_basic_type(cv_basic_type_code);
               U32 byte_size = rdi_size_from_basic_type_kind(type_kind);
               basic_type = dst_type = rdim_type_chunk_list_push(arena, all_types__pre_typedefs_ptr, (U64)itype_opl);
               if(byte_size == 0xffffffff)
@@ -2900,7 +2905,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
         }
         
         // rjf: symbol name -> container name
-        String8 container_name = str8_chop(str8_prefix(symbol_name, p2r_end_of_cplusplus_container_name(symbol_name)), 2);
+        String8 container_name = str8_chop(str8_prefix(symbol_name, cv2r_end_of_cplusplus_container_name(symbol_name)), 2);
         
         // rjf: non-empty container name -> gather
         if(container_name.size != 0)
@@ -3050,7 +3055,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
           nodes[idx] = n;
         }
       }
-      radsort(nodes, node_count, p2r_namespace_node_is_before);
+      radsort(nodes, node_count, cv2r_namespace_node_is_before);
       
       // rjf: build namespaces for this slot
       for EachIndex(node_in_slot_idx, node_count)
@@ -3367,7 +3372,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
                   // rjf: unpack global's container type
                   B32 got_container = 0;
                   RDIM_Type *container_type = 0;
-                  U64 container_name_opl = p2r_end_of_cplusplus_container_name(name);
+                  U64 container_name_opl = cv2r_end_of_cplusplus_container_name(name);
                   String8 container_name = str8_chop(str8_prefix(name, container_name_opl), 2);
                   if(!got_container && container_name.size != 0)
                   {
@@ -3453,7 +3458,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
                 // rjf: unpack proc's container type
                 B32 got_container = 0;
                 RDIM_Type *container_type = 0;
-                U64 container_name_opl = p2r_end_of_cplusplus_container_name(name);
+                U64 container_name_opl = cv2r_end_of_cplusplus_container_name(name);
                 String8 container_name = str8_chop(str8_prefix(name, container_name_opl), 2);
                 if(!got_container && container_name.size != 0 && tpi_hash != 0 && tpi_leaf != 0)
                 {
@@ -3513,7 +3518,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
                 if(procedure_root_scope && procedure_root_scope->voff_ranges.min != 0)
                 {
                   U64 voff = procedure_root_scope->voff_ranges.min;
-                  U64 hash = p2r_hash_from_voff(voff);
+                  U64 hash = cv2r_hash_from_voff(voff);
                   U64 bucket_idx = hash%link_name_map->buckets_count;
                   CV2R_LinkNameNode *node = 0;
                   for(CV2R_LinkNameNode *n = link_name_map->buckets[bucket_idx]; n != 0; n = n->next)
@@ -3694,13 +3699,13 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
                     // rjf: equip location info
                     {
                       // rjf: get raddbg register code
-                      RDI_RegCode reg_code = p2r_rdi_reg_code_from_cv_reg_code(arch, cv_reg);
+                      RDI_RegCode reg_code = cv2r_rdi_reg_code_from_cv_reg_code(arch, cv_reg);
                       // TODO(rjf): real byte_size & byte_pos from cv_reg goes here
                       U32 byte_size = 8;
                       U32 byte_pos = 0;
                       
                       // rjf: build location
-                      RDIM_Location loc = p2r_location_from_addr_reg_off(arena, arch, reg_code, byte_size, byte_pos, (S64)(S32)var_off, extra_indirection_to_value);
+                      RDIM_Location loc = cv2r_location_from_addr_reg_off(arena, arch, reg_code, byte_size, byte_pos, (S64)(S32)var_off, extra_indirection_to_value);
                       RDIM_Rng1U64 voff_range = {0, max_U64};
                       rdim_location_case_list_push(arena, &local->location_cases, loc, voff_range);
                     }
@@ -3724,7 +3729,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
                 // rjf: unpack thread variable's container type
                 B32 got_container = 0;
                 RDIM_Type *container_type = 0;
-                U64 container_name_opl = p2r_end_of_cplusplus_container_name(name);
+                U64 container_name_opl = cv2r_end_of_cplusplus_container_name(name);
                 String8 container_name = str8_chop(str8_prefix(name, container_name_opl), 2);
                 if(!got_container && container_name.size != 0)
                 {
@@ -3846,7 +3851,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
                 Rng1U64 voff_range = r1u64(range_voff_first, range_voff_opl);
                 CV_LvarAddrGap *gaps = (CV_LvarAddrGap*)(defrange_register+1);
                 U64 gap_count = ((U8*)iter.opl - (U8*)gaps) / sizeof(*gaps);
-                RDI_RegCode reg_code = p2r_rdi_reg_code_from_cv_reg_code(arch, cv_reg);
+                RDI_RegCode reg_code = cv2r_rdi_reg_code_from_cv_reg_code(arch, cv_reg);
                 
                 // rjf: build location
                 RDIM_Location loc = {RDI_LocationKind_ValReg, reg_code};
@@ -3922,7 +3927,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
                 Rng1U64 voff_range = r1u64(range_voff_first, range_voff_opl);
                 CV_LvarAddrGap *gaps = (CV_LvarAddrGap*)(defrange_subfield_register + 1);
                 U64 gap_count = ((U8*)iter.opl - (U8*)gaps) / sizeof(*gaps);
-                RDI_RegCode reg_code = p2r_rdi_reg_code_from_cv_reg_code(arch, cv_reg);
+                RDI_RegCode reg_code = cv2r_rdi_reg_code_from_cv_reg_code(arch, cv_reg);
                 
                 // rjf: skip "subfield" location info - currently not supported
                 if(defrange_subfield_register->field_offset != 0)
@@ -3964,14 +3969,14 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
                 // rjf: unpack sym
                 CV_SymDefrangeFramepointerRelFullScope *defrange_fprel_full_scope = (CV_SymDefrangeFramepointerRelFullScope*)iter.struct_base;
                 CV_EncodedFramePtrReg encoded_fp_reg = cv_pick_fp_encoding(frameproc, defrange_target->is_param);
-                RDI_RegCode fp_register_code = p2r_reg_code_from_arch_encoded_fp_reg(arch, encoded_fp_reg);
+                RDI_RegCode fp_register_code = cv2r_reg_code_from_arch_encoded_fp_reg(arch, encoded_fp_reg);
                 
                 // rjf: build location
                 B32 extra_indirection = 0;
                 U32 byte_size = rdi_addr_size_from_arch(arch);
                 U32 byte_pos = 0;
                 S64 var_off = (S64)defrange_fprel_full_scope->off;
-                RDIM_Location loc = p2r_location_from_addr_reg_off(arena, arch, fp_register_code, byte_size, byte_pos, var_off, extra_indirection);
+                RDIM_Location loc = cv2r_location_from_addr_reg_off(arena, arch, fp_register_code, byte_size, byte_pos, var_off, extra_indirection);
                 
                 // rjf: emit location over ranges
                 RDIM_Rng1U64 voff_range = {0, max_U64};
@@ -4169,7 +4174,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
                 U64 container_name_opl = 0;
                 if(type != 0)
                 {
-                  container_name_opl = p2r_end_of_cplusplus_container_name(type->name);
+                  container_name_opl = cv2r_end_of_cplusplus_container_name(type->name);
                 }
                 String8 name_qualified = name;
                 if(container_name_opl != 0)
@@ -4224,7 +4229,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
           // rjf: determine if this pub32 was covered by another symbol record
           B32 was_in_other_record = 0;
           {
-            U64 hash = p2r_hash_from_voff(voff);
+            U64 hash = cv2r_hash_from_voff(voff);
             U64 slot_idx = hash%link_name_map->buckets_count;
             for(CV2R_LinkNameNode *n = link_name_map->buckets[slot_idx]; n != 0; n = n->next)
             {
@@ -4300,7 +4305,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
     for EachInRange(n_idx, range)
     {
       RDIM_Namespace *ns = &n->v[n_idx];
-      U64 container_name_opl = p2r_end_of_cplusplus_container_name(ns->name);
+      U64 container_name_opl = cv2r_end_of_cplusplus_container_name(ns->name);
       String8 container_name = str8_chop(str8_prefix(ns->name, container_name_opl), 2);
       if(container_name.size != 0)
       {
@@ -4999,7 +5004,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
         if(dst_type != 0 && dst_type->udt != 0 && udt_name.size != 0)
         {
           // rjf: unpack fully qualified namespace from udt name
-          U64 container_name_opl = p2r_end_of_cplusplus_container_name(udt_name);
+          U64 container_name_opl = cv2r_end_of_cplusplus_container_name(udt_name);
           String8 container_name = str8_chop(str8_prefix(udt_name, container_name_opl), 2);
           String8 leaf_name = str8_skip(udt_name, container_name_opl);
           
