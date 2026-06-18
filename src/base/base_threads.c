@@ -192,3 +192,13 @@ slow_barrier_wait(Barrier barrier)
   
   ProfEnd();
 }
+
+////////////////////////////////
+///~ Semaphore
+
+internal void
+semaphore_drop(Semaphore semaphore)
+{
+  semaphore_drop_count(semaphore, 1);
+}
+

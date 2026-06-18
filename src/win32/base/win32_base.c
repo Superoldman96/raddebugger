@@ -686,10 +686,9 @@ semaphore_take(Semaphore semaphore, U64 endt_us)
 }
 
 internal void
-semaphore_drop(Semaphore semaphore)
+semaphore_drop_count(Semaphore semaphore, U64 drop_count)
 {
-  HANDLE handle = (HANDLE)semaphore.u64[0];
-  ReleaseSemaphore(handle, 1, 0);
+  ReleaseSemaphore((HANDLE)*semaphore.u64, drop_count, 0);
 }
 
 //- rjf: barriers

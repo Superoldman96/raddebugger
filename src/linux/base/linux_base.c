@@ -697,13 +697,15 @@ semaphore_take(Semaphore semaphore, U64 endt_us)
 }
 
 internal void
-semaphore_drop(Semaphore semaphore)
+semaphore_drop_count(Semaphore semaphore, U64 count)
 {
-  int err = -1;
-  if(semaphore.u64[0] != 0)
-  {
-    err = LNX_RETRY_ON_EINTR(sem_post((sem_t*)semaphore.u64[0]));
-    Assert(err == 0);
+  for EachIndex(i, count) {
+    int err = -1;
+    if(semaphore.u64[0] != 0)
+    {
+      err = LNX_RETRY_ON_EINTR(sem_post((sem_t*)*semaphore.u64));
+      Assert(err == 0);
+    }
   }
 }
 
