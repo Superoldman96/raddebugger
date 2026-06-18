@@ -874,7 +874,14 @@ rb_thread_entry_point(void *p)
             convert_params.subset_flags   = subset_flags;
             convert_params.deterministic  = cmd_line_has_flag(cmdline, str8_lit("deterministic"));
           }
-          ProfScope("convert") pdb_bake_params = p2r_convert(arena, &convert_params);
+          if(cmd_line_has_flag(cmdline, s("a")))
+          {
+            ProfScope("convert") pdb_bake_params = p2r_convert(arena, &convert_params);
+          }
+          else
+          {
+            ProfScope("convert") pdb_bake_params = p2r_convert2(arena, &convert_params);
+          }
         }
         
         //- rjf: RDI inputs => RDI joining

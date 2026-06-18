@@ -49,7 +49,6 @@ typedef struct CV2R_TPIHash CV2R_TPIHash;
 struct CV2R_TPIHash
 {
   String8 data;
-  String8 aux_data;
   CV2R_TPIHashBlock **buckets;
   U32 bucket_count;
   U32 bucket_mask;

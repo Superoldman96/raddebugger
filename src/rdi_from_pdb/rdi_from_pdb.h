@@ -135,6 +135,11 @@ internal void p2r_location_case_list_push_over_lvar_addr_range(Arena *arena, RDI
 internal RDIM_BakeParams p2r_convert(Arena *arena, P2R_ConvertParams *params);
 
 ////////////////////////////////
+//~ rjf: PDB -> (Codeview -> RDI) TPI Hash Table Building
+
+internal CV2R_TPIHash *p2r_cv2r_tpi_hash_from_data(Arena *arena, PDB_Strtbl *strtbl, PDB_TpiParsed *tpi, String8 data);
+
+////////////////////////////////
 //~ rjf: Top-Level Conversion Entry Point (Revised)
 
 internal RDIM_BakeParams p2r_convert2(Arena *arena, P2R_ConvertParams *params);

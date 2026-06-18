@@ -324,7 +324,7 @@ pdb_tpi_from_data(Arena *arena, String8 data)
 }
 
 internal PDB_TpiHashParsed*
-pdb_tpi_hash_from_data(Arena *arena, PDB_Strtbl *strtbl, PDB_TpiParsed *tpi, String8 data, String8 aux_data)
+pdb_tpi_hash_from_data(Arena *arena, PDB_Strtbl *strtbl, PDB_TpiParsed *tpi, String8 data)
 {
   ProfBeginFunction();
   PDB_TpiHashParsed *result = push_array(arena, PDB_TpiHashParsed, 1);
@@ -442,7 +442,6 @@ pdb_tpi_hash_from_data(Arena *arena, PDB_Strtbl *strtbl, PDB_TpiParsed *tpi, Str
     
     // fill result
     result->data = data;
-    result->aux_data = aux_data;
     result->buckets = buckets;
     result->bucket_count = bucket_count;
     result->bucket_mask = bucket_mask;

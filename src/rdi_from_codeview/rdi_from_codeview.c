@@ -331,7 +331,15 @@ cv2r_itypes_from_name(Arena *arena, CV2R_TPIHash *tpi_hash, CV_LeafParsed *leaf,
 internal CV_TypeId
 cv2r_first_itype_from_name(CV2R_TPIHash *tpi_hash, CV_LeafParsed *tpi_leaf, String8 name, B32 compare_unique_name)
 {
-  
+  Temp scratch = scratch_begin(0, 0);
+  CV_TypeIdArray array = cv2r_itypes_from_name(scratch.arena, tpi_hash, tpi_leaf, name, compare_unique_name, 1);
+  CV_TypeId result = 0;
+  if(array.count > 0)
+  {
+    result = array.itypes[0];
+  }
+  scratch_end(scratch);
+  return result;
 }
 
 ////////////////////////////////

@@ -550,12 +550,11 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
     if(lane_idx() == lane_from_task_idx(1)) ProfScope("parse TPI hash")
     {
       String8 hash_data = msf_data_from_stream(msf, tpi->hash_sn);
-      String8 aux_data  = msf_data_from_stream(msf, tpi->hash_sn_aux);
       if(!(params->subset_flags & (RDIM_SubsetFlag_Types|RDIM_SubsetFlag_UDTs)))
       {
-        hash_data = aux_data = str8_zero();
+        hash_data = str8_zero();
       }
-      tpi_hash = pdb_tpi_hash_from_data(scratch.arena, strtbl, tpi, hash_data, aux_data);
+      tpi_hash = pdb_tpi_hash_from_data(scratch.arena, strtbl, tpi, hash_data);
     }
     if(lane_idx() == lane_from_task_idx(2)) ProfScope("parse TPI leaf")
     {
@@ -565,12 +564,11 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
     if(lane_idx() == lane_from_task_idx(3)) ProfScope("parse IPI hash")
     {
       String8 hash_data = msf_data_from_stream(msf, ipi->hash_sn);
-      String8 aux_data  = msf_data_from_stream(msf, ipi->hash_sn_aux);
       if(!(params->subset_flags & (RDIM_SubsetFlag_Types|RDIM_SubsetFlag_UDTs)))
       {
-        hash_data = aux_data = str8_zero();
+        hash_data = str8_zero();
       }
-      ipi_hash = pdb_tpi_hash_from_data(scratch.arena, strtbl, ipi, hash_data, aux_data);
+      ipi_hash = pdb_tpi_hash_from_data(scratch.arena, strtbl, ipi, hash_data);
     }
     if(lane_idx() == lane_from_task_idx(4)) ProfScope("parse IPI leaf")
     {
@@ -5138,6 +5136,136 @@ p2r_convert(Arena *arena, P2R_ConvertParams *params)
 }
 
 ////////////////////////////////
+//~ rjf: PDB -> (Codeview -> RDI) TPI Hash Table Building
+
+internal CV2R_TPIHash *
+p2r_cv2r_tpi_hash_from_data(Arena *arena, PDB_Strtbl *strtbl, PDB_TpiParsed *tpi, String8 data)
+{
+  CV2R_TPIHash *result = push_array(arena, CV2R_TPIHash, 1);
+  U32 stride = tpi->hash_key_size;
+  U32 bucket_count = tpi->hash_bucket_count;
+  if(1 <= stride && stride <= 8 && bucket_count > 0 && data.size != 0)
+  {
+    // allocate buckets
+    CV2R_TPIHashBlock **buckets = push_array(arena, CV2R_TPIHashBlock*, bucket_count);
+    
+    // extract "hash" array
+    U8 *hashes = data.str + tpi->hash_vals_off;
+    U8 *hash_opl = hashes + tpi->hash_vals_size;
+    
+    // for each index in the array...
+    CV_TypeId itype = tpi->itype_first;
+    U8 *hash_cursor = hashes;
+    for(;hash_cursor + stride <= hash_opl;)
+    {
+      // read index
+      U64 bucket_idx = 0;
+      MemoryCopy(&bucket_idx, hash_cursor, stride);
+      
+      // save to map
+      if(bucket_idx < bucket_count)
+      {
+        CV2R_TPIHashBlock *block = buckets[bucket_idx];
+        if(block == 0 || block->local_count == ArrayCount(block->itypes))
+        {
+          block = push_array(arena, CV2R_TPIHashBlock, 1);
+          SLLStackPush(buckets[bucket_idx], block);
+        }
+        if(block->local_count != 0)
+        {
+          MemoryCopy(block->itypes+1, block->itypes, sizeof(CV_TypeId)*block->local_count);
+        }
+        block->itypes[0] = itype;
+        block->local_count += 1;
+      }
+      
+      // advance cursor
+      hash_cursor += stride;
+      itype += 1;
+    }
+    
+    //- rjf: compute bucket mask
+    U32 bucket_mask = 0;
+    if(IsPow2OrZero(bucket_count))
+    {
+      bucket_mask = bucket_count-1;
+    }
+    
+    //- rjf: apply hash adjustments, to pull correct type IDs to the front of
+    // the chains
+    if(tpi->hash_adj_size != 0)
+    {
+      // NOTE(rjf): this table is laid out in the following format:
+      //
+      // pair_count: U32 -> # of name_index/type_index pairs
+      // slot_count: U32 -> # of slots in this hash table
+      // present_bit_array_count: U32 -> count for next array
+      // present_bit_array: U32[present_bit_array_count] -> 1 bit per slot, "is present"
+      // deleted_bit_array_count: U32 -> count for next array
+      // deleted_bit_array: U32[deleted_bit_array_count] -> 1 bit per slot, "is deleted"
+      // (U32, U32)[pair_count] -> array of name_index/type_index pairs
+      //
+      U8 *adjs = data.str + tpi->hash_adj_off;
+      U8 *adjs_opl = adjs + tpi->hash_adj_size;
+      U8 *adjs_cursor = adjs;
+      U32 pair_count = *(U32 *)adjs_cursor;
+      adjs_cursor += sizeof(U32);
+      U32 slot_count = *(U32 *)adjs_cursor;
+      adjs_cursor += sizeof(U32);
+      U32 present_bit_array_count = *(U32 *)adjs_cursor; // skip present_bit_array
+      adjs_cursor += sizeof(U32);
+      adjs_cursor += present_bit_array_count*sizeof(U32);
+      U32 deleted_bit_array_count = *(U32 *)adjs_cursor; // skip deleted_bit_array
+      adjs_cursor += sizeof(U32);
+      adjs_cursor += deleted_bit_array_count*sizeof(U32);
+      U32 adjs_stride = sizeof(U32)*2;
+      U32 pair_idx = 0;
+      for(;adjs_cursor < adjs_opl && pair_idx < pair_count;
+          adjs_cursor += adjs_stride, pair_idx += 1)
+      {
+        U32 name_off = ((U32 *)adjs_cursor)[0];
+        CV_TypeId type_id = ((CV_TypeId *)adjs_cursor)[1];
+        String8 string = pdb_strtbl_string_from_off(strtbl, name_off);
+        U32 hash = pdb_hash_v1(string);
+        U32 bucket_idx = ((bucket_mask != 0) ? hash&bucket_mask : hash%bucket_count);
+        CV2R_TPIHashBlock *prev_block = 0;
+        for(CV2R_TPIHashBlock *block = buckets[bucket_idx];
+            block != 0;
+            prev_block = block, block = block->next)
+        {
+          for(U32 local_idx = 0;
+              local_idx < block->local_count && local_idx < ArrayCount(block->itypes);
+              local_idx += 1)
+          {
+            if(block->itypes[local_idx] == type_id)
+            {
+              if(prev_block != 0)
+              {
+                prev_block->next = block->next;
+                block->next = buckets[bucket_idx];
+                buckets[bucket_idx] = block;
+              }
+              if(local_idx != 0)
+              {
+                Swap(CV_TypeId, block->itypes[0], block->itypes[local_idx]);
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+    
+    // fill result
+    result->data = data;
+    result->buckets = buckets;
+    result->bucket_count = bucket_count;
+    result->bucket_mask = bucket_mask;
+  }
+  return result;
+}
+
+////////////////////////////////
 //~ rjf: Top-Level Conversion Entry Point (Revised)
 
 internal RDIM_BakeParams
@@ -5282,9 +5410,9 @@ p2r_convert2(Arena *arena, P2R_ConvertParams *params)
   //////////////////////////////////////////////////////////////
   //- rjf: hash EXE, parse TPI/IPI hash/leaf & global symbol stream & comp units
   //
-  PDB_TpiHashParsed *tpi_hash = 0;
+  CV2R_TPIHash *tpi_hash = 0;
   CV_LeafParsed *tpi_leaf = 0;
-  PDB_TpiHashParsed *ipi_hash = 0;
+  CV2R_TPIHash *ipi_hash = 0;
   CV_LeafParsed *ipi_leaf = 0;
   PDB_CompUnitArray *comp_units = 0;
   PDB_CompUnitContributionArray *comp_unit_contributions = 0;
@@ -5293,12 +5421,11 @@ p2r_convert2(Arena *arena, P2R_ConvertParams *params)
     if(lane_idx() == lane_from_task_idx(0)) ProfScope("parse TPI hash")
     {
       String8 hash_data = msf_data_from_stream(msf, tpi->hash_sn);
-      String8 aux_data  = msf_data_from_stream(msf, tpi->hash_sn_aux);
       if(!(params->subset_flags & (RDIM_SubsetFlag_Types|RDIM_SubsetFlag_UDTs)))
       {
-        hash_data = aux_data = str8_zero();
+        hash_data = str8_zero();
       }
-      tpi_hash = pdb_tpi_hash_from_data(scratch.arena, strtbl, tpi, hash_data, aux_data);
+      tpi_hash = p2r_cv2r_tpi_hash_from_data(scratch.arena, strtbl, tpi, hash_data);
     }
     if(lane_idx() == lane_from_task_idx(1)) ProfScope("parse TPI leaf")
     {
@@ -5308,12 +5435,11 @@ p2r_convert2(Arena *arena, P2R_ConvertParams *params)
     if(lane_idx() == lane_from_task_idx(2)) ProfScope("parse IPI hash")
     {
       String8 hash_data = msf_data_from_stream(msf, ipi->hash_sn);
-      String8 aux_data  = msf_data_from_stream(msf, ipi->hash_sn_aux);
       if(!(params->subset_flags & (RDIM_SubsetFlag_Types|RDIM_SubsetFlag_UDTs)))
       {
-        hash_data = aux_data = str8_zero();
+        hash_data = str8_zero();
       }
-      ipi_hash = pdb_tpi_hash_from_data(scratch.arena, strtbl, ipi, hash_data, aux_data);
+      ipi_hash = p2r_cv2r_tpi_hash_from_data(scratch.arena, strtbl, ipi, hash_data);
     }
     if(lane_idx() == lane_from_task_idx(3)) ProfScope("parse IPI leaf")
     {
@@ -5424,7 +5550,7 @@ p2r_convert2(Arena *arena, P2R_ConvertParams *params)
     {
       cv2r_comp_units[idx].obj_name   = comp_units->units[idx]->obj_name;
       cv2r_comp_units[idx].group_name = comp_units->units[idx]->group_name;
-      cv2r_comp_units[idx].ranges     = unit_ranges[idx-1];
+      cv2r_comp_units[idx].ranges     = unit_ranges[idx+1];
     }
     lane_sync();
   }
@@ -5479,6 +5605,19 @@ p2r_convert2(Arena *arena, P2R_ConvertParams *params)
   }
   
   //////////////////////////////////////////////////////////////
+  //- rjf: produce cv2r string table
+  //
+  CV2R_StringTable cv2r_strtbl = {0};
+  {
+    cv2r_strtbl.data         = strtbl->data;
+    cv2r_strtbl.bucket_count = strtbl->bucket_count;
+    cv2r_strtbl.strblock_min = strtbl->strblock_min;
+    cv2r_strtbl.strblock_max = strtbl->strblock_max;
+    cv2r_strtbl.buckets_min  = strtbl->buckets_min;
+    cv2r_strtbl.buckets_max  = strtbl->buckets_max;
+  }
+  
+  //////////////////////////////////////////////////////////////
   //- rjf: bundle codeview conversion parameters
   //
   CV2R_ConvertParams cv2r_params = {0};
@@ -5495,8 +5634,13 @@ p2r_convert2(Arena *arena, P2R_ConvertParams *params)
     cv2r_params.comp_unit_contributions       = cv2r_comp_unit_contributions;
     cv2r_params.sections_count                = cv2r_sections_count;
     cv2r_params.sections                      = cv2r_sections;
+    cv2r_params.strtbl                        = &cv2r_strtbl;
     cv2r_params.tpi_leaf                      = tpi_leaf;
     cv2r_params.ipi_leaf                      = ipi_leaf;
+    cv2r_params.tpi_hash                      = tpi_hash;
+    cv2r_params.ipi_hash                      = ipi_hash;
+    cv2r_params.subset_flags                  = params->subset_flags;
+    cv2r_params.deterministic                 = params->deterministic;
   }
   
   //////////////////////////////////////////////////////////////
