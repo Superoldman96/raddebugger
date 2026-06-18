@@ -79,7 +79,6 @@ struct CV2R_ConvertParams
   CV2R_CompUnitContribution *comp_unit_contributions;
   U64 sections_count;
   CV2R_Section *sections;
-  U64 exe_voff_max;
   CV2R_StringTable *strtbl;
   CV_LeafParsed *tpi_leaf;
   CV_LeafParsed *ipi_leaf;

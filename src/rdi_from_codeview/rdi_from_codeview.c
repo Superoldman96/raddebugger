@@ -672,6 +672,44 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
   lane_sync_u64(&exe_hash, 0);
   
   //////////////////////////////////////////////////////////////
+  //- rjf: calculate EXE's max voff
+  //
+  U64 exe_voff_max = 0;
+  {
+    Temp scratch2 = scratch_begin(&scratch.arena, 1);
+    
+    // rjf: set up
+    U64 *lane_voff_maxes = 0;
+    if(lane_idx() == 0)
+    {
+      lane_voff_maxes = push_array(scratch2.arena, U64, lane_count());
+    }
+    lane_sync_u64(&lane_voff_maxes, 0);
+    
+    // rjf: compute each lane's max
+    {
+      U64 lane_voff_max = 0;
+      Rng1U64 range = lane_range(sections_count);
+      for EachInRange(idx, range)
+      {
+        lane_voff_max = Max(lane_voff_max, sections[idx].voff + sections[idx].vsize);
+      }
+      lane_voff_maxes[lane_idx()] = lane_voff_max;
+    }
+    lane_sync();
+    
+    // rjf: find max from all lanes
+    U64 exe_voff_max = 0;
+    for EachIndex(l_idx, lane_count())
+    {
+      exe_voff_max = Max(exe_voff_max, lane_voff_maxes[l_idx]);
+    }
+    lane_sync();
+    
+    scratch_end(scratch2);
+  }
+  
+  //////////////////////////////////////////////////////////////
   //- rjf: determine architecture
   //
   RDI_Arch arch = RDI_Arch_NULL;
@@ -5032,7 +5070,7 @@ cv2r_convert(Arena *arena, CV2R_ConvertParams *params)
       top_level_info.arch     = arch;
       top_level_info.exe_name = str8_skip_last_slash(params->exe_name);
       top_level_info.exe_hash = exe_hash;
-      top_level_info.voff_max = params->exe_voff_max;
+      top_level_info.voff_max = exe_voff_max;
       if(!params->deterministic)
       {
         MemoryCopy(&top_level_info.guid, &params->guid, Min(sizeof top_level_info.guid, sizeof params->guid));

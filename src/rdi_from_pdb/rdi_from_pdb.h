@@ -134,4 +134,9 @@ internal void p2r_location_case_list_push_over_lvar_addr_range(Arena *arena, RDI
 
 internal RDIM_BakeParams p2r_convert(Arena *arena, P2R_ConvertParams *params);
 
+////////////////////////////////
+//~ rjf: Top-Level Conversion Entry Point (Revised)
+
+internal RDIM_BakeParams p2r_convert2(Arena *arena, P2R_ConvertParams *params);
+
 #endif // RDI_FROM_PDB_H
