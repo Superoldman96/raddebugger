@@ -3,8 +3,9 @@
 
 ////////////////////////////////
 
-#if !defined(MEM_STATIC)
+#ifndef MEM_STATIC
 # define MEM_STATIC
+# define MEM_API ASAN_NO_ADDR static inline
 # include "third_party/martins_memfun/memfun.h"
 #endif
 
@@ -281,7 +282,7 @@ str8_match(String8 a, String8 b, StringMatchFlags flags)
   {
     result = MemIsEqual(a.str, b.str, b.size);
   }
-  else if(a.size == b.size && flags == StringMatchFlag_CaseInsensitive)
+  else if (a.size == b.size && flags == StringMatchFlag_CaseInsensitive)
   {
     result = MemCompareI(a.str, b.str, a.size) == 0;
   }
@@ -3087,6 +3088,7 @@ str8_compar(String8 a, String8 b, B32 ignore_case)
   else
   {
     cmp = MemCompare(a.str, b.str, size);
+    cmp = cmp > 0 ? 1 : cmp < 0 ? -1 : 0;
   }
   
   // shorter prefix must precede longer prefixes
