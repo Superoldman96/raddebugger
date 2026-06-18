@@ -40,6 +40,7 @@
 #include "arch/arch_inc.h"
 #include "rdi_from_coff/rdi_from_coff.h"
 #include "rdi_from_elf/rdi_from_elf.h"
+#include "rdi_from_codeview/rdi_from_codeview.h"
 #include "rdi_from_pdb/rdi_from_pdb.h"
 #include "rdi_from_dwarf/rdi_from_dwarf.h"
 #include "radbin/radbin.h"
@@ -75,6 +76,7 @@
 #include "rdi_from_coff/rdi_from_coff.c"
 #include "rdi_from_elf/rdi_from_elf.c"
 #include "rdi_from_pdb/rdi_from_pdb.c"
+#include "rdi_from_codeview/rdi_from_codeview.c"
 #include "rdi_from_dwarf/rdi_from_dwarf.c"
 #include "radbin/radbin.c"
 
