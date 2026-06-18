@@ -4,31 +4,31 @@
 @table(name parse_kind precedence pre sep pos chain)
 E2_OpTable:
 {
-  {Deref   UnaryPrefix 2 "*"  ""   "" ""}
-  {Address UnaryPrefix 2 "&"  ""   "" ""}
-  {Pos     UnaryPrefix 2 "+"  ""   "" ""}
-  {Neg     UnaryPrefix 2 "-"  ""   "" ""}
-  {LogNot  UnaryPrefix 2 "!"  ""   "" ""}
-  {BitNot  UnaryPrefix 2 "~"  ""   "" ""}
-  {Mul     Binary      3 ""   "*"  "" ""}
-  {Div     Binary      3 ""   "/"  "" ""}
-  {Mod     Binary      3 ""   "%"  "" ""}
-  {Add     Binary      4 ""   "+"  "" ""}
-  {Sub     Binary      4 ""   "-"  "" ""}
-  {LShift  Binary      5 ""   "<<" "" ""}
-  {RShift  Binary      5 ""   ">>" "" ""}
-  {Less    Binary      6 ""   "<"  "" ""}
-  {LtEq    Binary      6 ""   "<=" "" ""}
-  {Grtr    Binary      6 ""   ">"  "" ""}
-  {GrEq    Binary      6 ""   ">=" "" ""}
-  {EqEq    Binary      7 ""   "==" "" ""}
-  {NtEq    Binary      7 ""   "!=" "" ""}
-  {BitAnd  Binary      8 ""   "&"  "" ""}
-  {BitXor  Binary      9 ""   "^"  "" ""}
-  {BitOr   Binary     10 ""   "|"  "" ""}
-  {LogAnd  Binary     11 ""   "&&" "" ""}
-  {LogOr   Binary     12 ""   "||" "" ""}
-  {Define  Binary     13 ""   "="  "" ""}
+  {Deref   UnaryPrefix   2 "*"  ""   ""  ""}
+  {Address UnaryPrefix   2 "&"  ""   ""  ""}
+  {Pos     UnaryPrefix   2 "+"  ""   ""  ""}
+  {Neg     UnaryPrefix   2 "-"  ""   ""  ""}
+  {LogNot  UnaryPrefix   2 "!"  ""   ""  ""}
+  {BitNot  UnaryPrefix   2 "~"  ""   ""  ""}
+  {Mul     Binary        3 ""   "*"  ""  ""}
+  {Div     Binary        3 ""   "/"  ""  ""}
+  {Mod     Binary        3 ""   "%"  ""  ""}
+  {Add     Binary        4 ""   "+"  ""  ""}
+  {Sub     Binary        4 ""   "-"  ""  ""}
+  {LShift  Binary        5 ""   "<<" ""  ""}
+  {RShift  Binary        5 ""   ">>" ""  ""}
+  {Less    Binary        6 ""   "<"  ""  ""}
+  {LtEq    Binary        6 ""   "<=" ""  ""}
+  {Grtr    Binary        6 ""   ">"  ""  ""}
+  {GrEq    Binary        6 ""   ">=" ""  ""}
+  {EqEq    Binary        7 ""   "==" ""  ""}
+  {NtEq    Binary        7 ""   "!=" ""  ""}
+  {BitAnd  Binary        8 ""   "&"  ""  ""}
+  {BitXor  Binary        9 ""   "^"  ""  ""}
+  {BitOr   Binary       10 ""   "|"  ""  ""}
+  {LogAnd  Binary       11 ""   "&&" ""  ""}
+  {LogOr   Binary       12 ""   "||" ""  ""}
+  {Define  Binary       13 ""   "="  ""  ""}
 }
 
 @enum E2_OpKind:

@@ -3762,6 +3762,13 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
                     }
                   }
                   
+                  //- TODO(rjf): Try to statically evaluate the expression here if possible
+                  // (or maybe intermixed above? investigate...), to reduce to simpler bytecode
+                  // forms - reduce pressure on pattern matching
+                  {
+                    // TODO(rjf)
+                  }
+                  
                   //- rjf: apply RDI byte offsets to jump ops
                   {
                     // TODO(rjf): apply RDI byte offsets to jump ops

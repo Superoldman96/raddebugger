@@ -12,6 +12,7 @@ typedef enum E2_OpParseKind
   E2_OpParseKind_Null,
   E2_OpParseKind_UnaryPrefix,
   E2_OpParseKind_Binary,
+  E2_OpParseKind_UnaryPostfix,
 }
 E2_OpParseKind;
 
