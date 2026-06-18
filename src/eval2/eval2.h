@@ -61,6 +61,8 @@ typedef enum E2_Status
   E2_Status_UnsupportedOp,
   E2_Status_BadOffset,
   E2_Status_Error,
+  E2_Status_FirstError = E2_Status_BadRegCode,
+  E2_Status_LastError = E2_Status_Error,
 }
 E2_Status;
 
@@ -71,7 +73,7 @@ typedef enum E2_TypeKeyKind
 {
   E2_TypeKeyKind_Null,
   E2_TypeKeyKind_Basic,
-  E2_TypeKeyKind_Ext,
+  E2_TypeKeyKind_DbgInfo,
   E2_TypeKeyKind_Cons,
   E2_TypeKeyKind_Reg,
 }
@@ -82,9 +84,9 @@ struct E2_TypeKey
 {
   E2_TypeKeyKind kind;
   U32 u32[3];
-  // [0] -> E_TypeKind (Basic, Cons, Ext); Arch (Reg, RegAlias)
-  // [1] -> Type Index In Debug Info (Ext); Code (Reg, RegAlias); Type Index In Constructed (Cons)
-  // [2] -> Debug Info Number (Ext)
+  // [0] -> E_TypeKind (Basic, Cons, DbgInfo); Arch (Reg)
+  // [1] -> Debug Info Number (DbgInfo); Code (Reg); Type Index In Constructed (Cons)
+  // [2] -> Type Index In Debug Info (DbgInfo)
 };
 
 typedef struct E2_TypeKeyNode E2_TypeKeyNode;
@@ -319,7 +321,7 @@ typedef struct E2_ParseTask E2_ParseTask;
 struct E2_ParseTask
 {
   E2_ParseTask *next;
-  E2_Expr *parent;
+  Rng1U64 src_range;
   E2_ExprNode *first_child;
   E2_ExprNode *last_child;
   U64 child_count;
@@ -411,6 +413,8 @@ struct E2_Interp
 ////////////////////////////////
 //~ rjf: Globals
 
+thread_static E2_Assets *e2_assets = 0;
+read_only global E2_DbgInfo e2_dbg_info_nil = {{0}, &rdi_parsed_nil};
 read_only global E2_Expr e2_expr_nil = {&e2_expr_nil, &e2_expr_nil, &e2_expr_nil};
 
 ////////////////////////////////
@@ -432,9 +436,99 @@ internal E2_Msg *e2_msg(Arena *arena, E2_MsgList *msgs, Rng1U64 src_range, Strin
 internal E2_Msg *e2_msgf(Arena *arena, E2_MsgList *msgs, Rng1U64 src_range, char *fmt, ...);
 
 ////////////////////////////////
+//~ rjf: Assets
+
+internal void e2_select_assets(E2_Assets *assets);
+internal E2_DbgInfo *e2_dbgi_from_num(U32 num);
+
+////////////////////////////////
 //~ rjf: Type Keys
 
+//- rjf: enums
+internal E2_TypeKind e2_type_kind_from_rdi(RDI_TypeKind k);
+internal RDI_EvalTypeGroup e2_type_group_from_kind(E2_TypeKind k);
+internal B32 e2_type_kind_is_ptr_or_ref(E2_TypeKind k);
+internal B32 e2_type_kind_is_integer(E2_TypeKind k);
+internal B32 e2_type_kind_is_float(E2_TypeKind k);
+internal B32 e2_type_kind_is_signed(E2_TypeKind k);
+internal B32 e2_type_kind_is_unsigned(E2_TypeKind k);
+
+//- rjf: basic key constructors
+internal E2_TypeKey e2_type_key_zero(void);
 internal E2_TypeKey e2_type_key_basic(E2_TypeKind kind);
+internal E2_TypeKey e2_type_key_dbgi(E2_TypeKind kind, U32 dbg_info_num, U32 type_idx);
+internal E2_TypeKey e2_type_key_reg(Arch arch, ARCH_RegCode reg_code);
+
+//- rjf: constructed type constructor
+typedef struct E2_ConsTypeParams E2_ConsTypeParams;
+struct E2_ConsTypeParams
+{
+  Arch arch;
+  E2_TypeKind kind;
+  E2_TypeFlags flags;
+  String8 name;
+  E2_TypeKey direct_type_key;
+  U64 count;
+  U64 depth;
+  E2_Expr **args;
+};
+internal E2_TypeKey e2_type_key_cons_(E2_ConsTypeParams *params);
+#define e2_type_key_cons(k, ...) e2_type_key_cons_(&(E2_ConsTypeParams){.kind = (k), __VA_ARGS__})
+
+//- rjf: constructed type constructor helpers
+#define e2_type_key_cons_array(element_type_key, count_, ...) e2_type_key_cons(E2_TypeKind_Array, .direct_type_key = (element_type_key), .count = (count_), __VA_ARGS__)
+#define e2_type_key_cons_ptr(arch, ptee_type_key, ...) e2_type_key_cons(E2_TypeKind_Ptr, .direct_type_key = (ptee_type_key), __VA_ARGS__)
+
+//- rjf: basic type key type functions
+internal B32 e2_type_key_match(E2_TypeKey a, E2_TypeKey b);
+
+//- rjf: type key -> info
+internal E2_TypeKind e2_type_kind_from_key(E2_TypeKey k);
+internal U64 e2_byte_size_from_type_key(E2_TypeKey k);
+internal U32 e2_dbgi_num_from_type_key(E2_TypeKey k);
+internal E2_DbgInfo *e2_dbgi_from_type_key(E2_TypeKey k);
+internal U32 e2_dbgi_type_idx_from_key(E2_TypeKey k);
+internal U64 e2_shift_from_type_key(E2_TypeKey k);
+internal U64 e2_mask_count_from_type_key(E2_TypeKey k);
+internal Arch e2_arch_from_type_key(E2_TypeKey k);
+
+//- rjf: type graph traversal primitives
+internal E2_TypeKey e2_type_key_direct(E2_TypeKey k);
+internal E2_TypeKey e2_type_key_owner(E2_TypeKey k);
+
+//- rjf: type unwrapping (helpers for advancing past categories of direct type chains)
+typedef U32 E2_TypeUnwrapFlags;
+enum
+{
+  E2_TypeUnwrapFlag_Modifiers     = (1<<0),
+  E2_TypeUnwrapFlag_Pointers      = (1<<1),
+  E2_TypeUnwrapFlag_Lenses        = (1<<2),
+  E2_TypeUnwrapFlag_Meta          = (1<<3),
+  E2_TypeUnwrapFlag_Enums         = (1<<4),
+  E2_TypeUnwrapFlag_Aliases       = (1<<5),
+  E2_TypeUnwrapFlag_Bitfields     = (1<<6),
+  E2_TypeUnwrapFlag_All           = 0xffffffff,
+  E2_TypeUnwrapFlag_AllDecorative = (E2_TypeUnwrapFlag_All & ~(E2_TypeUnwrapFlag_Pointers|E2_TypeUnwrapFlag_Bitfields))
+};
+internal E2_TypeKey e2_type_key_unwrap(E2_TypeKey k, E2_TypeUnwrapFlags flags);
+#define e2_type_key_undecorate(k) e2_type_key_unwrap((k), E2_TypeUnwrapFlag_AllDecorative)
+
+//- rjf: type coercion
+internal E2_TypeKey e2_coerced_type_key_from_operands(E2_TypeKey lhs, E2_TypeKey rhs);
+
+////////////////////////////////
+//~ rjf: Expression Constructors
+
+internal E2_Expr *e2_expr(Arena *arena);
+internal E2_Expr *e2_expr_const_u64_or_smaller(Arena *arena, U64 u);
+internal E2_Expr *e2_expr_const_f32(Arena *arena, F32 f32);
+internal E2_Expr *e2_expr_const_f64(Arena *arena, F64 f64);
+internal E2_Expr *e2_expr_unary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_Expr *operand);
+internal E2_Expr *e2_expr_binary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_Expr *lhs, E2_Expr *rhs);
+internal E2_Expr *e2_expr_resolve_to_value(Arena *arena, E2_Expr *expr);
+internal E2_Expr *e2_expr_truncate(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key);
+internal E2_Expr *e2_expr_convert_if_possible(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key);
+internal void e2_expr_push_child(E2_Expr *parent, E2_Expr *expr);
 
 ////////////////////////////////
 //~ rjf: String -> Expression
@@ -442,7 +536,7 @@ internal E2_TypeKey e2_type_key_basic(E2_TypeKind kind);
 internal E2_Token e2_token_from_string_off(String8 string, U64 start_off);
 internal U64 e2_read_token(String8 string, U64 off, E2_Token *token_out);
 internal B32 e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *off_out, E2_Token *token_out);
-internal E2_Parse e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map, E2_ExprMap *expr_map, String8 string);
+internal E2_Parse e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, String8 string);
 
 ////////////////////////////////
 //~ rjf: Expression -> Bytecode

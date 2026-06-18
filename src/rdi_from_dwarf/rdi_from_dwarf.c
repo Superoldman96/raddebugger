@@ -2104,7 +2104,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
         
         // rjf: convert type
         RDIM_Type *dst_type = 0;
-        RDI_TypeKind rdi_type_kind = RDI_TypeKind_NULL;
+        RDI_TypeKind rdi_type_kind = RDI_TypeKind_Null;
         RDI_TypeModifierFlags rdi_type_modifier_flags = 0;
         switch(tag.kind)
         {
@@ -2254,7 +2254,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
 #define CaseB(rdi_type_kind_, encoding_, bit_size_)                       else if(encoding == (encoding_) && bitsize == (bit_size_)) { rdi_type_kind = (rdi_type_kind_); }
 #define CaseC(rdi_type_kind_, encoding_, name_) /* assumes x64/arm64 */   else if(encoding == (encoding_) && str8_match(name, str8_lit(name_), 0)) { rdi_type_kind = (rdi_type_kind_); }
 #define CaseD(rdi_type_kind_, encoding_, name_, bit_size_)                else if(encoding == (encoding_) && bitsize == (bit_size_) && str8_match(name, str8_lit(name_), 0)) { rdi_type_kind = (rdi_type_kind_); }
-            CaseA(RDI_TypeKind_NULL,        DW_ATE_Null)
+            CaseA(RDI_TypeKind_Null,        DW_ATE_Null)
               CaseA(RDI_TypeKind_Void,        DW_ATE_Address)
               CaseA(RDI_TypeKind_Bool,        DW_ATE_Boolean)
               CaseB(RDI_TypeKind_ComplexF32,  DW_ATE_ComplexFloat, 64)

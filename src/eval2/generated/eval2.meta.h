@@ -117,6 +117,8 @@ E2_TypeKind_LastMeta        = E2_TypeKind_MetaDescription,
 
 C_LINKAGE_BEGIN
 extern E2_OpInfo e2_op_kind_info_table[26];
+extern U8 e2_type_kind_basic_byte_size_table[61];
+extern String8 e2_type_kind_basic_string_table[61];
 
 C_LINKAGE_END
 

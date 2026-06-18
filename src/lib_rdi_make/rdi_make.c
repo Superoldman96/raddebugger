@@ -545,7 +545,7 @@ rdim_rng1u64_chunk_list_push(RDIM_Arena *arena, RDIM_Rng1U64ChunkList *list, RDI
 RDI_PROC RDI_TypeKind
 rdim_short_type_kind_from_data_model(RDIM_DataModel data_model)
 {
-  RDI_TypeKind result = RDI_TypeKind_NULL;
+  RDI_TypeKind result = RDI_TypeKind_Null;
   switch((RDIM_DataModelEnum)data_model)
   {
     case RDIM_DataModel_Null:{}break;
@@ -561,7 +561,7 @@ rdim_short_type_kind_from_data_model(RDIM_DataModel data_model)
 RDI_PROC RDI_TypeKind
 rdim_unsigned_short_type_kind_from_data_model(RDIM_DataModel data_model)
 {
-  RDI_TypeKind result = RDI_TypeKind_NULL;
+  RDI_TypeKind result = RDI_TypeKind_Null;
   switch((RDIM_DataModelEnum)data_model)
   {
     case RDIM_DataModel_Null:{}break;
@@ -577,7 +577,7 @@ rdim_unsigned_short_type_kind_from_data_model(RDIM_DataModel data_model)
 RDI_PROC RDI_TypeKind
 rdim_int_type_from_data_model(RDIM_DataModel data_model)
 {
-  RDI_TypeKind result = RDI_TypeKind_NULL;
+  RDI_TypeKind result = RDI_TypeKind_Null;
   switch((RDIM_DataModelEnum)data_model)
   {
     case RDIM_DataModel_Null:{}break;
@@ -593,7 +593,7 @@ rdim_int_type_from_data_model(RDIM_DataModel data_model)
 RDI_PROC RDI_TypeKind
 rdim_unsigned_int_type_from_data_model(RDIM_DataModel data_model)
 {
-  RDI_TypeKind result = RDI_TypeKind_NULL;
+  RDI_TypeKind result = RDI_TypeKind_Null;
   switch((RDIM_DataModelEnum)data_model)
   {
     case RDIM_DataModel_Null:{}break;
@@ -609,7 +609,7 @@ rdim_unsigned_int_type_from_data_model(RDIM_DataModel data_model)
 RDI_PROC RDI_TypeKind
 rdim_long_type_kind_from_data_model(RDIM_DataModel data_model)
 {
-  RDI_TypeKind result = RDI_TypeKind_NULL;
+  RDI_TypeKind result = RDI_TypeKind_Null;
   switch((RDIM_DataModelEnum)data_model)
   {
     case RDIM_DataModel_Null:{}break;
@@ -625,7 +625,7 @@ rdim_long_type_kind_from_data_model(RDIM_DataModel data_model)
 RDI_PROC RDI_TypeKind
 rdim_unsigned_long_type_kind_from_data_model(RDIM_DataModel data_model)
 {
-  RDI_TypeKind result = RDI_TypeKind_NULL;
+  RDI_TypeKind result = RDI_TypeKind_Null;
   switch((RDIM_DataModelEnum)data_model)
   {
     case RDIM_DataModel_Null:{}break;
@@ -641,7 +641,7 @@ rdim_unsigned_long_type_kind_from_data_model(RDIM_DataModel data_model)
 RDI_PROC RDI_TypeKind
 rdim_long_long_type_kind_from_data_model(RDIM_DataModel data_model)
 {
-  RDI_TypeKind result = RDI_TypeKind_NULL;
+  RDI_TypeKind result = RDI_TypeKind_Null;
   switch((RDIM_DataModelEnum)data_model)
   {
     case RDIM_DataModel_Null:{}break;
@@ -657,7 +657,7 @@ rdim_long_long_type_kind_from_data_model(RDIM_DataModel data_model)
 RDI_PROC RDI_TypeKind
 rdim_unsigned_long_long_type_kind_from_data_model(RDIM_DataModel data_model)
 {
-  RDI_TypeKind result = RDI_TypeKind_NULL;
+  RDI_TypeKind result = RDI_TypeKind_Null;
   switch((RDIM_DataModelEnum)data_model)
   {
     case RDIM_DataModel_Null:{}break;
@@ -673,7 +673,7 @@ rdim_unsigned_long_long_type_kind_from_data_model(RDIM_DataModel data_model)
 RDI_PROC RDI_TypeKind
 rdim_pointer_size_t_type_kind_from_data_model(RDIM_DataModel data_model)
 {
-  RDI_TypeKind result = RDI_TypeKind_NULL;
+  RDI_TypeKind result = RDI_TypeKind_Null;
   switch((RDIM_DataModelEnum)data_model)
   {
     case RDIM_DataModel_Null:{}break;

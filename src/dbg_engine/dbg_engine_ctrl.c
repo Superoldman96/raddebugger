@@ -1804,10 +1804,21 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
   //////////////////////////////
   //- rjf: grab initial memory
   //
+  // NOTE(rjf): we can pre-fill memory that we can expect to load here -
+  // otherwise we will lazily evaluate it via the unwinding backends below
+  //
   MemoryMap memory_map = {0};
+  if(regs_block_good)
   {
-    // NOTE(rjf): we can pre-fill memory that we can expect to load here -
-    // otherwise we will lazily evaluate it via the unwinding backends below
+    U64 sp = arch_sp_from_reg_block(arch_info, regs_block);
+    U64 sp_rounded_down = AlignDownPow2(sp, KB(4));
+    Rng1U64 top_of_stack_vaddr_range = r1u64(sp_rounded_down, sp_rounded_down+KB(4));
+    D_ProcessMemorySlice slice = d_process_memory_slice_from_vaddr_range(scratch.arena, process_entity->handle, top_of_stack_vaddr_range, 1, endt_us);
+    String8 data = slice.data;
+    if(!slice.stale)
+    {
+      memory_map_push(scratch.arena, &memory_map, top_of_stack_vaddr_range, data.str);
+    }
   }
   
   //////////////////////////////
@@ -1834,7 +1845,6 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
     unwind.flags = 0;
     for(;!unwind.flags;)
     {
-      ARCH_Info *arch_info = arch_info_from_arch(arch);
       U64 start_ip = arch_ip_from_reg_block(arch_info, regs_block);
       U64 start_sp = arch_sp_from_reg_block(arch_info, regs_block);
       
@@ -1879,7 +1889,7 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
         // stale. if it can't be read, the unwind fails.
         if(step.status == UWND_StepStatus_FailedMemoryRead)
         {
-          D_ProcessMemorySlice slice = d_process_memory_slice_from_vaddr_range(scratch.arena, process_entity->handle, step.missed_read_vaddr_range, 1, 0);
+          D_ProcessMemorySlice slice = d_process_memory_slice_from_vaddr_range(scratch.arena, process_entity->handle, step.missed_read_vaddr_range, 1, endt_us);
           String8 data = slice.data;
           if(slice.stale)
           {
@@ -6157,7 +6167,7 @@ d_call_stack_artifact_create(String8 key, B32 *cancel_signal, B32 *retry_out, U6
       {
         pre_reg_gen = d_reg_gen();
         pre_mem_gen = d_mem_gen();
-        unwind = d_unwind_from_thread(arena, thread_handle, 0);
+        unwind = d_unwind_from_thread(arena, thread_handle, now_time_us()+100);
         if(!(unwind.flags & D_UnwindFlag_Stale))
         {
           good = 1;

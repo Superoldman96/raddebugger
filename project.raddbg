@@ -33,6 +33,6 @@ target:
 target:
 {
   executable: "build/ryan_scratch.exe"
-  working_directory: "build/"
+  working_directory: build
   enabled: 1
 }

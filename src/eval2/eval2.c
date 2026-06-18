@@ -141,7 +141,182 @@ e2_msgf(Arena *arena, E2_MsgList *msgs, Rng1U64 src_range, char *fmt, ...)
 }
 
 ////////////////////////////////
+//~ rjf: Assets
+
+internal void
+e2_select_assets(E2_Assets *assets)
+{
+  e2_assets = assets;
+}
+
+internal E2_DbgInfo *
+e2_dbgi_from_num(U32 num)
+{
+  E2_DbgInfo *result = &e2_dbg_info_nil;
+  if(0 < num && num <= e2_assets->dbg_infos_count)
+  {
+    result = &e2_assets->dbg_infos[num-1];
+  }
+  return result;
+}
+
+////////////////////////////////
 //~ rjf: Type Keys
+
+//- rjf: RDI -> eval enum conversions
+
+internal E2_TypeKind
+e2_type_kind_from_rdi(RDI_TypeKind k)
+{
+  E2_TypeKind result = E2_TypeKind_Null;
+  switch((RDI_TypeKindEnum)k)
+  {
+    case RDI_TypeKind_Null:{}break;
+    case RDI_TypeKind_COUNT:{}break;
+    case RDI_TypeKind_Void:                   {result = E2_TypeKind_Void;}break;
+    case RDI_TypeKind_Handle:                 {result = E2_TypeKind_Handle;}break;
+    case RDI_TypeKind_HResult:                {result = E2_TypeKind_HResult;}break;
+    case RDI_TypeKind_Char8:                  {result = E2_TypeKind_Char8;}break;
+    case RDI_TypeKind_Char16:                 {result = E2_TypeKind_Char16;}break;
+    case RDI_TypeKind_Char32:                 {result = E2_TypeKind_Char32;}break;
+    case RDI_TypeKind_UChar8:                 {result = E2_TypeKind_UChar8;}break;
+    case RDI_TypeKind_UChar16:                {result = E2_TypeKind_UChar16;}break;
+    case RDI_TypeKind_UChar32:                {result = E2_TypeKind_UChar32;}break;
+    case RDI_TypeKind_U8:                     {result = E2_TypeKind_U8;}break;
+    case RDI_TypeKind_U16:                    {result = E2_TypeKind_U16;}break;
+    case RDI_TypeKind_U32:                    {result = E2_TypeKind_U32;}break;
+    case RDI_TypeKind_U64:                    {result = E2_TypeKind_U64;}break;
+    case RDI_TypeKind_U128:                   {result = E2_TypeKind_U128;}break;
+    case RDI_TypeKind_U256:                   {result = E2_TypeKind_U256;}break;
+    case RDI_TypeKind_U512:                   {result = E2_TypeKind_U512;}break;
+    case RDI_TypeKind_S8:                     {result = E2_TypeKind_S8;}break;
+    case RDI_TypeKind_S16:                    {result = E2_TypeKind_S16;}break;
+    case RDI_TypeKind_S32:                    {result = E2_TypeKind_S32;}break;
+    case RDI_TypeKind_S64:                    {result = E2_TypeKind_S64;}break;
+    case RDI_TypeKind_S128:                   {result = E2_TypeKind_S128;}break;
+    case RDI_TypeKind_S256:                   {result = E2_TypeKind_S256;}break;
+    case RDI_TypeKind_S512:                   {result = E2_TypeKind_S512;}break;
+    case RDI_TypeKind_Bool:                   {result = E2_TypeKind_Bool;}break;
+    case RDI_TypeKind_F16:                    {result = E2_TypeKind_F16;}break;
+    case RDI_TypeKind_F32:                    {result = E2_TypeKind_F32;}break;
+    case RDI_TypeKind_F32PP:                  {result = E2_TypeKind_F32PP;}break;
+    case RDI_TypeKind_F48:                    {result = E2_TypeKind_F48;}break;
+    case RDI_TypeKind_F64:                    {result = E2_TypeKind_F64;}break;
+    case RDI_TypeKind_F80:                    {result = E2_TypeKind_F80;}break;
+    case RDI_TypeKind_F128:                   {result = E2_TypeKind_F128;}break;
+    case RDI_TypeKind_ComplexF32:             {result = E2_TypeKind_ComplexF32;}break;
+    case RDI_TypeKind_ComplexF64:             {result = E2_TypeKind_ComplexF64;}break;
+    case RDI_TypeKind_ComplexF80:             {result = E2_TypeKind_ComplexF80;}break;
+    case RDI_TypeKind_ComplexF128:            {result = E2_TypeKind_ComplexF128;}break;
+    case RDI_TypeKind_Modifier:               {result = E2_TypeKind_Modifier;}break;
+    case RDI_TypeKind_Ptr:                    {result = E2_TypeKind_Ptr;}break;
+    case RDI_TypeKind_LRef:                   {result = E2_TypeKind_LRef;}break;
+    case RDI_TypeKind_RRef:                   {result = E2_TypeKind_RRef;}break;
+    case RDI_TypeKind_Array:                  {result = E2_TypeKind_Array;}break;
+    case RDI_TypeKind_Function:               {result = E2_TypeKind_Function;}break;
+    case RDI_TypeKind_Method:                 {result = E2_TypeKind_Method;}break;
+    case RDI_TypeKind_MemberPtr:              {result = E2_TypeKind_MemberPtr;}break;
+    case RDI_TypeKind_Struct:                 {result = E2_TypeKind_Struct;}break;
+    case RDI_TypeKind_Class:                  {result = E2_TypeKind_Class;}break;
+    case RDI_TypeKind_Union:                  {result = E2_TypeKind_Union;}break;
+    case RDI_TypeKind_Enum:                   {result = E2_TypeKind_Enum;}break;
+    case RDI_TypeKind_Alias:                  {result = E2_TypeKind_Alias;}break;
+    case RDI_TypeKind_IncompleteStruct:       {result = E2_TypeKind_IncompleteStruct;}break;
+    case RDI_TypeKind_IncompleteUnion:        {result = E2_TypeKind_IncompleteUnion;}break;
+    case RDI_TypeKind_IncompleteClass:        {result = E2_TypeKind_IncompleteClass;}break;
+    case RDI_TypeKind_IncompleteEnum:         {result = E2_TypeKind_IncompleteEnum;}break;
+    case RDI_TypeKind_Bitfield:               {result = E2_TypeKind_Bitfield;}break;
+    case RDI_TypeKind_Variadic:               {result = E2_TypeKind_Variadic;}break;
+  }
+  return result;
+}
+
+internal RDI_EvalTypeGroup
+e2_type_group_from_kind(E2_TypeKind k)
+{
+  RDI_EvalTypeGroup result = 0;
+  switch(k)
+  {
+    case E2_TypeKind_Null: case E2_TypeKind_Void:
+    case E2_TypeKind_F16:  case E2_TypeKind_F32PP: case E2_TypeKind_F48:
+    case E2_TypeKind_F80:  case E2_TypeKind_F128:
+    case E2_TypeKind_ComplexF32: case E2_TypeKind_ComplexF64:
+    case E2_TypeKind_ComplexF80: case E2_TypeKind_ComplexF128:
+    case E2_TypeKind_Modifier:   case E2_TypeKind_Array:
+    case E2_TypeKind_Struct:     case E2_TypeKind_Class: case E2_TypeKind_Union:
+    case E2_TypeKind_Enum:       case E2_TypeKind_Alias:
+    case E2_TypeKind_IncompleteStruct: case E2_TypeKind_IncompleteClass:
+    case E2_TypeKind_IncompleteUnion:  case E2_TypeKind_IncompleteEnum:
+    case E2_TypeKind_Bitfield:
+    case E2_TypeKind_Variadic:
+    {result = RDI_EvalTypeGroup_Other;}break;
+    
+    case E2_TypeKind_Handle:
+    case E2_TypeKind_UChar8: case E2_TypeKind_UChar16: case E2_TypeKind_UChar32:
+    case E2_TypeKind_U8:     case E2_TypeKind_U16:     case E2_TypeKind_U32:
+    case E2_TypeKind_U64:    case E2_TypeKind_U128:    case E2_TypeKind_U256:
+    case E2_TypeKind_U512:
+    case E2_TypeKind_Ptr: case E2_TypeKind_LRef: case E2_TypeKind_RRef:
+    case E2_TypeKind_Function: case E2_TypeKind_Method: case E2_TypeKind_MemberPtr:
+    {result = RDI_EvalTypeGroup_U;}break;
+    
+    case E2_TypeKind_Char8: case E2_TypeKind_Char16: case E2_TypeKind_Char32:
+    case E2_TypeKind_S8:    case E2_TypeKind_S16:    case E2_TypeKind_S32:
+    case E2_TypeKind_S64:   case E2_TypeKind_S128:   case E2_TypeKind_S256:
+    case E2_TypeKind_S512:
+    case E2_TypeKind_Bool:
+    {result = RDI_EvalTypeGroup_S;}break;
+    
+    case E2_TypeKind_F32:{result = RDI_EvalTypeGroup_F32;}break;
+    case E2_TypeKind_F64:{result = RDI_EvalTypeGroup_F64;}break;
+  }
+  return result;
+}
+
+internal B32
+e2_type_kind_is_ptr_or_ref(E2_TypeKind k)
+{
+  B32 result = (k == E2_TypeKind_Ptr || k == E2_TypeKind_LRef || k == E2_TypeKind_RRef);
+  return result;
+}
+
+internal B32
+e2_type_kind_is_integer(E2_TypeKind k)
+{
+  B32 result = (E2_TypeKind_FirstInteger <= k && k <= E2_TypeKind_LastInteger);
+  return result;
+}
+
+internal B32
+e2_type_kind_is_float(E2_TypeKind k)
+{
+  B32 result = (k == E2_TypeKind_F32 || k == E2_TypeKind_F64);
+  return result;
+}
+
+internal B32
+e2_type_kind_is_signed(E2_TypeKind k)
+{
+  B32 result = ((E2_TypeKind_FirstSigned1 <= k && k <= E2_TypeKind_LastSigned1) ||
+                (E2_TypeKind_FirstSigned2 <= k && k <= E2_TypeKind_LastSigned2));
+  return result;
+}
+
+internal B32
+e2_type_kind_is_unsigned(E2_TypeKind k)
+{
+  B32 result = !e2_type_kind_is_signed(k) && e2_type_kind_is_integer(k);
+  return result;
+}
+
+//- rjf: basic key constructors
+
+internal E2_TypeKey
+e2_type_key_zero(void)
+{
+  E2_TypeKey key = {E2_TypeKeyKind_Null};
+  return key;
+}
 
 internal E2_TypeKey
 e2_type_key_basic(E2_TypeKind kind)
@@ -149,6 +324,572 @@ e2_type_key_basic(E2_TypeKind kind)
   E2_TypeKey key = {E2_TypeKeyKind_Basic};
   key.u32[0] = (U32)kind;
   return key;
+}
+
+internal E2_TypeKey
+e2_type_key_dbgi(E2_TypeKind kind, U32 dbg_info_num, U32 type_idx)
+{
+  E2_TypeKey key = {E2_TypeKeyKind_DbgInfo};
+  key.u32[0] = kind;
+  key.u32[1] = dbg_info_num;
+  key.u32[2] = type_idx;
+  return key;
+}
+
+internal E2_TypeKey
+e2_type_key_reg(Arch arch, ARCH_RegCode reg_code)
+{
+  E2_TypeKey key = {E2_TypeKeyKind_Reg};
+  key.u32[0] = arch;
+  key.u32[1] = reg_code;
+  return key;
+}
+
+//- rjf: constructed type constructor
+
+internal E2_TypeKey
+e2_type_key_cons_(E2_ConsTypeParams *params)
+{
+  E2_TypeKey result = {E2_TypeKeyKind_Null};
+  // TODO(rjf)
+  return result;
+}
+
+//- rjf: basic type key type functions
+
+internal B32
+e2_type_key_match(E2_TypeKey a, E2_TypeKey b)
+{
+  B32 result = MemoryMatchStruct(&a, &b);
+  return result;
+}
+
+//- rjf: type key -> info
+
+internal E2_TypeKind
+e2_type_kind_from_key(E2_TypeKey k)
+{
+  E2_TypeKind result = E2_TypeKind_Null;
+  switch(k.kind)
+  {
+    case E2_TypeKeyKind_Null:{}break;
+    case E2_TypeKeyKind_Basic:
+    case E2_TypeKeyKind_DbgInfo:
+    case E2_TypeKeyKind_Cons:
+    {
+      result = (E2_TypeKind)k.u32[0];
+    }break;
+    case E2_TypeKeyKind_Reg:
+    {
+      result = E2_TypeKind_Union;
+    }break;
+  }
+  return result;
+}
+
+internal U64
+e2_byte_size_from_type_key(E2_TypeKey k)
+{
+  U64 result = 0;
+  switch(k.kind)
+  {
+    case E2_TypeKeyKind_Null:{}break;
+    case E2_TypeKeyKind_Basic:
+    {
+      result = e2_type_kind_basic_byte_size_table[k.u32[0]];
+    }break;
+    case E2_TypeKeyKind_DbgInfo:
+    {
+      E2_DbgInfo *dbgi = e2_dbgi_from_type_key(k);
+      U32 dbgi_type_idx = e2_dbgi_type_idx_from_key(k);
+      RDI_TypeNode *type_node = rdi_element_from_name_idx(dbgi->rdi, TypeNodes, dbgi_type_idx);
+      result = type_node->byte_size;
+    }break;
+    case E2_TypeKeyKind_Cons:
+    {
+      // TODO(rjf)
+    }break;
+    case E2_TypeKeyKind_Reg:
+    {
+      // TODO(rjf)
+    }break;
+  }
+  return result;
+}
+
+internal U32
+e2_dbgi_num_from_type_key(E2_TypeKey k)
+{
+  U32 result = 0;
+  if(k.kind == E2_TypeKeyKind_DbgInfo)
+  {
+    result = k.u32[1];
+  }
+  return result;
+}
+
+internal E2_DbgInfo *
+e2_dbgi_from_type_key(E2_TypeKey k)
+{
+  U32 dbgi_num = e2_dbgi_num_from_type_key(k);
+  E2_DbgInfo *dbg_info = e2_dbgi_from_num(dbgi_num);
+  return dbg_info;
+}
+
+internal U32
+e2_dbgi_type_idx_from_key(E2_TypeKey k)
+{
+  U32 result = 0;
+  if(k.kind == E2_TypeKeyKind_DbgInfo)
+  {
+    result = k.u32[2];
+  }
+  return result;
+}
+
+internal U64
+e2_shift_from_type_key(E2_TypeKey k)
+{
+  U64 result = 0;
+  if(e2_type_kind_from_key(k) == E2_TypeKind_Bitfield)
+  {
+    switch(k.kind)
+    {
+      case E2_TypeKeyKind_Null:{}break;
+      case E2_TypeKeyKind_Basic:{}break;
+      case E2_TypeKeyKind_DbgInfo:
+      {
+        E2_DbgInfo *dbgi = e2_dbgi_from_type_key(k);
+        U32 dbgi_type_idx = e2_dbgi_type_idx_from_key(k);
+        RDI_TypeNode *type_node = rdi_element_from_name_idx(dbgi->rdi, TypeNodes, dbgi_type_idx);
+        result = type_node->bitfield.off;
+      }break;
+      case E2_TypeKeyKind_Cons:
+      {
+        // TODO(rjf)
+      }break;
+      case E2_TypeKeyKind_Reg:{}break;
+    }
+  }
+  return result;
+}
+
+internal U64
+e2_mask_count_from_type_key(E2_TypeKey k)
+{
+  U64 result = 0;
+  if(e2_type_kind_from_key(k) == E2_TypeKind_Bitfield)
+  {
+    switch(k.kind)
+    {
+      case E2_TypeKeyKind_Null:{}break;
+      case E2_TypeKeyKind_Basic:{}break;
+      case E2_TypeKeyKind_DbgInfo:
+      {
+        E2_DbgInfo *dbgi = e2_dbgi_from_type_key(k);
+        U32 dbgi_type_idx = e2_dbgi_type_idx_from_key(k);
+        RDI_TypeNode *type_node = rdi_element_from_name_idx(dbgi->rdi, TypeNodes, dbgi_type_idx);
+        result = type_node->bitfield.size;
+      }break;
+      case E2_TypeKeyKind_Cons:
+      {
+        // TODO(rjf)
+      }break;
+      case E2_TypeKeyKind_Reg:{}break;
+    }
+  }
+  return result;
+}
+
+internal Arch
+e2_arch_from_type_key(E2_TypeKey k)
+{
+  Arch arch = Arch_Null;
+  switch(k.kind)
+  {
+    case E2_TypeKeyKind_Null:{}break;
+    case E2_TypeKeyKind_Basic:{}break;
+    case E2_TypeKeyKind_DbgInfo:
+    {
+      E2_DbgInfo *dbgi = e2_dbgi_from_type_key(k);
+      RDI_TopLevelInfo *tli = rdi_element_from_name_idx(dbgi->rdi, TopLevelInfo, 0);
+      RDI_Arch rdi_arch = tli->arch;
+      arch = arch_from_rdi_arch(rdi_arch);
+    }break;
+    case E2_TypeKeyKind_Cons:
+    {
+      // TODO(rjf)
+    }break;
+    case E2_TypeKeyKind_Reg:
+    {
+      arch = k.u32[0];
+    }break;
+  }
+  return arch;
+}
+
+//- rjf: type graph traversal primitives
+
+internal E2_TypeKey
+e2_type_key_direct(E2_TypeKey k)
+{
+  E2_TypeKey result = {E2_TypeKeyKind_Null};
+  switch(k.kind)
+  {
+    case E2_TypeKeyKind_Null:{}break;
+    case E2_TypeKeyKind_Basic:{}break;
+    case E2_TypeKeyKind_DbgInfo:
+    {
+      U32 dbgi_num = e2_dbgi_num_from_type_key(k);
+      U32 dbgi_type_idx = e2_dbgi_type_idx_from_key(k);
+      E2_DbgInfo *dbgi = e2_dbgi_from_num(dbgi_num);
+      RDI_TypeNode *type_node = rdi_element_from_name_idx(dbgi->rdi, TypeNodes, dbgi_type_idx);
+      U32 direct_type_idx = 0;
+      if(RDI_TypeKind_FirstConstructed <= type_node->kind && type_node->kind <= RDI_TypeKind_LastConstructed)
+      {
+        direct_type_idx = type_node->constructed.direct_type_idx;
+      }
+      else if(RDI_TypeKind_FirstUserDefined <= type_node->kind && type_node->kind <= RDI_TypeKind_LastUserDefined)
+      {
+        direct_type_idx = type_node->user_defined.direct_type_idx;
+      }
+      else if(type_node->kind == RDI_TypeKind_Bitfield)
+      {
+        direct_type_idx = type_node->bitfield.direct_type_idx;
+      }
+      result = e2_type_key_dbgi(e2_type_kind_from_rdi(type_node->kind), dbgi_num, direct_type_idx);
+    }break;
+    case E2_TypeKeyKind_Cons:
+    {
+      // TODO(rjf)
+    }break;
+    case E2_TypeKeyKind_Reg:{}break;
+  }
+  return result;
+}
+
+internal E2_TypeKey
+e2_type_key_owner(E2_TypeKey k)
+{
+  E2_TypeKey result = {E2_TypeKeyKind_Null};
+  if(e2_type_kind_from_key(k) == E2_TypeKind_MemberPtr)
+  {
+    switch(k.kind)
+    {
+      case E2_TypeKeyKind_Null:{}break;
+      case E2_TypeKeyKind_Basic:{}break;
+      case E2_TypeKeyKind_DbgInfo:
+      {
+        U32 dbgi_num = e2_dbgi_num_from_type_key(k);
+        U32 dbgi_type_idx = e2_dbgi_type_idx_from_key(k);
+        E2_DbgInfo *dbgi = e2_dbgi_from_num(dbgi_num);
+        RDI_TypeNode *type_node = rdi_element_from_name_idx(dbgi->rdi, TypeNodes, dbgi_type_idx);
+        U32 owner_type_idx = type_node->constructed.owner_type_idx;
+        result = e2_type_key_dbgi(e2_type_kind_from_rdi(type_node->kind), dbgi_num, owner_type_idx);
+      }break;
+      case E2_TypeKeyKind_Cons:
+      {
+        // TODO(rjf)
+      }break;
+      case E2_TypeKeyKind_Reg:{}break;
+    }
+  }
+  return result;
+}
+
+//- rjf: type unwrapping (helpers for advancing past categories of direct type chains)
+
+internal E2_TypeKey
+e2_type_key_unwrap(E2_TypeKey k, E2_TypeUnwrapFlags flags)
+{
+  E2_TypeKey result = k;
+  E2_TypeKind kind = e2_type_kind_from_key(result);
+  B32 did_ptr = 0;
+  for(;;)
+  {
+    B32 done = 0;
+    switch(kind)
+    {
+      default:{done = 1;}break;
+      case E2_TypeKind_Modifier:  {done = !(flags & E2_TypeUnwrapFlag_Modifiers);}break;
+      case E2_TypeKind_Lens:      {done = !(flags & E2_TypeUnwrapFlag_Lenses);}break;
+      case E2_TypeKind_MetaDisplayName:
+      case E2_TypeKind_MetaDescription:
+      case E2_TypeKind_MetaExpr:  {done = !(flags & E2_TypeUnwrapFlag_Meta);}break;
+      case E2_TypeKind_Enum:      {done = !(flags & E2_TypeUnwrapFlag_Enums);}break;
+      case E2_TypeKind_Alias:     {done = !(flags & E2_TypeUnwrapFlag_Aliases);}break;
+      case E2_TypeKind_Bitfield:  {done = !(flags & E2_TypeUnwrapFlag_Bitfields);}break;
+      case E2_TypeKind_Array:
+      case E2_TypeKind_Ptr:
+      case E2_TypeKind_RRef:
+      case E2_TypeKind_LRef:
+      case E2_TypeKind_MemberPtr:
+      {
+        done = (did_ptr || !(flags & E2_TypeUnwrapFlag_Pointers));
+        did_ptr = 1;
+      }break;
+    }
+    if(done)
+    {
+      break;
+    }
+    result = e2_type_key_direct(result);
+    kind = e2_type_kind_from_key(result);
+  }
+  return result;
+}
+
+//- rjf: type coercion
+
+internal E2_TypeKey
+e2_coerced_type_key_from_operands(E2_TypeKey lhs, E2_TypeKey rhs)
+{
+  E2_TypeKey result = lhs;
+  {
+    E2_TypeKind lhs_kind = e2_type_kind_from_key(lhs);
+    E2_TypeKind rhs_kind = e2_type_kind_from_key(rhs);
+    U64 lhs_size = e2_byte_size_from_type_key(lhs);
+    U64 rhs_size = e2_byte_size_from_type_key(rhs);
+    
+    //- rjf: f? + f? -> pick biggest
+    if(e2_type_kind_is_float(lhs_kind) && e2_type_kind_is_float(rhs_kind) && lhs_size > rhs_size)
+    {
+      result = lhs;
+    }
+    else if(e2_type_kind_is_float(lhs_kind) && e2_type_kind_is_float(rhs_kind) && lhs_size < rhs_size)
+    {
+      result = rhs;
+    }
+    
+    //- rjf: f? + i? -> pick float
+    else if(e2_type_kind_is_float(lhs_kind) && e2_type_kind_is_integer(rhs_kind))
+    {
+      result = lhs;
+    }
+    else if(e2_type_kind_is_integer(lhs_kind) && e2_type_kind_is_float(rhs_kind))
+    {
+      result = rhs;
+    }
+    
+    //- rjf: i? + i? -> pick biggest
+    else if(e2_type_kind_is_integer(lhs_kind) && e2_type_kind_is_integer(rhs_kind) && lhs_size > rhs_size)
+    {
+      result = lhs;
+    }
+    else if(e2_type_kind_is_integer(lhs_kind) && e2_type_kind_is_integer(rhs_kind) && lhs_size < rhs_size)
+    {
+      result = rhs;
+    }
+    
+    //- rjf: i? + u? -> unsigned wins
+    else if(e2_type_kind_is_signed(lhs_kind) && e2_type_kind_is_unsigned(rhs_kind) && lhs_size == rhs_size)
+    {
+      result = rhs;
+    }
+    else if(e2_type_kind_is_unsigned(lhs_kind) && e2_type_kind_is_signed(rhs_kind) && lhs_size == rhs_size)
+    {
+      result = lhs;
+    }
+  }
+  return result;
+}
+
+////////////////////////////////
+//~ rjf: Expression Constructors
+
+internal E2_Expr *
+e2_expr(Arena *arena)
+{
+  E2_Expr *expr = push_array(arena, E2_Expr, 1);
+  MemoryCopyStruct(expr, &e2_expr_nil);
+  return expr;
+}
+
+internal E2_Expr *
+e2_expr_const_u64_or_smaller(Arena *arena, U64 u)
+{
+  E2_Expr *e = e2_expr(arena);
+  {
+    e->mode = E2_Mode_Value;
+    e->val.u64 = u;
+    if(u <= 0x7fffffff)
+    {
+      e->op = RDI_EvalOp_ConstU32;
+      e->type_key = e2_type_key_basic(E2_TypeKind_S32);
+    }
+    else if(u <= 0xffffffff)
+    {
+      e->op = RDI_EvalOp_ConstU32;
+      e->type_key = e2_type_key_basic(E2_TypeKind_U32);
+    }
+    else if(u <= 0x7fffffffffffffffull)
+    {
+      e->op = RDI_EvalOp_ConstU64;
+      e->type_key = e2_type_key_basic(E2_TypeKind_S64);
+    }
+    else if(u <= 0xffffffffffffffffull)
+    {
+      e->op = RDI_EvalOp_ConstU64;
+      e->type_key = e2_type_key_basic(E2_TypeKind_U64);
+    }
+  }
+  return e;
+}
+
+internal E2_Expr *
+e2_expr_const_f32(Arena *arena, F32 f32)
+{
+  E2_Expr *e = e2_expr(arena);
+  e->mode = E2_Mode_Value;
+  e->val.f32 = f32;
+  e->op = RDI_EvalOp_ConstU32;
+  e->type_key = e2_type_key_basic(E2_TypeKind_F32);
+  return e;
+}
+
+internal E2_Expr *
+e2_expr_const_f64(Arena *arena, F64 f64)
+{
+  E2_Expr *e = e2_expr(arena);
+  e->mode = E2_Mode_Value;
+  e->val.f64 = f64;
+  e->op = RDI_EvalOp_ConstU64;
+  e->type_key = e2_type_key_basic(E2_TypeKind_F64);
+  return e;
+}
+
+internal E2_Expr *
+e2_expr_unary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_Expr *operand)
+{
+  E2_Expr *e = e2_expr(arena);
+  e->type_key = type_key;
+  e->op = op;
+  e->mode = E2_Mode_Value;
+  e2_expr_push_child(e, operand);
+  return e;
+}
+
+internal E2_Expr *
+e2_expr_binary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_Expr *lhs, E2_Expr *rhs)
+{
+  E2_Expr *e = e2_expr(arena);
+  e->type_key = type_key;
+  e->op = op;
+  e->mode = E2_Mode_Value;
+  e->val.u512.u8[0] = e2_type_group_from_kind(e2_type_kind_from_key(type_key));
+  e->val.u512.u8[1] = 8*e2_byte_size_from_type_key(type_key);
+  e2_expr_push_child(e, lhs);
+  e2_expr_push_child(e, rhs);
+  return e;
+}
+
+internal E2_Expr *
+e2_expr_resolve_to_value(Arena *arena, E2_Expr *expr)
+{
+  E2_Expr *result = expr;
+  
+  // rjf: address evaluations of arrays -> create value of pointer to first element
+  if(expr->mode == E2_Mode_Address && e2_type_kind_from_key(e2_type_key_undecorate(expr->type_key)) == E2_TypeKind_Array)
+  {
+    result = e2_expr(arena);
+    result->type_key = e2_type_key_direct(e2_type_key_undecorate(expr->type_key));
+    result->mode = E2_Mode_Value;
+    e2_expr_push_child(result, expr);
+  }
+  
+  // rjf: address evaluations -> read value from space
+  else if(expr->mode == E2_Mode_Address)
+  {
+    U64 memread_byte_size = e2_byte_size_from_type_key(expr->type_key);
+    memread_byte_size = Min(64, memread_byte_size);
+    E2_Expr *memread_expr = e2_expr(arena);
+    memread_expr->op = RDI_EvalOp_MemRead;
+    memread_expr->mode = E2_Mode_Value;
+    memread_expr->type_key = expr->type_key;
+    memread_expr->val.u64 = memread_byte_size;
+    e2_expr_push_child(memread_expr, expr);
+    result = memread_expr;
+  }
+  
+  // rjf: bitfields -> shift & mask
+  E2_TypeKey core_type_key = e2_type_key_undecorate(expr->type_key);
+  if(e2_type_kind_from_key(core_type_key) == E2_TypeKind_Bitfield)
+  {
+    // rjf: unpack bitfield params
+    U64 shift = e2_shift_from_type_key(result->type_key);
+    U64 mask_count = e2_mask_count_from_type_key(result->type_key);
+    U64 valid_bits_mask = 0;
+    for EachIndex(idx, mask_count)
+    {
+      valid_bits_mask |= (1ull<<idx);
+    }
+    
+    // rjf: mask(shift(expr, count), bitmask)
+    E2_Expr *shift_expr = e2_expr_binary_op(arena, e2_type_key_basic(E2_TypeKind_U64), RDI_EvalOp_RShift, result, e2_expr_const_u64_or_smaller(arena, shift));
+    E2_Expr *mask_expr = e2_expr_binary_op(arena, e2_type_key_direct(core_type_key), RDI_EvalOp_BitAnd, shift_expr, e2_expr_const_u64_or_smaller(arena, valid_bits_mask));
+    result = mask_expr;
+  }
+  
+  return result;
+}
+
+internal E2_Expr *
+e2_expr_truncate(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key)
+{
+  E2_Expr *result = expr;
+  E2_TypeKind dst_type_kind = e2_type_kind_from_key(dst_type_key);
+  U64 dst_type_byte_size = e2_byte_size_from_type_key(dst_type_key);
+  B32 dst_type_is_signed = e2_type_kind_is_signed(dst_type_kind);
+  if(dst_type_byte_size < 64)
+  {
+    result = e2_expr(arena);
+    result->type_key = dst_type_key;
+    result->op = dst_type_is_signed ? RDI_EvalOp_TruncSigned : RDI_EvalOp_Trunc;
+    result->val.u64 = dst_type_byte_size*8;
+    e2_expr_push_child(result, expr);
+  }
+  return result;
+}
+
+internal E2_Expr *
+e2_expr_convert_if_possible(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key)
+{
+  E2_Expr *result = expr;
+  {
+    // rjf: unpack src / dst types
+    E2_TypeKey src_type_key = expr->type_key;
+    E2_TypeKind src_type_kind = e2_type_kind_from_key(src_type_key);
+    E2_TypeKind dst_type_kind = e2_type_kind_from_key(dst_type_key);
+    RDI_EvalTypeGroup src_type_group = e2_type_group_from_kind(src_type_kind);
+    RDI_EvalTypeGroup dst_type_group = e2_type_group_from_kind(dst_type_kind);
+    U64 src_byte_size = e2_byte_size_from_type_key(src_type_key);
+    U64 dst_byte_size = e2_byte_size_from_type_key(dst_type_key);
+    
+    // rjf: convert from src -> dst
+    RDI_EvalConversionKind conversion_kind = rdi_eval_conversion_kind_from_typegroups(src_type_group, dst_type_group);
+    if(conversion_kind == RDI_EvalConversionKind_Legal)
+    {
+      result = e2_expr(arena);
+      result->mode     = E2_Mode_Value;
+      result->type_key = dst_type_key;
+      result->op       = RDI_EvalOp_Convert;
+      result->val.u64  = src_type_group | (dst_type_group << 8);
+      e2_expr_push_child(result, expr);
+    }
+    
+    // rjf: if shrinking integer sizes, truncate
+    if(dst_byte_size < src_byte_size && e2_type_kind_is_integer(dst_type_kind))
+    {
+      result = e2_expr_truncate(arena, expr, dst_type_key);
+    }
+  }
+  return result;
+}
+
+internal void
+e2_expr_push_child(E2_Expr *parent, E2_Expr *expr)
+{
+  SLLQueuePush_NZ(&e2_expr_nil, parent->first, parent->last, expr, next);
 }
 
 ////////////////////////////////
@@ -237,6 +978,7 @@ e2_token_from_string_off(String8 string, U64 start_off)
       if(next_byte > 32)
       {
         done = 1;
+        token.range.max = off;
       }break;
       case E2_TokenKind_Comment:
       if(comment_is_explicit_ender && next_byte == '*' && next2_byte == '/')
@@ -292,6 +1034,21 @@ e2_token_from_string_off(String8 string, U64 start_off)
       {
         done = 1;
         token.range.max = off;
+        String8 token_string = str8_substr(string, token.range);
+        U64 biggest_match_size = 0;
+        for EachNonZeroEnumVal(E2_OpKind, k)
+        {
+          String8 op_symbol = (e2_op_kind_info_table[k].pre.size != 0) ? e2_op_kind_info_table[k].pre : e2_op_kind_info_table[k].sep;
+          if(biggest_match_size < op_symbol.size && str8_match(op_symbol, str8_prefix(token_string, op_symbol.size), 0))
+          {
+            biggest_match_size = op_symbol.size;
+            token.range.max = token.range.min + op_symbol.size;
+          }
+        }
+        if(biggest_match_size == 0)
+        {
+          token.range.max = token.range.min + 1;
+        }
       }break;
       case E2_TokenKind_CharLiteral:
       case E2_TokenKind_StringLiteral:
@@ -368,21 +1125,21 @@ e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *of
 }
 
 internal E2_Parse
-e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map, E2_ExprMap *expr_map, String8 string)
+e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, String8 string)
 {
   U64 off = state->string_off;
   E2_Parse parse = {E2_Status_Error, .expr = &e2_expr_nil, .access_expr = &e2_expr_nil};
   
   //- rjf: parse & attach to top parsing task - if we don't have a top task
   // then it is just the result
+  E2_Expr *expr = &e2_expr_nil;
   for(B32 done = 0; !done;)
   {
     S64 max_precedence = state->top_task ? state->top_task->max_precedence : max_S64;
-    E2_Expr *expr = &e2_expr_nil;
     E2_Token token = {0};
     
     //- rjf: nested sub-expressions
-    if(e2_try_token(string, E2_TokenKind_Symbol, s("("), &off, 0))
+    if(expr == &e2_expr_nil && e2_try_token(string, E2_TokenKind_Symbol, s("("), &off, &token))
     {
       E2_ParseTask *task = state->free_task;
       if(task != 0)
@@ -391,10 +1148,10 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
       }
       else
       {
-        task = push_array(arena, E2_ParseTask, 1);
+        task = push_array_no_zero(arena, E2_ParseTask, 1);
       }
-      task->parent = push_array(arena, E2_Expr, 1);
-      MemoryCopyStruct(task->parent, &e2_expr_nil);
+      MemoryZeroStruct(task);
+      task->src_range = token.range;
       task->expected_closer = s(")");
       task->child_count_target = 1;
       task->max_precedence = max_S64;
@@ -402,7 +1159,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
     }
     
     //- rjf: prefix unaries
-    else if(e2_try_token(string, E2_TokenKind_Symbol, s(""), &off, &token))
+    else if(expr == &e2_expr_nil && e2_try_token(string, E2_TokenKind_Symbol, s(""), &off, &token))
     {
       // rjf: string -> operator kind
       E2_OpKind op_kind = E2_OpKind_Null;
@@ -430,10 +1187,10 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
         }
         else
         {
-          task = push_array(arena, E2_ParseTask, 1);
+          task = push_array_no_zero(arena, E2_ParseTask, 1);
         }
-        task->parent = push_array(arena, E2_Expr, 1);
-        MemoryCopyStruct(task->parent, &e2_expr_nil);
+        MemoryZeroStruct(task);
+        task->src_range = token.range;
         task->child_count_target = 1;
         task->op_kind = op_kind;
         task->max_precedence = e2_op_kind_info_table[op_kind].precedence;
@@ -442,7 +1199,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
     }
     
     //- rjf: leaf identifiers
-    else if(e2_try_token(string, E2_TokenKind_Identifier, s(""), &off, &token))
+    else if(expr == &e2_expr_nil && e2_try_token(string, E2_TokenKind_Identifier, s(""), &off, &token))
     {
       String8 identifier = str8_substr(string, token.range);
       expr = e2_expr_from_name(expr_map, identifier);
@@ -455,29 +1212,27 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
     }
     
     //- rjf: leaf numerics
-    else if(e2_try_token(string, E2_TokenKind_Numeric, s(""), &off, &token))
+    else if(expr == &e2_expr_nil && e2_try_token(string, E2_TokenKind_Numeric, s(""), &off, &token))
     {
+      U64 u64_val = 0;
       String8 numeric_string = str8_substr(string, token.range);
-      expr = push_array(arena, E2_Expr, 1);
-      MemoryCopyStruct(expr, &e2_expr_nil);
       U64 dot_pos = str8_find_needle(numeric_string, 0, s("."), 0); 
       B32 f_suffix = str8_match(str8_postfix(numeric_string, 1), s("f"), 0);
       U64 colon_pos = str8_find_needle(numeric_string, 0, s(":"), 0);
       if(dot_pos < numeric_string.size && f_suffix)
       {
-        expr->val.f32 = (F32)f64_from_str8(numeric_string);
-        expr->type_key = e2_type_key_basic(E2_TypeKind_F32);
+        expr = e2_expr_const_f32(arena, (F32)f64_from_str8(numeric_string));
       }
       else if(dot_pos < numeric_string.size && !f_suffix)
       {
-        expr->val.f64 = f64_from_str8(numeric_string);
-        expr->type_key = e2_type_key_basic(E2_TypeKind_F64);
+        expr = e2_expr_const_f64(arena, f64_from_str8(numeric_string));
       }
       else if(colon_pos < numeric_string.size)
       {
         Temp scratch = scratch_begin(&arena, 1);
         String8List parts = str8_split(scratch.arena, numeric_string, (U8 *)":", 1, 0);
         U64 u64_idx = 0;
+        expr = e2_expr(arena);
         for EachNode(n, String8Node, parts.first)
         {
           if(u64_idx >= ArrayCount(expr->val.u512.u64))
@@ -500,28 +1255,9 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
         }
         scratch_end(scratch);
       }
-      else if(try_u64_from_str8_c_rules(numeric_string, &expr->val.u64))
+      else if(try_u64_from_str8_c_rules(numeric_string, &u64_val))
       {
-        if(expr->val.u64 <= 0xff)
-        {
-          expr->op = RDI_EvalOp_ConstU8;
-          expr->type_key = e2_type_key_basic(E2_TypeKind_U8);
-        }
-        else if(expr->val.u64 <= 0xffff)
-        {
-          expr->op = RDI_EvalOp_ConstU16;
-          expr->type_key = e2_type_key_basic(E2_TypeKind_U16);
-        }
-        else if(expr->val.u64 <= 0xffffffff)
-        {
-          expr->op = RDI_EvalOp_ConstU32;
-          expr->type_key = e2_type_key_basic(E2_TypeKind_U32);
-        }
-        else
-        {
-          expr->op = RDI_EvalOp_ConstU64;
-          expr->type_key = e2_type_key_basic(E2_TypeKind_U64);
-        }
+        expr = e2_expr_const_u64_or_smaller(arena, u64_val);
       }
     }
     
@@ -539,7 +1275,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
           {
             if(e2_op_kind_info_table[k].parse_kind == E2_OpParseKind_Binary &&
                e2_op_kind_info_table[k].precedence <= max_precedence &&
-               str8_match(token_string, e2_op_kind_info_table[k].pre, 0))
+               str8_match(token_string, e2_op_kind_info_table[k].sep, 0))
             {
               op_kind = k;
               break;
@@ -557,16 +1293,16 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
           }
           else
           {
-            task = push_array(arena, E2_ParseTask, 1);
+            task = push_array_no_zero(arena, E2_ParseTask, 1);
           }
-          task->parent = push_array(arena, E2_Expr, 1);
-          MemoryCopyStruct(task->parent, &e2_expr_nil);
-          SLLQueuePush_NZ(&e2_expr_nil, task->parent->first, task->parent->last, expr, next);
-          task->child_count = 1;
+          MemoryZeroStruct(task);
+          task->src_range = token.range;
+          task->child_count = 0;
           task->child_count_target = 2;
           task->op_kind = op_kind;
           task->max_precedence = e2_op_kind_info_table[op_kind].precedence;
           SLLStackPush(state->top_task, task);
+          off = trailing_symbol_off;
         }
       }
     }
@@ -576,37 +1312,51 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
     if(expr != &e2_expr_nil)
     {
       //- rjf: pop finished expressions
-      E2_Expr *finished_expr = expr;
       for(;state->top_task != 0;)
       {
         //- rjf: gather finished expression to current task; increase task child count
         E2_ExprNode *n = push_array(arena, E2_ExprNode, 1);
         SLLQueuePush(state->top_task->first_child, state->top_task->last_child, n);
-        n->v = finished_expr;
+        n->v = expr;
         state->top_task->child_count += 1;
         
-        //- rjf: task child count hits limit -> complete this child
+        //- rjf: task child count hits limit -> complete this subtree
         if(state->top_task->child_count >= state->top_task->child_count_target)
         {
-          //- rjf: release task; iterate to this finished expression next
+          //- rjf: release task
           E2_ParseTask *completed_task = state->top_task;
           SLLStackPop(state->top_task);
           SLLStackPush(state->free_task, completed_task);
           
-          //- rjf: finish expression with operator info, if applicable
-          finished_expr = completed_task->parent;
+          //- rjf: produced finished expression tree, given all children
+          E2_Expr *finished_root = &e2_expr_nil;
           E2_Expr *lhs = completed_task->first_child ? completed_task->first_child->v : &e2_expr_nil;
           E2_Expr *rhs = completed_task->last_child ? completed_task->last_child->v : &e2_expr_nil;
           {
-            E2_Expr *root = finished_expr;
+            RDI_EvalOp op = RDI_EvalOp_Stop;
+            E2_TypeKey dst_type_key = {E2_TypeKeyKind_Null};
             switch(completed_task->op_kind)
             {
-              default:{}break;
+              //- rjf: no op -> just a sub-expression
+              default:
+              {
+                if(lhs != rhs)
+                {
+                  finished_root = e2_expr(arena);
+                  for EachNode(n, E2_ExprNode, completed_task->first_child)
+                  {
+                    e2_expr_push_child(finished_root, n->v);
+                  }
+                }
+                else
+                {
+                  finished_root = lhs;
+                }
+              }break;
               
               //- rjf: dereference
               case E2_OpKind_Deref:
               {
-#if 0
                 // rjf: unpack operand
                 E2_TypeKey rhs_type_key = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_AllDecorative & ~E2_TypeUnwrapFlag_Enums);
                 E2_TypeKind rhs_type_kind = e2_type_kind_from_key(rhs_type_key);
@@ -618,62 +1368,264 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
                 if(dereferenced_type_size == 0 && e2_type_kind_is_ptr_or_ref(rhs_type_kind))
                 {
                   malformed = 1;
-                  e2_msgf(arena, &parse.msgs, src->root_range, "Cannot dereference pointers to zero-sized types.");
+                  e2_msgf(arena, &parse.msgs, completed_task->src_range, "Cannot dereference pointers to zero-sized types.");
                 }
                 else if(dereferenced_type_size == 0 && rhs_type_kind == E2_TypeKind_Array)
                 {
                   malformed = 1;
-                  e2_msgf(arena, &parse.msgs, src->root_range, "Cannot dereference arrays of zero-sized types.");
+                  e2_msgf(arena, &parse.msgs, completed_task->src_range, "Cannot dereference arrays of zero-sized types.");
                 }
                 else if(!e2_type_kind_is_ptr_or_ref(rhs_type_kind) && rhs_type_kind != E2_TypeKind_Array)
                 {
                   malformed = 1;
-                  e2_msgf(arena, &parse.msgs, src->root_range, "Cannot dereference this type.");
+                  e2_msgf(arena, &parse.msgs, completed_task->src_range, "Cannot dereference this type.");
                 }
                 
                 // rjf: not malformed -> equip info
                 if(!malformed)
                 {
+                  B32 is_only_type_eval = (rhs->mode == E2_Mode_Type);
                   E2_Expr *addr_value_tree = e2_expr_resolve_to_value(arena, rhs);
-                  SLLQueuePush_NZ(&e2_expr_nil, finished_expr->first, finished_expr->last, addr_value_tree, next);
+                  addr_value_tree->type_key = dereferenced_type;
+                  if(is_only_type_eval)
+                  {
+                    addr_value_tree->mode = E2_Mode_Type;
+                  }
+                  else
+                  {
+                    addr_value_tree->mode = E2_Mode_Address;
+                  }
+                  finished_root = addr_value_tree;
                 }
-#endif
               }break;
               
-              case E2_OpKind_Address:{}break;
-              case E2_OpKind_Pos:{}break;
-              case E2_OpKind_Neg:{}break;
-              case E2_OpKind_LogNot:{}break;
-              case E2_OpKind_BitNot:{}break;
-              case E2_OpKind_Mul:{}break;
-              case E2_OpKind_Div:{}break;
-              case E2_OpKind_Mod:{}break;
-              case E2_OpKind_Add:{}break;
-              case E2_OpKind_Sub:{}break;
-              case E2_OpKind_LShift:{}break;
-              case E2_OpKind_RShift:{}break;
-              case E2_OpKind_Less:{}break;
-              case E2_OpKind_LtEq:{}break;
-              case E2_OpKind_Grtr:{}break;
-              case E2_OpKind_GrEq:{}break;
-              case E2_OpKind_EqEq:{}break;
-              case E2_OpKind_NtEq:{}break;
-              case E2_OpKind_BitAnd:{}break;
-              case E2_OpKind_BitXor:{}break;
-              case E2_OpKind_BitOr:{}break;
-              case E2_OpKind_LogAnd:{}break;
-              case E2_OpKind_LogOr:{}break;
+              //- rjf: address-of
+              case E2_OpKind_Address:
+              {
+                // rjf: determine if malformed
+                B32 malformed = 0;
+                if(rhs->mode != E2_Mode_Address)
+                {
+                  malformed = 1;
+                  e2_msgf(arena, &parse.msgs, completed_task->src_range, "Cannot take an address of a value; it does not exist in memory.");
+                }
+                
+                // rjf: generate
+                if(!malformed)
+                {
+                  Arch arch = e2_arch_from_type_key(rhs->type_key);
+                  finished_root = rhs;
+                  finished_root->mode = E2_Mode_Value;
+                  finished_root->type_key = e2_type_key_cons_ptr(arch, rhs->type_key);
+                }
+              }break;
+              
+              //- rjf: positive (no-op, just take the right-hand-side)
+              case E2_OpKind_Pos:
+              {
+                finished_root = rhs;
+              }break;
+              
+              //- rjf: unary ops
+              case E2_OpKind_Neg:    {op = RDI_EvalOp_Neg;}goto unary_op;
+              case E2_OpKind_LogNot: {op = RDI_EvalOp_LogNot;}goto unary_op;
+              case E2_OpKind_BitNot: {op = RDI_EvalOp_BitNot;}goto unary_op;
+              unary_op:;
+              {
+                // rjf: unpack operand
+                E2_TypeKey rhs_type_key = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_AllDecorative & ~E2_TypeUnwrapFlag_Enums);
+                E2_TypeKind rhs_type_kind = e2_type_kind_from_key(rhs_type_key);
+                RDI_EvalTypeGroup rhs_type_group = e2_type_group_from_kind(rhs_type_kind);
+                
+                // rjf: determine if malformed
+                B32 malformed = 0;
+                if(!rdi_eval_op_typegroup_are_compatible(op, rhs_type_group))
+                {
+                  malformed = 1;
+                  e2_msgf(arena, &parse.msgs, completed_task->src_range, "Cannot use this operator on this type.");
+                }
+                
+                // rjf: generate
+                if(!malformed)
+                {
+                  E2_TypeKey dst_type = rhs_type_key;
+                  if(RDI_EvalOp_FirstLogical <= op && op <= RDI_EvalOp_LastLogical)
+                  {
+                    dst_type = e2_type_key_basic(E2_TypeKind_Bool);
+                  }
+                  else if(rhs_type_kind == E2_TypeKind_Bool ||
+                          rhs_type_kind == E2_TypeKind_S8 ||
+                          rhs_type_kind == E2_TypeKind_S16 ||
+                          rhs_type_kind == E2_TypeKind_U8 ||
+                          rhs_type_kind == E2_TypeKind_U16)
+                  {
+                    dst_type = e2_type_key_basic(E2_TypeKind_S32);
+                  }
+                  E2_Expr *operand = e2_expr_resolve_to_value(arena, rhs);
+                  E2_Expr *operand__converted = e2_expr_convert_if_possible(arena, operand, dst_type);
+                  finished_root = e2_expr_unary_op(arena, dst_type, op, operand__converted);
+                }
+              }break;
+              
+              //- rjf: binary ops
+              case E2_OpKind_Mul:   {op = RDI_EvalOp_Mul;}goto binary_op;
+              case E2_OpKind_Div:   {op = RDI_EvalOp_Div;}goto binary_op;
+              case E2_OpKind_Mod:   {op = RDI_EvalOp_Mod;}goto binary_op;
+              case E2_OpKind_Add:   {op = RDI_EvalOp_Add;}goto binary_op;
+              case E2_OpKind_Sub:   {op = RDI_EvalOp_Sub;}goto binary_op;
+              case E2_OpKind_LShift:{op = RDI_EvalOp_LShift;}goto binary_op;
+              case E2_OpKind_RShift:{op = RDI_EvalOp_RShift;}goto binary_op;
+              case E2_OpKind_Less:  {op = RDI_EvalOp_Less;}goto binary_op;
+              case E2_OpKind_LtEq:  {op = RDI_EvalOp_LsEq;}goto binary_op;
+              case E2_OpKind_Grtr:  {op = RDI_EvalOp_Grtr;}goto binary_op;
+              case E2_OpKind_GrEq:  {op = RDI_EvalOp_GrEq;}goto binary_op;
+              case E2_OpKind_EqEq:  {op = RDI_EvalOp_EqEq;}goto binary_op;
+              case E2_OpKind_NtEq:  {op = RDI_EvalOp_NtEq;}goto binary_op;
+              case E2_OpKind_BitAnd:{op = RDI_EvalOp_BitAnd;}goto binary_op;
+              case E2_OpKind_BitXor:{op = RDI_EvalOp_BitXor;}goto binary_op;
+              case E2_OpKind_BitOr: {op = RDI_EvalOp_BitOr;}goto binary_op;
+              case E2_OpKind_LogAnd:{op = RDI_EvalOp_LogAnd;}goto binary_op;
+              case E2_OpKind_LogOr: {op = RDI_EvalOp_LogOr;}goto binary_op;
+              binary_op:;
+              {
+                // rjf: resolve lhs / rhs to values
+                E2_Expr *lhs_value = e2_expr_resolve_to_value(arena, lhs);
+                E2_Expr *rhs_value = e2_expr_resolve_to_value(arena, rhs);
+                
+                // rjf: unpack resolved lhs/rhs
+                E2_TypeKey lhs_type_key = e2_type_key_undecorate(lhs_value->type_key);
+                E2_TypeKey rhs_type_key = e2_type_key_undecorate(rhs_value->type_key);
+                E2_TypeKind lhs_type_kind = e2_type_kind_from_key(lhs_type_key);
+                E2_TypeKind rhs_type_kind = e2_type_kind_from_key(rhs_type_key);
+                RDI_EvalTypeGroup lhs_type_group = e2_type_group_from_kind(lhs_type_kind);
+                RDI_EvalTypeGroup rhs_type_group = e2_type_group_from_kind(rhs_type_kind);
+                U64 lhs_type_size = e2_byte_size_from_type_key(lhs_type_key);
+                U64 rhs_type_size = e2_byte_size_from_type_key(rhs_type_key);
+                
+                // rjf: determine kind of arithmetic
+                typedef enum ArithKind
+                {
+                  ArithKind_Normal,
+                  ArithKind_PtrAdd,
+                  ArithKind_PtrSub,
+                  ArithKind_PtrArrayCompare,
+                  ArithKind_TypeCompare,
+                }
+                ArithKind;
+                ArithKind arith_kind = ArithKind_Normal;
+                {
+                  if(lhs_value->mode == E2_Mode_Type || rhs_value->mode == E2_Mode_Type)
+                  {
+                    arith_kind = ArithKind_TypeCompare;
+                  }
+                  else if((op == RDI_EvalOp_Add || op == RDI_EvalOp_Sub) &&
+                          ((e2_type_kind_is_ptr_or_ref(lhs_type_kind) && e2_type_kind_is_integer(rhs_type_kind)) ||
+                           (e2_type_kind_is_ptr_or_ref(rhs_type_kind) && e2_type_kind_is_integer(lhs_type_kind))))
+                  {
+                    arith_kind = ArithKind_PtrAdd;
+                  }
+                  else if(op == RDI_EvalOp_Sub && e2_type_kind_is_ptr_or_ref(lhs_type_kind) && e2_type_kind_is_ptr_or_ref(rhs_type_kind))
+                  {
+                    arith_kind = ArithKind_PtrSub;
+                  }
+                  else if((op == RDI_EvalOp_EqEq || op == RDI_EvalOp_NtEq) &&
+                          ((e2_type_kind_is_ptr_or_ref(lhs_type_kind) && rhs_type_kind == E2_TypeKind_Array) ||
+                           (e2_type_kind_is_ptr_or_ref(rhs_type_kind) && lhs_type_kind == E2_TypeKind_Array)))
+                  {
+                    arith_kind = ArithKind_PtrArrayCompare;
+                  }
+                }
+                
+                // rjf: generate
+                switch(arith_kind)
+                {
+                  //- rjf: normal arithmetic
+                  case ArithKind_Normal:
+                  {
+                    // rjf: check malformation
+                    B32 malformed = 0;
+                    if(!rdi_eval_op_typegroup_are_compatible(op, lhs_type_group) ||
+                       !rdi_eval_op_typegroup_are_compatible(op, rhs_type_group))
+                    {
+                      malformed = 1;
+                      e2_msgf(arena, &parse.msgs, completed_task->src_range, "Cannot use this operator on this type.");
+                    }
+                    
+                    // rjf: generate
+                    if(!malformed)
+                    {
+                      E2_TypeKey dst_type_key = lhs_type_key;
+                      if(RDI_EvalOp_FirstLogical <= op && op <= RDI_EvalOp_LastLogical)
+                      {
+                        dst_type_key = e2_type_key_basic(E2_TypeKind_Bool);
+                      }
+                      else
+                      {
+                        dst_type_key = e2_coerced_type_key_from_operands(lhs_type_key, rhs_type_key);
+                      }
+                      E2_Expr *lhs_converted = e2_expr_convert_if_possible(arena, lhs_value, dst_type_key);
+                      E2_Expr *rhs_converted = e2_expr_convert_if_possible(arena, rhs_value, dst_type_key);
+                      finished_root = e2_expr_binary_op(arena, dst_type_key, op, lhs_converted, rhs_converted);
+                    }
+                  }break;
+                  
+                  //- rjf: pointer-add arithmetic
+                  case ArithKind_PtrAdd:
+                  {
+                    
+                  }break;
+                  
+                  //- rjf: pointer-sub arithmetic
+                  case ArithKind_PtrSub:
+                  {
+                    
+                  }break;
+                  
+                  //- rjf: pointer-array comparisons
+                  case ArithKind_PtrArrayCompare:
+                  {
+                    
+                  }break;
+                  
+                  //- rjf: type comparisons
+                  case ArithKind_TypeCompare:
+                  {
+                    
+                  }break;
+                }
+              }break;
+              
+              //- rjf: definitions (TODO(rjf): tricky with the 'user resolves expressions' model - let's figure it out once basics are in)
               case E2_OpKind_Define:{}break;
             }
           }
+          
+          //- rjf: consume expected closers
+          if(completed_task->expected_closer.size != 0)
+          {
+            if(!e2_try_token(string, E2_TokenKind_Symbol, completed_task->expected_closer, &off, 0))
+            {
+              e2_msgf(arena, &parse.msgs, r1u64(off, off), "Expected `%S`.", completed_task->expected_closer);
+            }
+          }
+          
+          //- rjf: work on the parent of the finished expression next
+          expr = finished_root;
+        }
+        
+        //- rjf: if the top task is not done -> break & continue - reset expression, because we need to parse another.
+        else
+        {
+          expr = &e2_expr_nil;
+          break;
         }
       }
       
       //- rjf: for the last finished expression, if we do not have any further tasks,
       // this is our result.
-      if(finished_expr != &e2_expr_nil && state->top_task == 0)
+      if(state->top_task == 0 && off >= string.size)
       {
-        parse.expr = finished_expr;
+        parse.expr = expr;
         if(parse.status == E2_Status_Error)
         {
           parse.status = E2_Status_Good;
@@ -684,7 +1636,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
   }
   
   //- rjf: advance offset if successful
-  if(parse.status == E2_Status_Good)
+  if(parse.status == E2_Status_Good || parse.status == E2_Status_Error)
   {
     state->string_off = off;
   }
@@ -697,7 +1649,73 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_SpaceMap *space_map,
 internal String8
 e2_bytecode_from_expr(Arena *arena, E2_Expr *expr)
 {
-  
+  String8 result = {0};
+  {
+    Temp scratch = scratch_begin(&arena, 1);
+    String8List strings = {0};
+    typedef struct Task Task;
+    struct Task
+    {
+      Task *next;
+      E2_Expr *e;
+      E2_Expr *last_pushed_child;
+      U64 pushed_child_count;
+    };
+    Task start_task = {0, expr, &e2_expr_nil};
+    Task *top_task = &start_task;
+    Task *free_task = 0;
+    for(Task *t = top_task; t != 0; t = top_task)
+    {
+      E2_Expr *e = t->e;
+      
+      //- rjf: unpack this op
+      U16 ctrlbits = rdi_eval_op_ctrlbits_table[e->op];
+      U64 child_count = RDI_POPN_FROM_CTRLBITS(ctrlbits);
+      
+      //- rjf: push the next child task if we can
+      if(t->pushed_child_count < child_count)
+      {
+        t->pushed_child_count += 1;
+        E2_Expr *next_child = (t->last_pushed_child == &e2_expr_nil ? e->first : t->last_pushed_child->next);
+        Task *child_task = free_task;
+        if(child_task != 0)
+        {
+          SLLStackPop(free_task);
+        }
+        else
+        {
+          child_task = push_array_no_zero(scratch.arena, Task, 1);
+        }
+        MemoryZeroStruct(child_task);
+        SLLStackPush(top_task, child_task);
+        child_task->e = next_child;
+        child_task->last_pushed_child = &e2_expr_nil;
+        child_task->pushed_child_count = 0;
+        t->last_pushed_child = next_child;
+      }
+      
+      //- rjf: did push of all children -> push this expr's op, pop off stack
+      else
+      {
+        U16 ctrlbits = 0;
+        if(e->op < RDI_EvalOp_COUNT)
+        {
+          ctrlbits = rdi_eval_op_ctrlbits_table[e->op];
+        }
+        U64 decode_byte_count = RDI_DECODEN_FROM_CTRLBITS(ctrlbits);
+        U64 op_size = 1 + decode_byte_count;
+        U8 *op_buffer = push_array(scratch.arena, U8, op_size);
+        op_buffer[0] = e->op;
+        MemoryCopy(op_buffer+1, &e->val, decode_byte_count);
+        str8_list_push(scratch.arena, &strings, str8(op_buffer, op_size));
+        SLLStackPop(top_task);
+        SLLStackPush(free_task, t);
+      }
+    }
+    result = str8_list_join(arena, &strings, 0);
+    scratch_end(scratch);
+  }
+  return result;
 }
 
 ////////////////////////////////
@@ -965,6 +1983,15 @@ BinOp(U, u64, u64, symbol);
 #undef ArithTypeCases
 #undef ArithTypeCasesDiv
 #undef ArithTypeCasesIntAllU64
+        
+        case RDI_EvalOp_LogNot:
+        {
+          push_vals[0].u64 = !popped_vals[0].u64;
+        }break;
+        case RDI_EvalOp_BitNot:
+        {
+          push_vals[0].u64 = ~popped_vals[0].u64;
+        }break;
         
         case RDI_EvalOp_EqEq:
         case RDI_EvalOp_NtEq:

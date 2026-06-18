@@ -199,7 +199,7 @@ p2r_rdi_language_from_cv_language(CV_Language cv_language)
 internal RDI_TypeKind
 p2r_rdi_type_kind_from_cv_basic_type(CV_BasicType basic_type)
 {
-  RDI_TypeKind result = RDI_TypeKind_NULL;
+  RDI_TypeKind result = RDI_TypeKind_Null;
   switch(basic_type)
   {
     case CV_BasicType_VOID: {result = RDI_TypeKind_Void;}break;

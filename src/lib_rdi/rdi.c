@@ -81,17 +81,17 @@ RDI_EVAL_CTRLBITS(64, 0, 1),
 RDI_EVAL_CTRLBITS(1, 0, 1),
 RDI_EVAL_CTRLBITS(1, 1, 1),
 RDI_EVAL_CTRLBITS(1, 1, 1),
-RDI_EVAL_CTRLBITS(1, 2, 1),
-RDI_EVAL_CTRLBITS(1, 2, 1),
-RDI_EVAL_CTRLBITS(1, 2, 1),
-RDI_EVAL_CTRLBITS(1, 2, 1),
-RDI_EVAL_CTRLBITS(1, 2, 1),
 RDI_EVAL_CTRLBITS(2, 2, 1),
 RDI_EVAL_CTRLBITS(2, 2, 1),
-RDI_EVAL_CTRLBITS(1, 2, 1),
-RDI_EVAL_CTRLBITS(1, 2, 1),
-RDI_EVAL_CTRLBITS(1, 2, 1),
-RDI_EVAL_CTRLBITS(1, 1, 1),
+RDI_EVAL_CTRLBITS(2, 2, 1),
+RDI_EVAL_CTRLBITS(2, 2, 1),
+RDI_EVAL_CTRLBITS(2, 2, 1),
+RDI_EVAL_CTRLBITS(2, 2, 1),
+RDI_EVAL_CTRLBITS(2, 2, 1),
+RDI_EVAL_CTRLBITS(2, 2, 1),
+RDI_EVAL_CTRLBITS(2, 2, 1),
+RDI_EVAL_CTRLBITS(2, 2, 1),
+RDI_EVAL_CTRLBITS(2, 1, 1),
 RDI_EVAL_CTRLBITS(1, 2, 1),
 RDI_EVAL_CTRLBITS(1, 2, 1),
 RDI_EVAL_CTRLBITS(1, 1, 1),
@@ -162,7 +162,6 @@ RDI_U8 *result = 0;
 switch (kind)
 {
 default:{}break;
-case RDI_TypeKind_NULL: {result = (RDI_U8*)"NULL"; *size_out = sizeof("NULL")-1;}break;
 case RDI_TypeKind_Void: {result = (RDI_U8*)"Void"; *size_out = sizeof("Void")-1;}break;
 case RDI_TypeKind_Handle: {result = (RDI_U8*)"Handle"; *size_out = sizeof("Handle")-1;}break;
 case RDI_TypeKind_HResult: {result = (RDI_U8*)"HResult"; *size_out = sizeof("HResult")-1;}break;
@@ -222,7 +221,6 @@ case RDI_TypeKind_IncompleteUnion: {result = (RDI_U8*)"IncompleteUnion"; *size_o
 case RDI_TypeKind_IncompleteClass: {result = (RDI_U8*)"IncompleteClass"; *size_out = sizeof("IncompleteClass")-1;}break;
 case RDI_TypeKind_IncompleteEnum: {result = (RDI_U8*)"IncompleteEnum"; *size_out = sizeof("IncompleteEnum")-1;}break;
 case RDI_TypeKind_Bitfield: {result = (RDI_U8*)"Bitfield"; *size_out = sizeof("Bitfield")-1;}break;
-case RDI_TypeKind_COUNT: {result = (RDI_U8*)"COUNT"; *size_out = sizeof("COUNT")-1;}break;
 }
 return result;
 }

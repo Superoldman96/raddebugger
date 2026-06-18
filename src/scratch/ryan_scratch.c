@@ -38,17 +38,66 @@
 internal void
 entry_point(CmdLine *cmdline)
 {
-  Temp scratch = scratch_begin(0, 0);
-  E2_ParseState state = {0};
-  E2_SpaceMap space_map = {0};
-  E2_ExprMap expr_map = {0};
-  for(;;)
+  String8 strings[] =
   {
-    E2_Parse parse = e2_parse_from_string(scratch.arena, &state, &space_map, &expr_map, s("!123"));
-    if(parse.status == E2_Status_Good)
+    s("123"),
+    s("123 + 456"),
+    s("!1"),
+    s("!0"),
+    s("1 + 1 + 1"),
+    s("40 / 0"),
+    s("3 * 4"),
+    s("3 * 4 + 2"),
+    s("(3 * 4) + 2"),
+    s("2 + (3 * 4)"),
+  };
+  for EachElement(idx, strings)
+  {
+    Temp scratch = scratch_begin(0, 0);
+    
+    // rjf: string -> expr
+    E2_Expr *expr = &e2_expr_nil;
     {
-      break;
+      E2_ParseState state = {0};
+      E2_ExprMap expr_map = {0};
+      for(;;)
+      {
+        E2_Parse parse = e2_parse_from_string(scratch.arena, &state, &expr_map, strings[idx]);
+        if(parse.status == E2_Status_Good)
+        {
+          expr = parse.expr;
+          break;
+        }
+      }
     }
+    
+    // rjf: expr -> bytecode
+    String8 bytecode = e2_bytecode_from_expr(scratch.arena, expr);
+    
+    // rjf: bytecode -> value
+    E2_Val val = {0};
+    {
+      E2_InterpState state = {0};
+      E2_SpaceMap space_map = {0};
+      for(;;)
+      {
+        E2_Interp interp = e2_interp_from_bytecode(scratch.arena, &state, &space_map, bytecode);
+        if(interp.status == E2_Status_Good)
+        {
+          val = interp.val;
+          break;
+        }
+        else if(E2_Status_FirstError <= interp.status <= E2_Status_LastError)
+        {
+          break;
+        }
+      }
+    }
+    
+    // rjf: log
+    printf("%.*s -> %I64u\n", str8_varg(strings[idx]), val.u64);
+    fflush(stdout);
+    
+    scratch_end(scratch);
   }
-  scratch_end(scratch);
 }

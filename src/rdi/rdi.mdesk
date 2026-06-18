@@ -718,8 +718,6 @@ RDI_LanguageTable:
 @table(name value size bookend1 bookend2)
 RDI_TypeKindTable:
 {
-  {NULL                 0x0000     0                                             }
-  //-
   {Void                 0x0001     0              FirstBuiltIn                   }
   {Handle               0x0002     0xFFFFFFFF                                    }
   {HResult              0x0003     4                                             }
@@ -782,7 +780,6 @@ RDI_TypeKindTable:
   {IncompleteEnum       0x2008     0               LastIncomplete LastUserDefined}
   //-
   {Bitfield             0xF000     0                                             }
-  {COUNT                0xF002     0                                             }
 }
 
 @table(name value)
@@ -857,9 +854,11 @@ RDI_EnumMemberTable:
 
 @enum(RDI_U16) RDI_TypeKind:
 {
+  `Null`,
   @expand(RDI_TypeKindTable a) `$(a.name .. =>20) = $(a.value)`;
   @expand(RDI_TypeKindTable a) `$(a.bookend1 != "" -> a.bookend1 .. =>20 .. " = RDI_TypeKind_" .. a.name)`;
   @expand(RDI_TypeKindTable a) `$(a.bookend2 != "" -> a.bookend2 .. =>20 .. " = RDI_TypeKind_" .. a.name)`;
+  `COUNT`;
 }
 
 @enum(RDI_U16) RDI_TypeModifierFlags:
@@ -1193,7 +1192,7 @@ RDI_LocationSetElementMemberTable:
 ////////////////////////////////
 //~ rjf: Evaluation Bytecode Tables
 
-@table(name value num_decodes num_pops num_pushes)
+@table(name value num_decodes num_pops num_pushes bookend)
 RDI_EvalOpTable:
 {
   {Stop            0       0 0 0}
@@ -1217,18 +1216,18 @@ RDI_EvalOpTable:
   {ConstString     18      1 0 1}
   {Abs             19      1 1 1}
   {Neg             20      1 1 1}
-  {Add             21      1 2 1}
-  {Sub             22      1 2 1}
-  {Mul             23      1 2 1}
-  {Div             24      1 2 1}
-  {Mod             25      1 2 1}
+  {Add             21      2 2 1}
+  {Sub             22      2 2 1}
+  {Mul             23      2 2 1}
+  {Div             24      2 2 1}
+  {Mod             25      2 2 1}
   {LShift          26      2 2 1}
   {RShift          27      2 2 1}
-  {BitAnd          28      1 2 1}
-  {BitOr           29      1 2 1}
-  {BitXor          30      1 2 1}
-  {BitNot          31      1 1 1}
-  {LogAnd          32      1 2 1}
+  {BitAnd          28      2 2 1}
+  {BitOr           29      2 2 1}
+  {BitXor          30      2 2 1}
+  {BitNot          31      2 1 1}
+  {LogAnd          32      1 2 1 FirstLogical}
   {LogOr           33      1 2 1}
   {LogNot          34      1 1 1}
   {EqEq            35      1 2 1}
@@ -1236,7 +1235,7 @@ RDI_EvalOpTable:
   {LsEq            37      1 2 1}
   {GrEq            38      1 2 1}
   {Less            39      1 2 1}
-  {Grtr            40      1 2 1}
+  {Grtr            40      1 2 1 LastLogical}
   {Trunc           41      1 1 1}
   {TruncSigned     42      1 1 1}
   {Convert         43      2 1 1}
@@ -1280,7 +1279,8 @@ RDI_EvalConversionKindTable:
 
 @enum(RDI_U8) RDI_EvalOp:
 {
-  @expand(RDI_EvalOpTable a) `$(a.name .. =>20) = $(a.value)`
+  @expand(RDI_EvalOpTable a) `$(a.name .. =>20) = $(a.value)`,
+  @expand(RDI_EvalOpTable a) `$(a.bookend != "" -> a.bookend .. " = RDI_EvalOp_" .. a.name)`,
 }
 
 @enum(RDI_U8) RDI_EvalTypeGroup:

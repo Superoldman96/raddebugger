@@ -758,7 +758,7 @@ e_push_type_from_key(Arena *arena, E_TypeKey key)
           RDI_TopLevelInfo *tli = rdi_element_from_name_idx(rdi, TopLevelInfo, 0);
           Arch arch = arch_from_rdi_arch(tli->arch);
           RDI_TypeNode *rdi_type = rdi_element_from_name_idx(rdi, TypeNodes, type_node_idx);
-          if(rdi_type->kind != RDI_TypeKind_NULL)
+          if(rdi_type->kind != RDI_TypeKind_Null)
           {
             E_TypeKind kind = e_type_kind_from_rdi(rdi_type->kind);
             

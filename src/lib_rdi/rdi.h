@@ -274,7 +274,7 @@ RDI_Language_COUNT      = 4,
 typedef RDI_U16 RDI_TypeKind;
 typedef enum RDI_TypeKindEnum
 {
-RDI_TypeKind_NULL                 = 0x0000,
+RDI_TypeKind_Null,
 RDI_TypeKind_Void                 = 0x0001,
 RDI_TypeKind_Handle               = 0x0002,
 RDI_TypeKind_HResult              = 0x0003,
@@ -334,7 +334,6 @@ RDI_TypeKind_IncompleteUnion      = 0x2006,
 RDI_TypeKind_IncompleteClass      = 0x2007,
 RDI_TypeKind_IncompleteEnum       = 0x2008,
 RDI_TypeKind_Bitfield             = 0xF000,
-RDI_TypeKind_COUNT                = 0xF002,
 RDI_TypeKind_FirstBuiltIn         = RDI_TypeKind_Void,
 RDI_TypeKind_LastBuiltIn          = RDI_TypeKind_Variadic,
 RDI_TypeKind_FirstConstructed     = RDI_TypeKind_Modifier,
@@ -345,6 +344,7 @@ RDI_TypeKind_FirstIncomplete      = RDI_TypeKind_IncompleteStruct,
 RDI_TypeKind_LastIncomplete       = RDI_TypeKind_IncompleteEnum,
 RDI_TypeKind_FirstRecord          = RDI_TypeKind_Struct,
 RDI_TypeKind_LastUserDefined      = RDI_TypeKind_IncompleteEnum,
+RDI_TypeKind_COUNT,
 } RDI_TypeKindEnum;
 
 typedef RDI_U16 RDI_TypeModifierFlags;
@@ -471,6 +471,8 @@ RDI_EvalOp_PartialValueBit      = 50,
 RDI_EvalOp_Swap                 = 51,
 RDI_EvalOp_PushCfa              = 52,
 RDI_EvalOp_COUNT                = 53,
+RDI_EvalOp_FirstLogical = RDI_EvalOp_LogAnd,
+RDI_EvalOp_LastLogical = RDI_EvalOp_Grtr,
 } RDI_EvalOpEnum;
 
 typedef RDI_U8 RDI_EvalTypeGroup;
@@ -771,7 +773,6 @@ X(Masm)\
 X(COUNT)\
 
 #define RDI_TypeKind_XList \
-X(NULL)\
 X(Void)\
 X(Handle)\
 X(HResult)\
@@ -831,7 +832,6 @@ X(IncompleteUnion)\
 X(IncompleteClass)\
 X(IncompleteEnum)\
 X(Bitfield)\
-X(COUNT)\
 
 #define RDI_TypeModifierFlags_XList \
 X(Const)\

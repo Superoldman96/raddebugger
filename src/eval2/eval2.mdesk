@@ -128,3 +128,14 @@ E2_TypeKindTable:
   `FirstMeta       = E2_TypeKind_MetaExpr`,
   `LastMeta        = E2_TypeKind_MetaDescription`,
 }
+
+@data(U8) e2_type_kind_basic_byte_size_table:
+{
+  @expand(E2_TypeKindTable a) `$(a.basic_byte_size)`
+}
+
+@data(String8) e2_type_kind_basic_string_table:
+{
+  @expand(E2_TypeKindTable a) `str8_lit_comp("$(a.basic_string)")`
+}
+
