@@ -64,13 +64,17 @@
 #include "thread_pool/thread_pool.h"
 #include "codeview_ext/codeview.h"
 #include "pdb_ext/msf_builder.h"
-#include "pdb_ext/pdb.h"
-#include "pdb_ext/pdb_helpers.h"
-#include "pdb_ext/pdb_builder.h"
 
 #include "base_ext/base_inc.c"
 #include "thread_pool/thread_pool.c"
 #include "codeview_ext/codeview.c"
+
+// --- PDB Extensions- ---------------------------------------------------------
+
+#include "pdb_ext/pdb.h"
+#include "pdb_ext/pdb_helpers.h"
+#include "pdb_ext/pdb_builder.h"
+
 #include "pdb_ext/msf_builder.c"
 #include "pdb_ext/pdb.c"
 #include "pdb_ext/pdb_helpers.c"
@@ -82,6 +86,7 @@
 #include "rdi/rdi_local.h"
 #include "rdi_make/rdi_make_local.h"
 #include "rdi_from_coff/rdi_from_coff.h"
+#include "rdi_from_codeview/rdi_from_codeview.h"
 #include "rdi_from_pdb/rdi_from_pdb.h"
 #include "arch/arch_inc.h"
 
@@ -89,6 +94,7 @@
 #include "rdi/rdi_local.c"
 #include "rdi_make/rdi_make_local.c"
 #include "rdi_from_coff/rdi_from_coff.c"
+#include "rdi_from_codeview/rdi_from_codeview.c"
 #include "rdi_from_pdb/rdi_from_pdb.c"
 #include "arch/arch_inc.c"
 
@@ -5317,7 +5323,7 @@ THREAD_POOL_TASK_FUNC(lnk_p2r_worker)
   lane_ctx(lctx);
 
   Arena *bake_arena = arena_alloc();
-  RDIM_BakeParams bake_params = p2r_convert(bake_arena, &p2r_params);
+  RDIM_BakeParams bake_params = p2r_convert2(bake_arena, &p2r_params);
   barrier_wait(tp->barrier);
 
   RDIM_BakeResults bake_results = rdim_bake(arena, &bake_params);
