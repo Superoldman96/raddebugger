@@ -3080,11 +3080,11 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
               U64 voff_opl = 0;
               if(dw_attrib_class_from_form_kind(unit_parse_ctx->version, unit_parse_ctx->exts, hipc_attrib->val.kind) & (1<<DW_AttribClass_Address))
               {
-                voff_opl = voff_base + hipc_attrib->val.u128.u64[0];
+                voff_opl = hipc_attrib->val.addr;
               }
               else
               {
-                voff_opl = hipc_attrib->val.addr;
+                voff_opl = voff_base + hipc_attrib->val.u128.u64[0];
               }
               rdim_rng1u64_list_push(arena, &ranges, (RDIM_Rng1U64){voff_base, voff_opl});
             }
