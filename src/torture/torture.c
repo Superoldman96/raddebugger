@@ -40,7 +40,7 @@ t_name_from_test_info(Arena *arena, TestInfo *test_info)
 }
 
 internal String8List
-t_test_group_from_name(Arena *arena, String8 pattern)
+t_test_layer_from_name(Arena *arena, String8 pattern)
 {
   Temp scratch = scratch_begin(&arena, 1);
   String8List matches = {0};
@@ -120,6 +120,7 @@ t_delete_dir(String8 path)
     
     if (info.props.flags & FilePropertyFlag_IsFolder) {
       t_delete_dir(str8f(scratch.arena, "%S/%S", path, info.name));
+
       continue;
     }
     
@@ -1030,7 +1031,7 @@ t_help(void)
   fprintf(stderr, " Usage: torture [Options] <Input>\n\n");
   fprintf(stderr, " Options:\n");
   fprintf(stderr, "   -list                 Print available test targets\n");
-  fprintf(stderr, "   --gui                 Launch debugger with window\n");
+  fprintf(stderr, "   -gui                  Launch debugger with window\n");
   fprintf(stderr, "   -cl:<path>            Override default cl path\n");
   fprintf(stderr, "   -clang:<path>         Override default clang path\n");
   fprintf(stderr, "   -gcc:<path>           Override default gcc path\n");
@@ -1155,17 +1156,12 @@ t_entry_point(CmdLine *cmdline)
         String8 test_name = t_name_from_test_info(scratch.arena, test_info);
         
         if (str8_match_wildcard(test_name, t, StringMatchFlag_CaseInsensitive)) {
-          // TODO(rjf): do we really need to mutate the test infos here? this test won't
-          // even run, so I am not sure what setting the bit does - we already collect
-          // the tests that we *will* run
-#if 0
           // set skip flag
           switch (mode) {
             case Mode_Default: break;
-            case Mode_Skip:  g_torture_tests[test_idx]->skip = 1; break;
-            case Mode_Force: g_torture_tests[test_idx]->skip = 0; break;
+            case Mode_Skip:  test_info->skip = 1; break;
+            case Mode_Force: test_info->skip = 0; break;
           }
-#endif
           
           // append test when not in skipping mode
           if ( ! hash_map_search_string_u64(&hm, test_name)) {
@@ -1238,12 +1234,12 @@ t_entry_point(CmdLine *cmdline)
     U64Array target_indices = u64_array_from_list(scratch.arena, &targets);
     
     U64 max_label_size = 0;
-    U64 max_group_size = 0;
+    U64 max_layer_size = 0;
     for EachIndex(i, target_indices.count) {
       U64 test_idx = target_indices.v[i];
       TestInfo *test_info = g_sorted_test_infos[test_idx];
       max_label_size = Max(max_label_size, test_info->label.size);
-      max_group_size = Max(max_group_size, test_info->layer.size);
+      max_layer_size = Max(max_layer_size, test_info->layer.size);
     }
     
     U64 run_counters[TestStatus_COUNT] = {0};
@@ -1258,7 +1254,7 @@ t_entry_point(CmdLine *cmdline)
     
     for EachIndex(i, target_indices.count) {
       if (i == 0) { PrintHeader("Tests"); }
-      
+
       U64 target_idx = target_indices.v[i];
       TestInfo *test = g_sorted_test_infos[target_idx];
       
@@ -1268,7 +1264,7 @@ t_entry_point(CmdLine *cmdline)
       U64 curr_digit_count = count_digits_u64(i+1, 10);
       int idx_align_space_count = (int)(max_digit_count - curr_digit_count);
       fprintf(stdout, "[%.*s%llu/%llu] ", idx_align_space_count, spaces, (unsigned long long)i+1, (unsigned long long)target_indices.count);
-      fprintf(stdout, "%.*s %.*s/ %.*s", str8_varg(test->layer), (int)(max_group_size - test->layer.size), spaces, str8_varg(test->label));
+      fprintf(stdout, "%.*s %.*s/ %.*s", str8_varg(test->layer), (int)(max_layer_size - test->layer.size), spaces, str8_varg(test->label));
       fprintf(stdout, " %.*s ", (int)dots_count, dots);
       fflush(stdout);
       
@@ -1375,6 +1371,7 @@ t_entry_point(CmdLine *cmdline)
       fprintf(stderr, "  Skipped  %llu\n", (unsigned long long)run_counters[TestStatus_Skip]);
       fprintf(stderr, "  Time     %.*s\n", str8_varg(total_time_str));
       
+      // count slow tests
       U64 slow_count = 0;
       for EachElement(i, slowest) {
         Slowest s = slowest[i];
@@ -1382,26 +1379,28 @@ t_entry_point(CmdLine *cmdline)
         slow_count += 1;
       }
       
-      if (slow_count > 3) {
+      if (slow_count > 1) {
         U64 label_max = 0;
-        U64 group_max = 0;
+        U64 layer_max = 0;
         for EachElement(i, slowest) {
           Slowest s = slowest[i];
           label_max = Max(g_sorted_test_infos[s.target_idx]->label.size, label_max);
-          group_max = Max(g_sorted_test_infos[s.target_idx]->layer.size, group_max);
+          layer_max = Max(g_sorted_test_infos[s.target_idx]->layer.size, layer_max);
         }
         
         fprintf(stderr, "  \nSlow Tests\n");
         for EachElement(i, slowest) {
           Slowest s = slowest[i];
           if (s.target_idx >= test_infos_count) { break; }
-          TestInfo *test_info = g_sorted_test_infos[i];
-          String8 elapsed_time = string_from_elapsed_time(scratch.arena, date_time_from_micro_seconds(s.d));
+
+          TestInfo *test_info    = g_sorted_test_infos[s.target_idx];
+          String8   elapsed_time = string_from_elapsed_time(scratch.arena, date_time_from_micro_seconds(s.d));
+
           fprintf(stderr, "    %.*s %.*s/ %.*s %.*s %.*s\n",
                   str8_varg(test_info->layer),
-                  (int)(group_max - test_info->layer.size), spaces,
+                  (int)(layer_max - test_info->layer.size), spaces,
                   str8_varg(test_info->label),
-                  (int)(label_max - test_info->layer.size) + 4, dots,
+                  (int)(label_max - test_info->label.size) + 4, dots,
                   str8_varg(elapsed_time));
         }
       }
