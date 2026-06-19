@@ -96,7 +96,6 @@ typedef enum
   LNK_CmdSwitch_WholeArchive,
 
   LNK_CmdSwitch_Rad_Age,
-  LNK_CmdSwitch_Rad_AltPchDir,
   LNK_CmdSwitch_Rad_BuildExp,
   LNK_CmdSwitch_Rad_BuildInfo,
   LNK_CmdSwitch_Rad_BuildImpLib,
@@ -383,7 +382,6 @@ typedef struct LNK_Config
   U64                         unresolved_symbol_limit;
   U64                         unresolved_symbol_ref_limit;
   LNK_SwitchState             map_lines_for_unresolved_symbols;
-  String8List                 alt_pch_dirs;
   LLVM_GHashAlg               type_hash_alg;
   String8                     type_server_name;
   LNK_SwitchState             type_server;

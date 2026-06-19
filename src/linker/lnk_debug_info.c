@@ -954,38 +954,29 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
  
   ProfBegin("Set up PCH");
   {
-    // pre-build PCH obj hash map (obj_path, obj_idx)
+    // register PCH file paths
     HashMap debug_p_hm_path = {0};
-    HashMap debug_p_hm_sig  = {0};
+    HashMap debug_p_hm_name = {0}; // (obj name, U64List of PCH obj indices)
     for EachIndex(i, input.debug_p_indices.count) {
       U64      obj_idx = input.debug_p_indices.v[i];
       LNK_Obj *obj     = obj_arr[obj_idx];
 
-      // register PCH signature
-      CV_DebugT debug_p = input.debug_t_arr[obj_idx];
-      if (debug_p.count > 0) {
-        CV_Leaf lf = cv_debug_t_get_leaf(&debug_p, debug_p.count - 1);
-        if (lf.kind == CV_LeafKind_ENDPRECOMP && lf.data.size <= sizeof(CV_LeafEndPreComp)) {
-          CV_LeafEndPreComp *ender = str8_deserial_get_raw_ptr(lf.data, 0, sizeof(*ender));
-          if (ender->sig) {
-            U64 *extant_obj_idx = hash_map_search_u64_u64(&debug_p_hm_sig, ender->sig);
-            if (extant_obj_idx == 0) {
-              hash_map_push_u64_u64(scratch.arena, &debug_p_hm_sig, ender->sig, obj_idx);
-            } else {
-              LNK_Obj *extant_obj = obj_arr[*extant_obj_idx];
-              lnk_log(LNK_Log_Debug, "%S: PCH signature is already defined in %S", lnk_loc_from_obj(scratch.arena, obj), lnk_loc_from_obj(scratch.arena, extant_obj));
-            }
-          }
-        }
-      }
-
-      // register PCH path
+      // register file path -> obj idx map
       String8 obj_path = path_absolute_dst_from_relative_dst_src(scratch.arena, obj_arr[obj_idx]->path, config->work_dir);
       if (hash_map_search_path_u64(&debug_p_hm_path, obj_path)) {
         lnk_error_obj(LNK_Warning_DuplicateObjPath, obj, "duplicate obj path %S", obj_path);
       } else {
         hash_map_push_path_u64(scratch.arena, &debug_p_hm_path, obj_path, obj_idx);
       }
+
+      // register file name -> obj idx map
+      String8  obj_name      = str8_skip_last_slash(obj_path);
+      U64List *match_indices = hash_map_search_path_raw(&debug_p_hm_name, obj_name);
+      if (match_indices == 0) {
+        match_indices = push_array(scratch.arena, U64List, 1);
+        hash_map_push_path_raw(scratch.arena, &debug_p_hm_name, obj_name, match_indices);
+      }
+      u64_list_push(scratch.arena, match_indices, obj_idx);
     }
 
     for EachIndex(i, input.int_obj_indices.count) {
@@ -995,31 +986,36 @@ lnk_make_code_view_input(TP_Context *tp, TP_Arena *tp_arena, LNK_Config *config,
       // skip objs that do not depend on PCH
       if ( ! cv_debug_t_is_pch(debug_t)) { continue; }
 
-      // find PCH obj
+      // find PCH obj by file path
       CV_PrecompInfo  precomp             = cv_precomp_info_from_leaf(cv_debug_t_get_leaf(debug_t, 0));
       String8         obj_path            = path_absolute_dst_from_relative_dst_src(scratch.arena, precomp.obj_name, config->work_dir);
       U64            *debug_p_obj_idx_ptr = hash_map_search_path_u64(&debug_p_hm_path, obj_path);
-      if (debug_p_obj_idx_ptr == 0) {
-        debug_p_obj_idx_ptr = hash_map_search_u64_u64(&debug_p_hm_sig, precomp.sig);
-      }
+      U64             debug_p_obj_idx     = debug_p_obj_idx_ptr ? *debug_p_obj_idx_ptr : max_U64;
 
-      // try alternative directory for the PCH
+      // find PCH obj by signature
       if (debug_p_obj_idx_ptr == 0) {
-        String8 obj_name = str8_skip_last_slash(obj_path);
-        for EachNode(alt_dir_n, String8Node, config->alt_pch_dirs.first) {
-          String8 alt_obj_path = str8f(scratch.arena, "%S/%S", alt_dir_n->string, obj_name);
-          debug_p_obj_idx_ptr = hash_map_search_path_u64(&debug_p_hm_path, alt_obj_path);
-          if (debug_p_obj_idx_ptr) { break; }
+        for EachIndex(pch_i, input.debug_p_indices.count) {
+          U64        pch_obj_idx = input.debug_p_indices.v[pch_i];
+          CV_DebugT *pch_debug_t = &input.debug_t_arr[pch_obj_idx];
+          if (precomp.leaf_count >= pch_debug_t->count) { continue; }
+
+          CV_Leaf end_leaf = cv_debug_t_get_leaf(pch_debug_t, precomp.leaf_count);
+          if (end_leaf.kind != CV_LeafKind_ENDPRECOMP)        { continue; }
+          if (end_leaf.data.size < sizeof(CV_LeafEndPreComp)) { continue; }
+
+          CV_LeafEndPreComp *end_precomp = str8_deserial_get_raw_ptr(end_leaf.data, 0, sizeof(*end_precomp));
+          if (end_precomp->sig != precomp.sig) { continue; }
+
+          debug_p_obj_idx = pch_obj_idx;
+          break;
         }
       }
 
-      if (debug_p_obj_idx_ptr == 0) {
+      if (debug_p_obj_idx > input.obj_count) {
         lnk_error_obj(LNK_Error_PrecompObjNotFound, obj_arr[obj_idx], "LF_PRECOMP references non-existent obj %S; discarding debug info", obj_path);
         lnk_discard_cv_debug_info(&input, obj_idx);
         continue;
       }
-
-      U64 debug_p_obj_idx = *debug_p_obj_idx_ptr;
 
       // get PCH leaf data
       CV_DebugT *debug_p = &input.debug_t_arr[debug_p_obj_idx];

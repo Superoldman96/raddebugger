@@ -62,7 +62,6 @@ global read_only LNK_CmdSwitch g_cmd_switch_map[] =
   { LNK_CmdSwitch_WholeArchive,       0, "WHOLEARCHIVE",         "[:LIBNAME]",                     "Force linker to pull in all objs from the specified lib."     },
 
   { LNK_CmdSwitch_Rad_Age,                          0, "RAD_AGE",                              ":#",        "Age embeded in EXE and PDB, used to validate incremental build. Default is 1."    },
-  { LNK_CmdSwitch_Rad_AltPchDir,                    0, "RAD_ALT_PCH_DIR",                      ":PATH",     "Alternative directory to search for PCH object files."                            },
   //{ LNK_CmdSwitch_Rad_BuildExp,                     0, "RAD_BUILD_EXP",                        "[:NO]",     "Build export data."                                                             },
   { LNK_CmdSwitch_Rad_BuildInfo,                    0, "RAD_BUILD_INFO",                       "",          "Print build info and exit."                                                       },
   { LNK_CmdSwitch_Rad_BuildImpLib,                  0, "RAD_BUILD_IMPLIB",                     "[:NO]",     "Build import library."                                                            },
@@ -1803,15 +1802,6 @@ lnk_apply_cmd_option_to_config(LNK_Config *config, String8 cmd_name, String8List
 
   case LNK_CmdSwitch_Rad_Age: {
     lnk_cmd_switch_parse_u32(obj, cmd_switch, value_strings, &config->age, 0);
-  } break;
-
-  case LNK_CmdSwitch_Rad_AltPchDir: {
-    if (value_strings.node_count == 0) {
-      lnk_error_cmd_switch(LNK_Error_Cmdl, obj, cmd_switch, "missing parameters");
-      break;
-    }
-    String8List dirs = str8_list_copy(config->arena, &value_strings);
-    str8_list_concat_in_place(&config->alt_pch_dirs, &dirs);
   } break;
 
   //case LNK_CmdSwitch_Rad_BuildExp: {

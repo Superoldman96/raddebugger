@@ -164,7 +164,7 @@ if "%didbuild%"=="" (
 if "%pgo_run%"=="1" (
   if "%radlink%"=="1" (
     pushd local\lyra_pgo
-    call %~dp0build\radlink @lyra.rsp /rad_alt_pch_dir:%~dp0local\lyra_pgo || exit /b 1
+    call %~dp0build\radlink @lyra.rsp || exit /b 1
     popd
   )
   goto restart

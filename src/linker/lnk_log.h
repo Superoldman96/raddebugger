@@ -43,7 +43,6 @@ typedef enum
   LNK_Error_NoAccess,
   LNK_Error_NoSubsystem,
   LNK_Error_OutOfExportOrdinals,
-  LNK_Error_PrecompObjNotFound,
   LNK_Error_Telemetry,
   LNK_Error_UnsupportedMachine,
   LNK_Error_Mt,
@@ -78,6 +77,7 @@ typedef enum
   LNK_Error_InvalidLib,
   LNK_Error_UnresolvedSymbol,
   LNK_Error_PrecompSigMismatch,
+  LNK_Error_PrecompObjNotFound,
   LNK_Error_ContinueLast,
   
   LNK_Warning_First,
