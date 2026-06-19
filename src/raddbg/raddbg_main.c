@@ -586,6 +586,16 @@ entry_point(CmdLine *cmd_line)
 {
   Temp scratch = scratch_begin(0, 0);
   
+  //- rjf: re-open stdout handles if cli
+#if OS_WINDOWS
+  if(cmd_line_has_flag(cmd_line, s("bin")))
+  {
+    AttachConsole(ATTACH_PARENT_PROCESS);
+    freopen("CONOUT$", "wt", stdout);
+    freopen("CONOUT$", "wt", stderr);
+  }
+#endif
+  
   //- rjf: unpack command line arguments
   ExecMode exec_mode = ExecMode_Normal;
   B32 auto_run = 0;

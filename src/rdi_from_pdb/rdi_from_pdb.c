@@ -422,7 +422,7 @@ p2r_convert2(Arena *arena, P2R_ConvertParams *params)
       }
       else
       {
-        cv2r_comp_units[idx].obj_name = s("*global");
+        cv2r_comp_units[idx].obj_name = s("*global*");
       }
       cv2r_comp_units[idx].ranges = unit_ranges[idx];
       cv2r_comp_units[idx].sym = all_syms[idx];

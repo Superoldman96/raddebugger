@@ -12,7 +12,8 @@ typedef enum E2_OpParseKind
   E2_OpParseKind_Null,
   E2_OpParseKind_UnaryPrefix,
   E2_OpParseKind_Binary,
-  E2_OpParseKind_UnaryPostfix,
+  E2_OpParseKind_Ternary,
+  E2_OpParseKind_Call,
 }
 E2_OpParseKind;
 
@@ -41,31 +42,57 @@ enum
 };
 
 ////////////////////////////////
-//~ rjf: Compilation Statuses
+//~ rjf: Parse Statuses
 
-typedef enum E2_Status
+typedef enum E2_ParseStatus
 {
-  E2_Status_Good,
+  //- rjf: terminals
+  E2_ParseStatus_Good,
+  E2_ParseStatus_Error,
+  E2_ParseStatus_FirstTerminal = E2_ParseStatus_Good,
+  E2_ParseStatus_LastTerminal = E2_ParseStatus_Error,
   
-  //- rjf: need caller-provided info
-  E2_Status_MissedSpaceRead,
-  E2_Status_MissedIdentifierResolution,
-  E2_Status_Access,
-  E2_Status_NewCtxID,
-  
-  //- rjf: unrecoverable errors
-  E2_Status_BadRegCode,
-  E2_Status_MissingCtxFlag,
-  E2_Status_DivideByZero,
-  E2_Status_InsufficientStackSpace,
-  E2_Status_BadOpTypes,
-  E2_Status_UnsupportedOp,
-  E2_Status_BadOffset,
-  E2_Status_Error,
-  E2_Status_FirstError = E2_Status_BadRegCode,
-  E2_Status_LastError = E2_Status_Error,
+  //- rjf: caller-provided info
+  E2_ParseStatus_MissedIdentifierResolution,
+  E2_ParseStatus_MemberAccess,
+  E2_ParseStatus_IndexAccess,
+  E2_ParseStatus_Call,
+  E2_ParseStatus_FirstCallerRequest = E2_ParseStatus_MissedIdentifierResolution,
+  E2_ParseStatus_LastCallerRequest = E2_ParseStatus_Call,
 }
-E2_Status;
+E2_ParseStatus;
+
+#define e2_parse_status_is_terminal(s) (E2_ParseStatus_FirstTerminal <= (s) && (s) <= E2_ParseStatus_LastTerminal)
+#define e2_parse_status_is_caller_request(s) (E2_ParseStatus_FirstCallerRequest <= (s) && (s) <= E2_ParseStatus_LastCallerRequest)
+
+////////////////////////////////
+//~ rjf: Interpretation Statuses
+
+typedef enum E2_InterpStatus
+{
+  //- rjf: terminals
+  E2_InterpStatus_Good,
+  E2_InterpStatus_BadRegCode,
+  E2_InterpStatus_MissingCtxFlag,
+  E2_InterpStatus_DivideByZero,
+  E2_InterpStatus_InsufficientStackSpace,
+  E2_InterpStatus_BadOpTypes,
+  E2_InterpStatus_UnsupportedOp,
+  E2_InterpStatus_BadOffset,
+  E2_InterpStatus_Error,
+  E2_InterpStatus_FirstTerminal = E2_InterpStatus_Good,
+  E2_InterpStatus_LastTerminal = E2_InterpStatus_Error,
+  
+  //- rjf: caller-provided info
+  E2_InterpStatus_MissedSpaceRead,
+  E2_InterpStatus_NewCtxID,
+  E2_InterpStatus_FirstCallerRequest = E2_InterpStatus_MissedSpaceRead,
+  E2_InterpStatus_LastCallerRequest = E2_InterpStatus_NewCtxID,
+}
+E2_InterpStatus;
+
+#define e2_interp_status_is_terminal(s) (E2_InterpStatus_FirstTerminal <= (s) && (s) <= E2_InterpStatus_LastTerminal)
+#define e2_interp_status_is_caller_request(s) (E2_InterpStatus_FirstCallerRequest <= (s) && (s) <= E2_InterpStatus_LastCallerRequest)
 
 ////////////////////////////////
 //~ rjf: Type Keys
@@ -330,6 +357,8 @@ struct E2_ParseTask
   S64 max_precedence;
   E2_OpKind op_kind;
   String8 expected_closer;
+  String8 expected_splitter;
+  B32 splitter_is_required;
 };
 
 typedef struct E2_ParseState E2_ParseState;
@@ -338,6 +367,10 @@ struct E2_ParseState
   U64 string_off;
   E2_ParseTask *top_task;
   E2_ParseTask *free_task;
+  U64 last_caller_request_string_off;
+  U64 caller_request_count;
+  String8 last_requested_member_name;
+  B32 caller_info_completes_task;
 };
 
 typedef struct E2_Msg E2_Msg;
@@ -359,10 +392,11 @@ struct E2_MsgList
 typedef struct E2_Parse E2_Parse;
 struct E2_Parse
 {
-  E2_Status status;
+  E2_ParseStatus status;
   String8 missed_identifier;
   E2_Expr *expr;
-  E2_Expr *access_expr;
+  String8 member_name;
+  E2_Expr *params_expr;
   E2_MsgList msgs;
 };
 
@@ -398,17 +432,20 @@ struct E2_InterpState
   E2_Ctx selected_ctx;
   E2_InterpStackValNode *top_val;
   E2_InterpStackValNode *free_val;
+  U64 last_caller_request_bytecode_off;
+  U64 caller_request_count;
 };
 
 typedef struct E2_Interp E2_Interp;
 struct E2_Interp
 {
-  E2_Status status;
+  E2_InterpStatus status;
   E2_SpaceID space_id;
   Rng1U64 missed_read_space_addr_range;
   E2_CtxID ctx_id;
   E2_CtxFlags missing_ctx_flags;
   E2_Val val;
+  E2_MsgList msgs;
 };
 
 ////////////////////////////////
@@ -537,7 +574,7 @@ internal void e2_expr_push_child(E2_Expr *parent, E2_Expr *expr);
 internal E2_Token e2_token_from_string_off(String8 string, U64 start_off);
 internal U64 e2_read_token(String8 string, U64 off, E2_Token *token_out);
 internal B32 e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *off_out, E2_Token *token_out);
-internal E2_Parse e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, String8 string);
+internal E2_Parse e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E2_Expr *access_result, String8 string);
 
 ////////////////////////////////
 //~ rjf: Expression -> Bytecode

@@ -70,7 +70,7 @@ internal Process launch_cmd_linef(char *fmt, ...);
 ////////////////////////////////
 //~ rjf: @per_os_impl Aborting
 
-internal void abort_self(S32 exit_code);
+internal void abort_self(U64 exit_code);
 
 ////////////////////////////////
 //~ rjf: @per_os_impl Process Info

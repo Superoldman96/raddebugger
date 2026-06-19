@@ -693,6 +693,7 @@ di_async_tick(void)
         B32 og_is_downloading = 0;
         if(og_path.size != 0)
         {
+#if defined(SYMBOL_SERVER_H)
           B32 file_is_present = (properties_from_file_path(og_path).modified != 0);
           if(!file_is_present)
           {
@@ -715,6 +716,7 @@ di_async_tick(void)
               }
             }
           }
+#endif
         }
         
         //- rjf: analyze O.G. debug info

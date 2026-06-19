@@ -1187,9 +1187,9 @@ make_directory(String8 path)
 //~ rjf: @per_os_impl Aborting
 
 internal void
-abort_self(S32 exit_code)
+abort_self(U64 exit_code)
 {
-  exit(exit_code);
+  exit((int)exit_code);
 }
 
 ////////////////////////////////
