@@ -588,7 +588,7 @@ entry_point(CmdLine *cmd_line)
   
   //- rjf: re-open stdout handles if cli
 #if OS_WINDOWS
-  if(cmd_line_has_flag(cmd_line, s("bin")))
+  if(cmd_line_has_flag(cmd_line, s("cli")))
   {
     AttachConsole(ATTACH_PARENT_PROCESS);
     freopen("CONOUT$", "wt", stdout);

@@ -41,6 +41,7 @@ entry_point(CmdLine *cmd_line)
 #endif
     }
     str8_list_push(scratch.arena, &command_parts, exe_name);
+    str8_list_push(scratch.arena, &command_parts, s("--cli"));
     for EachIndex(idx, cmd_line->argc)
     {
       String8 arg = str8_cstring(cmd_line->argv[idx]);
