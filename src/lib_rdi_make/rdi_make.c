@@ -1623,7 +1623,7 @@ RDI_PROC RDI_U32
 rdim_bake_idx_from_idx_run(RDIM_BakeIdxRunMap *map, RDI_U32 *idxes, RDI_U32 count)
 {
   RDI_U32 idx = 0;
-  if(count != 0)
+  if(count != 0 && map->slots_count != 0)
   {
     RDI_U64 hash = rdim_hash_from_idx_run(idxes, count);
     RDI_U64 slot_idx = hash%map->slots_count;

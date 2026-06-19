@@ -1948,7 +1948,12 @@ rdim_bake(Arena *arena, RDIM_BakeParams *params)
     RDI_U64 nodes_count;
   };
   BakedNameMaps *baked_name_maps = 0;
-  ProfScope("bake name maps")
+  if(lane_idx() == 0)
+  {
+    baked_name_maps = push_array(scratch.arena, BakedNameMaps, 1);
+  }
+  lane_sync_u64(&baked_name_maps, 0);
+  if(params->subset_flags & RDIM_SubsetFlag_NameMaps) ProfScope("bake name maps")
   {
     Temp scratch2 = scratch_begin(&scratch.arena, 1);
     
@@ -2022,7 +2027,6 @@ rdim_bake(Arena *arena, RDIM_BakeParams *params)
     // rjf: setup
     ProfScope("setup") if(lane_idx() == 0)
     {
-      baked_name_maps = push_array(scratch.arena, BakedNameMaps, 1);
       baked_name_maps->name_maps_count = RDI_NameMapKind_COUNT;
       baked_name_maps->name_maps = push_array(arena, RDI_NameMap, baked_name_maps->name_maps_count);
       RDI_U32 bucket_off = 0;
