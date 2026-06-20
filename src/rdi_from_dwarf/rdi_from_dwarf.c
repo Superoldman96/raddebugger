@@ -1002,14 +1002,36 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
         DW2_Tag tag = {0};
         off += dw2_read_tag(scratch3.arena, raw, unit_parse_ctx, raw->sec[DW_SectionKind_Info].data, off, &tag);
         
-        //- rjf: do tree navigations
-        if(tag.has_children)
+        //- rjf: look for sibling attribute fast path
+        B32 sibling_encoded = 0;
+        U64 sibling_off = 0;
+        for EachNode(n, DW2_AttribNode, tag.attribs.first)
         {
-          depth += 1;
+          if(n->v.attrib_kind == DW_AttribKind_Sibling)
+          {
+            sibling_off = dw2_reference_info_off_from_form_val(unit_parse_ctx, &n->v.val);
+            sibling_encoded = 1;
+            break;
+          }
         }
-        if(tag.kind == DW_TagKind_Null)
+        
+        //- rjf: if we have a sibling link, follow it -> depth stays the same
+        if(sibling_encoded && sibling_off >= off)
         {
-          depth -= 1;
+          off = sibling_off;
+        }
+        
+        //- rjf: otherwise, do tree navigations...
+        else
+        {
+          if(tag.has_children)
+          {
+            depth += 1;
+          }
+          if(tag.kind == DW_TagKind_Null)
+          {
+            depth -= 1;
+          }
         }
         
         scratch_end(scratch3);
@@ -1149,7 +1171,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
       for EachInRange(unit_idx, range)
       {
         Rng1U64 unit_info_tag_range = unit_info_tag_ranges[unit_idx];
-        unit_deduped_tag_maps[unit_idx].slots_count = dim_1u64(unit_info_tag_range) / 256 + 1;
+        unit_deduped_tag_maps[unit_idx].slots_count = dim_1u64(unit_info_tag_range) / 32 + 1;
         unit_deduped_tag_maps[unit_idx].slots = push_array(scratch.arena, D2R_UnitDedupedTagNode *, unit_deduped_tag_maps[unit_idx].slots_count);
       }
       lane_sync();
@@ -1168,6 +1190,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
         {
           break;
         }
+        ProfBegin("gather unique tags work");
         Temp work_scratch = scratch_begin(&scratch.arena, 1);
         
         //- rjf: unpack work
@@ -1188,6 +1211,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
           U64 container_ancestor_info_off;
           U64 hash_seed;
         };
+        U64 tags_to_dedup_count = 0;
         D2R_TagNode *first_tag_to_dedup = 0;
         D2R_TagNode *last_tag_to_dedup = 0;
         for(U64 root_tag_idx = origin_unit_root_tag_idx_range.min;
@@ -1265,6 +1289,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
               n->container_ancestor_info_off = container_ancestor_info_off;
               n->hash_seed = top_parent ? top_parent->hash_seed : 0;
               SLLQueuePush(first_tag_to_dedup, last_tag_to_dedup, n);
+              tags_to_dedup_count += 1;
             }
             
             // rjf: compute hash seed for this tag
@@ -1321,6 +1346,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
         }
         
         //- rjf: hash all tags we need to deduplicate & gather
+        U64 total_tag_count_this_work = 0;
         for(D2R_TagNode *tag_n = first_tag_to_dedup; tag_n != 0; tag_n = tag_n->next)
         {
           Temp dedup_root_scratch = scratch_begin(&scratch.arena, 1);
@@ -1331,6 +1357,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
           
           //- rjf: hash all tags & dependency tag trees
           U64 hash = hash_seed;
+          ProfScope("hash tag trees & dependencies")
           {
             typedef struct TagTask TagTask;
             struct TagTask
@@ -1373,6 +1400,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
                 // rjf: read tag
                 DW2_Tag tag = {0};
                 t_off += dw2_read_tag(tag_scratch.arena, raw, unit_parse_ctx, raw->sec[DW_SectionKind_Info].data, t_off, &tag);
+                total_tag_count_this_work += 1;
                 
                 // rjf: determine if tag should be skipped from hashing
                 B32 should_skip_tag = (tag.kind == DW_TagKind_LexicalBlock ||
@@ -1624,7 +1652,8 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
           }
           scratch_end(dedup_root_scratch);
         }
-        
+        // ProfMsg("work_idx %I64u: %I64u tags encountered", work_idx, total_tag_count_this_work);
+        ProfEnd();
         scratch_end(work_scratch);
       }
       lane_sync();
@@ -2896,7 +2925,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
         {
           U64 voff_base = lopc_attrib->val.addr - base_vaddr;
           U64 voff_opl = 0;
-          if(dw_attrib_class_from_form_kind(unit_parse_ctx->version, unit_parse_ctx->exts, hipc_attrib->val.kind) & (1<<DW_AttribClass_Address))
+          if(dw_attrib_class_from_form_kind(unit_parse_ctx->version, unit_parse_ctx->exts, hipc_attrib->val.kind) & DW_AttribClass_Address)
           {
             voff_opl = voff_base + hipc_attrib->val.u128.u64[0];
           }
@@ -3078,7 +3107,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
             {
               U64 voff_base = lopc_attrib->val.addr - base_vaddr;
               U64 voff_opl = 0;
-              if(dw_attrib_class_from_form_kind(unit_parse_ctx->version, unit_parse_ctx->exts, hipc_attrib->val.kind) & (1<<DW_AttribClass_Address))
+              if(dw_attrib_class_from_form_kind(unit_parse_ctx->version, unit_parse_ctx->exts, hipc_attrib->val.kind) & DW_AttribClass_Address)
               {
                 voff_opl = hipc_attrib->val.addr;
               }
