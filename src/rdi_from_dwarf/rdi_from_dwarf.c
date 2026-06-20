@@ -1003,17 +1003,9 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
         off += dw2_read_tag(scratch3.arena, raw, unit_parse_ctx, raw->sec[DW_SectionKind_Info].data, off, &tag);
         
         //- rjf: look for sibling attribute fast path
-        B32 sibling_encoded = 0;
-        U64 sibling_off = 0;
-        for EachNode(n, DW2_AttribNode, tag.attribs.first)
-        {
-          if(n->v.attrib_kind == DW_AttribKind_Sibling)
-          {
-            sibling_off = dw2_reference_info_off_from_form_val(unit_parse_ctx, &n->v.val);
-            sibling_encoded = 1;
-            break;
-          }
-        }
+        DW2_Attrib *sibling_attrib = dw2_attrib_from_kind(&tag, DW_AttribKind_Sibling);
+        B32 sibling_encoded = (sibling_attrib != &dw2_attrib_nil);
+        U64 sibling_off = dw2_reference_info_off_from_form_val(unit_parse_ctx, &sibling_attrib->val);
         
         //- rjf: if we have a sibling link, follow it -> depth stays the same
         if(sibling_encoded && sibling_off >= off)
@@ -1226,6 +1218,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
             DW_TagKind tag_kind;
             U64 info_off;
             U64 hash_seed;
+            B32 disable_dedup;
           };
           D2R_ParentTagNode *top_parent = 0;
           D2R_ParentTagNode *free_parent = 0;
@@ -1239,35 +1232,67 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
             DW2_Tag tag = {0};
             off += dw2_read_tag(tag_scratch.arena, raw, origin_unit_parse_ctx, raw->sec[DW_SectionKind_Info].data, off, &tag);
             
+            // rjf: look for sibling attribute fast path
+            DW2_Attrib *sibling_attrib = dw2_attrib_from_kind(&tag, DW_AttribKind_Sibling);
+            B32 sibling_encoded = (sibling_attrib != &dw2_attrib_nil);
+            U64 sibling_off = dw2_reference_info_off_from_form_val(origin_unit_parse_ctx, &sibling_attrib->val);
+            
+            // rjf: determine if we'll deduplicate children of this tag
+            //
+            // three possible cases:
+            //
+            //  (1) namespaced by a function - we do *not* want to deduplicate.
+            //      functions are not deduplicated, and even if types defined
+            //      within many functions match structurally, we consider them
+            //      unique, given that they have different definition sites &
+            //      names (fully qualified) still.
+            //
+            //  (2) namespaced by a type - we do *not* want to deduplicate. the
+            //      root-level type will already be deduplicated, so we'll only
+            //      produce it once, and that'll catch all sub-types etc.
+            //
+            //  (3) namespaced by a namespace - we *do* want to deduplicate. the
+            //      children of a namespace are functionally top-level, and even
+            //      if the same namespace definition is used across units, the
+            //      debug info for each unit will contain fragmentary parts of it,
+            //      since presumably unused pieces of the namespace will be stripped.
+            //      thus, we need to visit namespace children as if they're top-level.
+            B32 children_should_be_deduped = 0;
+            if(tag.kind == DW_TagKind_Namespace)
+            {
+              children_should_be_deduped = 1;
+            }
+            
             // rjf: is this one of the tags we'd like to dedup? -> gather
-            if(tag.kind == DW_TagKind_ArrayType ||
-               tag.kind == DW_TagKind_ClassType ||
-               tag.kind == DW_TagKind_EnumerationType ||
-               tag.kind == DW_TagKind_PointerType ||
-               tag.kind == DW_TagKind_ReferenceType ||
-               tag.kind == DW_TagKind_StringType ||
-               tag.kind == DW_TagKind_StructureType ||
-               tag.kind == DW_TagKind_SubroutineType ||
-               tag.kind == DW_TagKind_SubProgram ||
-               tag.kind == DW_TagKind_Typedef ||
-               tag.kind == DW_TagKind_UnionType ||
-               tag.kind == DW_TagKind_PtrToMemberType ||
-               tag.kind == DW_TagKind_SetType ||
-               tag.kind == DW_TagKind_BaseType ||
-               tag.kind == DW_TagKind_ConstType ||
-               tag.kind == DW_TagKind_FileType ||
-               tag.kind == DW_TagKind_PackedType ||
-               tag.kind == DW_TagKind_VolatileType ||
-               tag.kind == DW_TagKind_RestrictType ||
-               tag.kind == DW_TagKind_InterfaceType ||
-               tag.kind == DW_TagKind_UnspecifiedType ||
-               tag.kind == DW_TagKind_SharedType ||
-               tag.kind == DW_TagKind_RValueReferenceType ||
-               tag.kind == DW_TagKind_CoarrayType ||
-               tag.kind == DW_TagKind_DynamicType ||
-               tag.kind == DW_TagKind_AtomicType ||
-               tag.kind == DW_TagKind_ImmutableType ||
-               tag.kind == DW_TagKind_Namespace)
+            if((top_parent == 0 || !top_parent->disable_dedup) &&
+               (tag.kind == DW_TagKind_ArrayType ||
+                tag.kind == DW_TagKind_ClassType ||
+                tag.kind == DW_TagKind_EnumerationType ||
+                tag.kind == DW_TagKind_PointerType ||
+                tag.kind == DW_TagKind_ReferenceType ||
+                tag.kind == DW_TagKind_StringType ||
+                tag.kind == DW_TagKind_StructureType ||
+                tag.kind == DW_TagKind_SubroutineType ||
+                tag.kind == DW_TagKind_SubProgram ||
+                tag.kind == DW_TagKind_Typedef ||
+                tag.kind == DW_TagKind_UnionType ||
+                tag.kind == DW_TagKind_PtrToMemberType ||
+                tag.kind == DW_TagKind_SetType ||
+                tag.kind == DW_TagKind_BaseType ||
+                tag.kind == DW_TagKind_ConstType ||
+                tag.kind == DW_TagKind_FileType ||
+                tag.kind == DW_TagKind_PackedType ||
+                tag.kind == DW_TagKind_VolatileType ||
+                tag.kind == DW_TagKind_RestrictType ||
+                tag.kind == DW_TagKind_InterfaceType ||
+                tag.kind == DW_TagKind_UnspecifiedType ||
+                tag.kind == DW_TagKind_SharedType ||
+                tag.kind == DW_TagKind_RValueReferenceType ||
+                tag.kind == DW_TagKind_CoarrayType ||
+                tag.kind == DW_TagKind_DynamicType ||
+                tag.kind == DW_TagKind_AtomicType ||
+                tag.kind == DW_TagKind_ImmutableType ||
+                tag.kind == DW_TagKind_Namespace))
             {
               U64 container_ancestor_info_off = 0;
               for EachNode(n, D2R_ParentTagNode, top_parent)
@@ -1307,33 +1332,44 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
               }
             }
             
-            // rjf: update depth / parent stack
-            if(tag.has_children)
+            // rjf: if we have a sibling offset encoded, and if we do not need to dedup children,
+            // then skip
+            if(!children_should_be_deduped && sibling_encoded && sibling_off >= off)
             {
-              depth += 1;
-              D2R_ParentTagNode *n = free_parent;
-              if(n != 0)
-              {
-                SLLStackPop(free_parent);
-              }
-              else
-              {
-                n = push_array(work_scratch.arena, D2R_ParentTagNode, 1);
-              }
-              SLLStackPush(top_parent, n);
-              n->tag_kind = tag.kind;
-              n->info_off = start_off;
-              n->hash_seed = hash_seed;
+              off = sibling_off;
             }
-            if(tag.kind == DW_TagKind_Null)
+            
+            // rjf: otherwise, update depth / parent stack
+            else
             {
-              depth -= 1;
-              depth = Max(0, depth);
-              if(top_parent != 0)
+              if(tag.has_children)
               {
-                D2R_ParentTagNode *popped = top_parent;
-                SLLStackPop(top_parent);
-                SLLStackPush(free_parent, popped);
+                depth += 1;
+                D2R_ParentTagNode *n = free_parent;
+                if(n != 0)
+                {
+                  SLLStackPop(free_parent);
+                }
+                else
+                {
+                  n = push_array(work_scratch.arena, D2R_ParentTagNode, 1);
+                }
+                SLLStackPush(top_parent, n);
+                n->tag_kind = tag.kind;
+                n->info_off = start_off;
+                n->hash_seed = hash_seed;
+                n->disable_dedup = !children_should_be_deduped;
+              }
+              if(tag.kind == DW_TagKind_Null)
+              {
+                depth -= 1;
+                depth = Max(0, depth);
+                if(top_parent != 0)
+                {
+                  D2R_ParentTagNode *popped = top_parent;
+                  SLLStackPop(top_parent);
+                  SLLStackPush(free_parent, popped);
+                }
               }
             }
             
@@ -1379,8 +1415,8 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
               
               // rjf: record this task in our seen task table
               {
-                U64 hash = u64_hash_from_str8(str8_struct(&t->off));
-                U64 slot_idx = hash%seen_task_slots_count;
+                U64 off_hash = u64_hash_from_str8(str8_struct(&t->off));
+                U64 slot_idx = off_hash%seen_task_slots_count;
                 SLLStackPush(seen_task_slots[slot_idx], t);
               }
               
@@ -1388,8 +1424,9 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
               Rng1U64 unit_info_tag_range = unit_info_tag_ranges[t->unit_idx];
               DW2_ParseCtx *unit_parse_ctx = &unit_parse_ctxs[t->unit_idx];
               
-              // rjf: read/hash the full tag tree at `t_off`; kick off additional
-              // tasks for referenced dependency types
+              // rjf: read/hash the full tag tree at `t_off`; kick
+              // off additional tasks for referenced dependency types
+              U64 t_hash = 0;
               S64 depth = 0;
               B32 hash_should_include_children = 1;
               for(;unit_info_tag_range.min <= t_off && t_off < unit_info_tag_range.max && (depth > 0 || t_off == t->off);)
@@ -1416,7 +1453,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
                 if(!should_skip_tag)
                 {
                   // rjf: combine tag's kind
-                  hash = u64_hash_from_seed_str8(hash, str8_struct(&tag.kind));
+                  t_hash = u64_hash_from_seed_str8(t_hash, str8_struct(&tag.kind));
                   
                   // rjf: combine non-reference attributes (references could be different,
                   // because of deduping, but they could match ultimately). for any
@@ -1444,18 +1481,18 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
                          n->v.attrib_kind != DW_AttribKind_LowPc &&
                          n->v.attrib_kind != DW_AttribKind_HighPc)))
                     {
-                      hash = u64_hash_from_seed_str8(hash, str8_struct(&n->v.val.kind));
+                      t_hash = u64_hash_from_seed_str8(t_hash, str8_struct(&n->v.val.kind));
                       if(n->v.val.string.size != 0)
                       {
-                        hash = u64_hash_from_seed_str8(hash, n->v.val.string);
+                        t_hash = u64_hash_from_seed_str8(t_hash, n->v.val.string);
                       }
                       else if(n->v.val.addr != 0)
                       {
-                        hash = u64_hash_from_seed_str8(hash, str8_struct(&n->v.val.addr));
+                        t_hash = u64_hash_from_seed_str8(t_hash, str8_struct(&n->v.val.addr));
                       }
                       else
                       {
-                        hash = u64_hash_from_seed_str8(hash, str8_struct(&n->v.val.u128));
+                        t_hash = u64_hash_from_seed_str8(t_hash, str8_struct(&n->v.val.u128));
                       }
                     }
                     
@@ -1485,7 +1522,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
                       // rjf: if we've seen -> hash the order
                       if(already_seen)
                       {
-                        hash = u64_hash_from_seed_str8(hash, str8_struct(&already_seen_order_idx));
+                        t_hash = u64_hash_from_seed_str8(t_hash, str8_struct(&already_seen_order_idx));
                       }
                       
                       // rjf: if we've not seen -> descend
@@ -1533,6 +1570,9 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
                 }
                 scratch_end(tag_scratch);
               }
+              
+              // rjf: combine t_hash -> main hash
+              hash = u64_hash_from_seed_str8(hash, str8_struct(&t_hash));
             }
           }
           
