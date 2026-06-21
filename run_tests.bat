@@ -8,6 +8,42 @@ set RAW_ARGS=%*
 set TORTURE_ARGS=
 set RUN_TORTURE=1
 
+:: Make test data directories
+if not exist local mkdir local
+pushd local
+if not exist test_inputs mkdir test_inputs
+popd
+
+:: Check if we need new test data version
+pushd local
+set need_test_data=0
+curl -s -o test_data_version_latest.txt https://data.raddbg.com/public/raddbg_test_data_version.txt
+if exist "test_data_version_current.txt" (
+  fc /b "test_data_version_latest.txt" "test_data_version_current.txt" > nul
+) else (
+  echo Test data not present.
+  set need_test_data=1
+)
+if errorlevel 1 (
+  echo Test data out-of-date.
+  set need_test_data=1
+)
+popd
+
+:: Download test data if stale
+if "%need_test_data%"=="1" (
+  echo Downloading test data...
+  pushd local
+  pushd test_inputs
+  curl -s -o test_inputs.zip https://data.raddbg.com/public/raddbg_test_inputs.zip
+  tar -xf test_inputs.zip
+  del test_inputs.zip
+  popd
+  copy /y test_data_version_latest.txt test_data_version_current.txt
+  popd
+)
+popd
+
 :parse_args
 if "%~1" == ""   goto parse_done
 if "%~1" == "--" goto parse_torture_args
