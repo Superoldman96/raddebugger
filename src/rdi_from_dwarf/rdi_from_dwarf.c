@@ -930,6 +930,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
   //- rjf: find all offsets of top-level tag trees across all units
   //
   U64Array *unit_info_root_tag_offs = 0;
+  U64 *unit_tag_counts__first_pass = 0; // only includes roots + any descendants of roots who *don't* have a 'sibling' attribute
   U64 total_root_tag_count = 0;
   U64 *total_root_tag_count_ptr = &total_root_tag_count;
   lane_sync_u64(&total_root_tag_count_ptr, 0);
@@ -938,8 +939,10 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
     if(lane_idx() == 0)
     {
       unit_info_root_tag_offs = push_array(scratch.arena, U64Array, unit_count);
+      unit_tag_counts__first_pass = push_array(scratch.arena, U64, unit_count);
     }
     lane_sync_u64(&unit_info_root_tag_offs, 0);
+    lane_sync_u64(&unit_tag_counts__first_pass, 0);
     typedef struct D2R_UnitTagTreeOffChunkNode D2R_UnitTagTreeOffChunkNode;
     struct D2R_UnitTagTreeOffChunkNode
     {
@@ -1001,6 +1004,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
         //- rjf: reading the next tag
         DW2_Tag tag = {0};
         off += dw2_read_tag(scratch3.arena, raw, unit_parse_ctx, raw->sec[DW_SectionKind_Info].data, off, &tag);
+        unit_tag_counts__first_pass[unit_idx] += 1;
         
         //- rjf: look for sibling attribute fast path
         DW2_Attrib *sibling_attrib = dw2_attrib_from_kind(&tag, DW_AttribKind_Sibling);
@@ -1105,6 +1109,190 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
   lane_sync_u64(&sub_unit_works, 0);
   
   ////////////////////////////
+  //- rjf: predict the total number of tags in all units
+  //
+  U64 total_tag_count_estimate = 1;
+  {
+    U64 tag_size_estimate = 32;
+    for EachIndex(unit_idx, unit_count)
+    {
+      total_tag_count_estimate += dim_1u64(unit_info_tag_ranges[unit_idx]) / tag_size_estimate;
+    }
+  }
+  
+  ////////////////////////////
+  //- rjf: hash all tags / attributes related to type info in all works,
+  // for combining into type content hashes later. type content hashes
+  // require combining a tree of several tag hashes - this just does the
+  // tag hash portion.
+  //
+  // record into (off -> hash) map.
+  //
+  U64 tag_hash_slots_count = total_tag_count_estimate/8 + 1;
+  D2R_TagHashNode **tag_hash_slots = 0;
+  if(lane_idx() == 0)
+  {
+    tag_hash_slots = push_array(scratch.arena, D2R_TagHashNode *, tag_hash_slots_count);
+  }
+  lane_sync_u64(&tag_hash_slots, 0);
+  ProfScope("hash all tags / attributes related to type info in all works, for combining into type content hashes later")
+  {
+    U64 work_take_idx_ = 0;
+    U64 *work_take_idx_ptr = &work_take_idx_;
+    lane_sync_u64(&work_take_idx_ptr, 0);
+    for(;;)
+    {
+      //- rjf: take next work
+      U64 work_idx = ins_atomic_u64_inc_eval(work_take_idx_ptr) - 1;
+      if(work_idx >= sub_unit_works_count)
+      {
+        break;
+      }
+      ProfBegin("hash work");
+      
+      //- rjf: unpack work
+      U64 unit_idx = sub_unit_works[work_idx].unit_idx;
+      Rng1U64 unit_root_tag_idx_range = sub_unit_works[work_idx].root_tag_idx_range;
+      
+      //- rjf: unpack unit info
+      DW2_ParseCtx *unit_parse_ctx = &unit_parse_ctxs[unit_idx];
+      Rng1U64 unit_info_tag_range = unit_info_tag_ranges[unit_idx];
+      
+      //- rjf: hash all relevant tags
+      for(U64 root_tag_idx = unit_root_tag_idx_range.min;
+          root_tag_idx < unit_root_tag_idx_range.max;
+          root_tag_idx += 1)
+      {
+        U64 root_tag_start_off = unit_info_root_tag_offs[unit_idx].v[root_tag_idx];
+        S64 depth = 0;
+        for(U64 off = root_tag_start_off; contains_1u64(unit_info_tag_range, off) && (depth > 0 || off == root_tag_start_off);)
+        {
+          Temp tag_scratch = scratch_begin(&scratch.arena, 1);
+          U64 start_off = off;
+          
+          // rjf: read tag
+          DW2_Tag tag = {0};
+          off += dw2_read_tag(tag_scratch.arena, raw, unit_parse_ctx, raw->sec[DW_SectionKind_Info].data, off, &tag);
+          
+          // rjf: determine if we need this tag's hash
+          B32 need_tag_hash = (tag.kind == DW_TagKind_ArrayType ||
+                               tag.kind == DW_TagKind_ClassType ||
+                               tag.kind == DW_TagKind_EnumerationType ||
+                               tag.kind == DW_TagKind_PointerType ||
+                               tag.kind == DW_TagKind_ReferenceType ||
+                               tag.kind == DW_TagKind_StringType ||
+                               tag.kind == DW_TagKind_StructureType ||
+                               tag.kind == DW_TagKind_SubroutineType ||
+                               tag.kind == DW_TagKind_SubProgram ||
+                               tag.kind == DW_TagKind_Typedef ||
+                               tag.kind == DW_TagKind_UnionType ||
+                               tag.kind == DW_TagKind_PtrToMemberType ||
+                               tag.kind == DW_TagKind_SetType ||
+                               tag.kind == DW_TagKind_BaseType ||
+                               tag.kind == DW_TagKind_ConstType ||
+                               tag.kind == DW_TagKind_FileType ||
+                               tag.kind == DW_TagKind_PackedType ||
+                               tag.kind == DW_TagKind_VolatileType ||
+                               tag.kind == DW_TagKind_RestrictType ||
+                               tag.kind == DW_TagKind_InterfaceType ||
+                               tag.kind == DW_TagKind_UnspecifiedType ||
+                               tag.kind == DW_TagKind_SharedType ||
+                               tag.kind == DW_TagKind_RValueReferenceType ||
+                               tag.kind == DW_TagKind_CoarrayType ||
+                               tag.kind == DW_TagKind_DynamicType ||
+                               tag.kind == DW_TagKind_AtomicType ||
+                               tag.kind == DW_TagKind_ImmutableType ||
+                               tag.kind == DW_TagKind_Namespace);
+          
+          // rjf: hash <:= tag kind
+          U64 hash = 0;
+          if(need_tag_hash)
+          {
+            hash = u64_hash_from_seed_str8(hash, str8_struct(&tag.kind));
+          }
+          
+          // rjf: hash <:= non-reference attributes
+          if(need_tag_hash) for(DW2_AttribNode *n = tag.attribs.first; n != 0; n = n->next)
+          {
+            if(n->v.val.kind != DW_FormKind_RefAddr &&
+               n->v.val.kind != DW_FormKind_Ref1 &&
+               n->v.val.kind != DW_FormKind_Ref2 &&
+               n->v.val.kind != DW_FormKind_Ref4 &&
+               n->v.val.kind != DW_FormKind_Ref8 &&
+               n->v.val.kind != DW_FormKind_RefUData &&
+               n->v.val.kind != DW_FormKind_RefSup4 &&
+               n->v.val.kind != DW_FormKind_RefSig8 &&
+               ((tag.kind != DW_TagKind_SubProgram &&
+                 tag.kind != DW_TagKind_FormalParameter) ||
+                (n->v.attrib_kind != DW_AttribKind_Name &&
+                 n->v.attrib_kind != DW_AttribKind_DeclFile &&
+                 n->v.attrib_kind != DW_AttribKind_DeclLine &&
+                 n->v.attrib_kind != DW_AttribKind_Prototyped &&
+                 n->v.attrib_kind != DW_AttribKind_External &&
+                 n->v.attrib_kind != DW_AttribKind_FrameBase &&
+                 n->v.attrib_kind != DW_AttribKind_Location &&
+                 n->v.attrib_kind != DW_AttribKind_LowPc &&
+                 n->v.attrib_kind != DW_AttribKind_HighPc)))
+            {
+              hash = u64_hash_from_seed_str8(hash, str8_struct(&n->v.val.kind));
+              if(n->v.val.string.size != 0)
+              {
+                hash = u64_hash_from_seed_str8(hash, n->v.val.string);
+              }
+              else if(n->v.val.addr != 0)
+              {
+                hash = u64_hash_from_seed_str8(hash, str8_struct(&n->v.val.addr));
+              }
+              else
+              {
+                hash = u64_hash_from_seed_str8(hash, str8_struct(&n->v.val.u128));
+              }
+            }
+          }
+          
+          // rjf: store
+          if(need_tag_hash)
+          {
+            U64 off_hash = u64_hash_from_str8(str8_struct(&start_off));
+            U64 slot_idx = off_hash%tag_hash_slots_count;
+            D2R_TagHashNode *n = push_array(scratch.arena, D2R_TagHashNode, 1);
+            n->info_off = start_off;
+            n->hash = hash;
+            for(B32 inserted = 0; !inserted;)
+            {
+              U64 slot_head_val = (U64)ins_atomic_u64_eval(&tag_hash_slots[slot_idx]);
+              n->next = (D2R_TagHashNode *)slot_head_val;
+              if(slot_head_val == ins_atomic_u64_eval_cond_assign(&tag_hash_slots[slot_idx], (U64)n, slot_head_val))
+              {
+                inserted = 1;
+              }
+            }
+          }
+          
+          // rjf: tree nav
+          if(tag.has_children)
+          {
+            depth += 1;
+          }
+          if(tag.kind == DW_TagKind_Null)
+          {
+            depth -= 1;
+          }
+          
+          scratch_end(tag_scratch);
+          if(off == start_off)
+          {
+            break;
+          }
+        }
+      }
+      
+      ProfEnd();
+    }
+    lane_sync();
+  }
+  
+  ////////////////////////////
   //- rjf: build built-in types
   //
   RDIM_TypeChunkList *builtin_types = 0;
@@ -1127,18 +1315,6 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
   lane_sync_u64(&builtin_types, 0);
   lane_sync_u64(&builtin_type_from_kind_map, 0);
 #define d2r_type_from_builtin_kind(k) ((RDI_TypeKind_FirstBuiltIn <= (k) && (k) <= RDI_TypeKind_LastBuiltIn) ? builtin_type_from_kind_map[k - RDI_TypeKind_FirstBuiltIn] : builtin_type_from_kind_map[RDI_TypeKind_Void])
-  
-  ////////////////////////////
-  //- rjf: predict the total number of tags in all units
-  //
-  U64 total_tag_count_estimate = 1;
-  {
-    U64 tag_size_estimate = 32;
-    for EachIndex(unit_idx, unit_count)
-    {
-      total_tag_count_estimate += dim_1u64(unit_info_tag_ranges[unit_idx]) / tag_size_estimate;
-    }
-  }
   
   ////////////////////////////
   //- rjf: gather all unique, to-be-deduplicated tags across all units (types, namespaces)
@@ -1245,11 +1421,14 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
             //      functions are not deduplicated, and even if types defined
             //      within many functions match structurally, we consider them
             //      unique, given that they have different definition sites &
-            //      names (fully qualified) still.
+            //      names (fully qualified) still. (technically, if two UDTs
+            //      match structurally, we could even dedup members - so two
+            //      UDT records, w/ different decl sites/names/etc., but point
+            //      at the same members)
             //
-            //  (2) namespaced by a type - we do *not* want to deduplicate. the
-            //      root-level type will already be deduplicated, so we'll only
-            //      produce it once, and that'll catch all sub-types etc.
+            //  (2) namespaced by a type - we *do* want to deduplicate. the
+            //      root-level type will be deduplicated, but children are
+            //      fragmentary - see (3).
             //
             //  (3) namespaced by a namespace - we *do* want to deduplicate. the
             //      children of a namespace are functionally top-level, and even
@@ -1257,8 +1436,12 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
             //      debug info for each unit will contain fragmentary parts of it,
             //      since presumably unused pieces of the namespace will be stripped.
             //      thus, we need to visit namespace children as if they're top-level.
+            //
             B32 children_should_be_deduped = 0;
-            if(tag.kind == DW_TagKind_Namespace)
+            if(tag.kind == DW_TagKind_Namespace ||
+               tag.kind == DW_TagKind_ClassType ||
+               tag.kind == DW_TagKind_StructureType ||
+               tag.kind == DW_TagKind_UnionType)
             {
               children_should_be_deduped = 1;
             }
@@ -1381,7 +1564,10 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
           }
         }
         
-        //- rjf: hash all tags we need to deduplicate & gather
+        //- rjf: produce tree hash for all tags we need to deduplicate & gather
+        //
+        // the tree hash is formed by combining the tag hashes for all dependency tags
+        //
         U64 total_tag_count_this_work = 0;
         for(D2R_TagNode *tag_n = first_tag_to_dedup; tag_n != 0; tag_n = tag_n->next)
         {
@@ -1412,13 +1598,30 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
             {
               next = 0;
               U64 t_off = t->off;
+              U64 off_hash = u64_hash_from_str8(str8_struct(&t->off));
               
               // rjf: record this task in our seen task table
               {
-                U64 off_hash = u64_hash_from_str8(str8_struct(&t->off));
                 U64 slot_idx = off_hash%seen_task_slots_count;
                 SLLStackPush(seen_task_slots[slot_idx], t);
               }
+              
+              // rjf: find tag hash for this task
+              U64 tag_hash = 0;
+              {
+                U64 slot_idx = off_hash%tag_hash_slots_count;
+                for(D2R_TagHashNode *n = tag_hash_slots[slot_idx]; n != 0; n = n->next)
+                {
+                  if(n->info_off == t_off)
+                  {
+                    tag_hash = n->hash;
+                    break;
+                  }
+                }
+              }
+              
+              // rjf: combine tag hash into tree hash
+              hash = u64_hash_from_seed_str8(hash, str8_struct(&tag_hash));
               
               // rjf: unpack unit
               Rng1U64 unit_info_tag_range = unit_info_tag_ranges[t->unit_idx];

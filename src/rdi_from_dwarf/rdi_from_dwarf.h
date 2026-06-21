@@ -5,6 +5,17 @@
 #define RDI_FROM_DWARF_H
 
 ////////////////////////////////
+//~ rjf: Tag Hash Cache Types
+
+typedef struct D2R_TagHashNode D2R_TagHashNode;
+struct D2R_TagHashNode
+{
+  D2R_TagHashNode *next;
+  U64 info_off;
+  U64 hash;
+};
+
+////////////////////////////////
 //~ rjf: Unique Tag Tree Deduplication Types
 
 typedef enum D2R_UniqueTagKind

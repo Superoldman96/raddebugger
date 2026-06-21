@@ -120,7 +120,7 @@ t_delete_dir(String8 path)
     
     if (info.props.flags & FilePropertyFlag_IsFolder) {
       t_delete_dir(str8f(scratch.arena, "%S/%S", path, info.name));
-
+      
       continue;
     }
     
@@ -1254,7 +1254,7 @@ t_entry_point(CmdLine *cmdline)
     
     for EachIndex(i, target_indices.count) {
       if (i == 0) { PrintHeader("Tests"); }
-
+      
       U64 target_idx = target_indices.v[i];
       TestInfo *test = g_sorted_test_infos[target_idx];
       
@@ -1279,7 +1279,7 @@ t_entry_point(CmdLine *cmdline)
       {
         String8 binary_dir_path = get_process_info()->binary_path;
         String8 root_dir_path = str8_chop_last_slash(binary_dir_path);
-        g_input_data_dir = str8f(scratch.arena, "%S/data/test_inputs", root_dir_path);
+        g_input_data_dir = str8f(scratch.arena, "%S/local/test_inputs", root_dir_path);
       }
       
       // setup output directory
@@ -1392,10 +1392,10 @@ t_entry_point(CmdLine *cmdline)
         for EachElement(i, slowest) {
           Slowest s = slowest[i];
           if (s.target_idx >= test_infos_count) { break; }
-
+          
           TestInfo *test_info    = g_sorted_test_infos[s.target_idx];
           String8   elapsed_time = string_from_elapsed_time(scratch.arena, date_time_from_micro_seconds(s.d));
-
+          
           fprintf(stderr, "    %.*s %.*s/ %.*s %.*s %.*s\n",
                   str8_varg(test_info->layer),
                   (int)(layer_max - test_info->layer.size), spaces,
