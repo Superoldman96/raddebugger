@@ -25,6 +25,8 @@ target:
 {
   executable: "build/torture.exe"
   working_directory: build
+  enabled: 1
+  arguments: "raddbg/*"
 }
 target:
 {
@@ -45,7 +47,6 @@ target:
 target:
 {
   executable: "build/radbin.exe"
-  working_directory: "build/"
+  working_directory: build
   arguments: "--breakpad fat.so --capture"
-  enabled: 1
 }

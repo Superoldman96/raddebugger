@@ -230,6 +230,15 @@ e2_type_kind_from_rdi(RDI_TypeKind k)
     case RDI_TypeKind_IncompleteEnum:         {result = E2_TypeKind_IncompleteEnum;}break;
     case RDI_TypeKind_Bitfield:               {result = E2_TypeKind_Bitfield;}break;
     case RDI_TypeKind_Variadic:               {result = E2_TypeKind_Variadic;}break;
+    
+    case RDI_TypeKind_BF16:
+    case RDI_TypeKind_F96:
+    case RDI_TypeKind_Decimal32:
+    case RDI_TypeKind_Decimal64:
+    case RDI_TypeKind_Decimal128:
+    {
+      // NOTE(rjf): currently unsupported
+    }break;
   }
   return result;
 }
@@ -240,6 +249,8 @@ e2_type_group_from_kind(E2_TypeKind k)
   RDI_EvalTypeGroup result = 0;
   switch(k)
   {
+    case E2_TypeKind_COUNT:{}break;
+    
     case E2_TypeKind_Null: case E2_TypeKind_Void:
     case E2_TypeKind_F16:  case E2_TypeKind_F32PP: case E2_TypeKind_F48:
     case E2_TypeKind_F80:  case E2_TypeKind_F128:
@@ -252,6 +263,13 @@ e2_type_group_from_kind(E2_TypeKind k)
     case E2_TypeKind_IncompleteUnion:  case E2_TypeKind_IncompleteEnum:
     case E2_TypeKind_Bitfield:
     case E2_TypeKind_Variadic:
+    case E2_TypeKind_HResult:
+    case E2_TypeKind_Set:
+    case E2_TypeKind_Lens:
+    case E2_TypeKind_LensSpec:
+    case E2_TypeKind_MetaExpr:
+    case E2_TypeKind_MetaDisplayName:
+    case E2_TypeKind_MetaDescription:
     {result = RDI_EvalTypeGroup_Other;}break;
     
     case E2_TypeKind_Handle:
