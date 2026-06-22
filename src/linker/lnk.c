@@ -1589,10 +1589,10 @@ lnk_queue_lib_member(Arena                *arena,
                                        is_addr_import  ? is_addr_import  : 0;
 
   if (is_queued_import) {
-    // do not queue second import member link -- flag member and continue
+    // do not queue second import member link -> flag member and continue
     U8                 flag                = str8_starts_with(link_symbol->name, str8_lit("__imp_")) ? LNK_LibMemberFlag_LinkedImp : LNK_LibMemberFlag_LinkedRegular;
     LNK_LibMemberInfo *import_member_infos = hash_map_search_raw_raw(&lib_member_info_hm, is_queued_import->lib);
-    ins_atomic_u8_or(&import_member_infos[member_idx].flags, flag);
+    ins_atomic_u8_or(&import_member_infos[is_queued_import->member_idx].flags, flag);
   } else {
     B32 do_queue;
     if (str8_starts_with(link_symbol->name, str8_lit("__imp_"))) {
@@ -1816,7 +1816,6 @@ lnk_link_inputs(TP_Context      *tp,
 
         // sort library member refs to match the order of their appearance in obj symbol tables
         LNK_LibMemberRef **member_refs = lnk_array_from_lib_member_list(scratch.arena, queued_members);
-        //qsort(member_refs, queued_members.count, sizeof(member_refs[0]), lnk_lib_member_ref_compar);
         g_sort_lib_member_context = lib_member_infos;
         radsort(member_refs, queued_members.count, lnk_lib_member_ref_is_before);
 
