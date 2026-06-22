@@ -11,6 +11,7 @@ typedef struct D2R_TagHashNode D2R_TagHashNode;
 struct D2R_TagHashNode
 {
   D2R_TagHashNode *next;
+  U64 container_ancestor_info_off;
   U64 info_off;
   U64 hash;
 };
