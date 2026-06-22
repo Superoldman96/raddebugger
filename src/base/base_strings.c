@@ -3240,12 +3240,15 @@ str8_buffer_write_string_list(String8Node *buf, U64 *pos, String8List list)
 ////////////////////////////////
 //~ rjf: Basic String Hashes
 
+#pragma push_macro("__cpuid")
+#undef __cpuid
 #if !defined(XXH_IMPLEMENTATION)
 # define XXH_INLINE_ALL
 # define XXH_IMPLEMENTATION
 # define XXH_STATIC_LINKING_ONLY
 # include "third_party/xxHash/xxhash.h"
 #endif
+#pragma pop_macro("__cpuid")
 
 internal U64
 u64_hash_from_seed_str8(U64 seed, String8 string)

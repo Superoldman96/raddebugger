@@ -391,7 +391,6 @@ global D_UserState *d_user_state = 0;
 ////////////////////////////////
 //~ rjf: Basic Helpers
 
-internal U64 d_hash_from_seed_string(U64 seed, String8 string);
 internal U64 d_hash_from_string(String8 string);
 internal U64 d_hash_from_seed_string__case_insensitive(U64 seed, String8 string);
 internal U64 d_hash_from_string__case_insensitive(String8 string);

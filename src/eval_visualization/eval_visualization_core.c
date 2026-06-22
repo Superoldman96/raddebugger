@@ -13,12 +13,6 @@ EV_EXPAND_RULE_INFO_FUNCTION_DEF(nil)
 ////////////////////////////////
 //~ rjf: Key Functions
 
-#if !defined(XXH_IMPLEMENTATION)
-# define XXH_IMPLEMENTATION
-# define XXH_STATIC_LINKING_ONLY
-# include "third_party/xxHash/xxhash.h"
-#endif
-
 internal EV_Key
 ev_key_make(U64 parent_hash, U64 child_id)
 {
@@ -54,7 +48,7 @@ ev_key_match(EV_Key a, EV_Key b)
 internal U64
 ev_hash_from_seed_string(U64 seed, String8 string)
 {
-  U64 result = XXH3_64bits_withSeed(string.str, string.size, seed);
+  U64 result = u64_hash_from_seed_str8(seed, string);
   return result;
 }
 

@@ -4,12 +4,6 @@
 ////////////////////////////////
 //~ rjf: Basic Functions
 
-#if !defined(XXH_IMPLEMENTATION)
-# define XXH_IMPLEMENTATION
-# define XXH_STATIC_LINKING_ONLY
-# include "third_party/xxHash/xxhash.h"
-#endif
-
 internal U128
 fnt_hash_from_string(String8 string)
 {

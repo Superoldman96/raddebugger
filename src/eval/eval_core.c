@@ -9,16 +9,10 @@
 ////////////////////////////////
 //~ rjf: Basic Helpers
 
-#if !defined(XXH_IMPLEMENTATION)
-# define XXH_IMPLEMENTATION
-# define XXH_STATIC_LINKING_ONLY
-# include "third_party/xxHash/xxhash.h"
-#endif
-
 internal U64
 e_hash_from_string(U64 seed, String8 string)
 {
-  U64 result = XXH3_64bits_withSeed(string.str, string.size, seed);
+  U64 result = u64_hash_from_seed_str8(seed, string);
   return result;
 }
 
