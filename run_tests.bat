@@ -11,7 +11,7 @@ set RUN_TORTURE=1
 :: Make test data directories
 if not exist local mkdir local
 pushd local
-if not exist test_inputs mkdir test_inputs
+if not exist test_data mkdir test_data
 popd
 
 :: Check if we need new test data version
@@ -34,10 +34,10 @@ popd
 if "%need_test_data%"=="1" (
   echo Downloading test data...
   pushd local
-  pushd test_inputs
-  curl -s -o test_inputs.zip https://data.raddbg.com/public/raddbg_test_inputs.zip
-  tar -xf test_inputs.zip
-  del test_inputs.zip
+  pushd test_data
+  curl -s -o test_data.zip https://data.raddbg.com/public/raddbg_test_data.zip
+  tar -xf test_data.zip
+  del test_data.zip
   popd
   copy /y test_data_version_latest.txt test_data_version_current.txt
   popd

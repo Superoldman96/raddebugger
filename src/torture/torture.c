@@ -1272,14 +1272,14 @@ t_entry_point(CmdLine *cmdline)
       {
         String8 binary_dir_path = get_process_info()->binary_path;
         String8 root_dir_path = str8_chop_last_slash(binary_dir_path);
-        g_exemplar_dir = str8f(scratch.arena, "%S/data/test_exemplars/%S", root_dir_path, test->label);
+        g_exemplar_dir = str8f(scratch.arena, "%S/local/test_data/exemplars/%S", root_dir_path, test->label);
       }
       
       // rjf: find input data directory
       {
         String8 binary_dir_path = get_process_info()->binary_path;
         String8 root_dir_path = str8_chop_last_slash(binary_dir_path);
-        g_input_data_dir = str8f(scratch.arena, "%S/local/test_inputs", root_dir_path);
+        g_input_data_dir = str8f(scratch.arena, "%S/local/test_data/inputs", root_dir_path);
       }
       
       // setup output directory
