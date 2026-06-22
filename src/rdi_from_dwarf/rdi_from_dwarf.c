@@ -1592,6 +1592,14 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
         {
           Temp dedup_root_scratch = scratch_begin(&scratch.arena, 1);
           
+          {
+            DW2_ParseCtx *unit_parse_ctx = &unit_parse_ctxs[origin_unit_idx];
+            DW2_Tag tag = {0};
+            dw2_read_tag(dedup_root_scratch.arena, raw, unit_parse_ctx, raw->sec[DW_SectionKind_Info].data, tag_n->info_off, &tag);
+            String8 name = dw2_attrib_from_kind(&tag, DW_AttribKind_Name)->val.string;
+            ProfBegin("%.*s (%.*s)", str8_varg(name), str8_varg(dw_string_from_tag_kind(unit_parse_ctx->version, unit_parse_ctx->exts, tag.kind)));
+          }
+          
           //- rjf: compute tree hash
           U64 start_off = tag_n->info_off;
           U64 hash = 0;
@@ -1620,6 +1628,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
             U64 seen_task_slots_count = 16;
             SeenTask **seen_task_slots = push_array(dedup_root_scratch.arena, SeenTask *, seen_task_slots_count);
             TagTask start_task = {0, DW_TagKind_Null, 0, origin_unit_idx, start_off, start_off, 0};
+            ProfBegin("task");
             TagTask *top_task = &start_task;
             TagTask *free_task = 0;
             for(;top_task != 0;)
@@ -1627,7 +1636,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
               //- rjf: determine if we're done with this hash
               B32 done = (top_task->depth == 0 && top_task->start_off != top_task->off);
               
-              //- rjf: if we're not done -> make progress computing the hash ourselves
+              //- rjf: if we're not done -> continue contributing to the task's hash
               if(!done)
               {
                 Temp tag_scratch = scratch_begin(&dedup_root_scratch.arena, 1);
@@ -1641,9 +1650,26 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
                 U64 start_off = top_task->off;
                 top_task->off += dw2_read_tag(tag_scratch.arena, raw, unit_parse_ctx, raw->sec[DW_SectionKind_Info].data, top_task->off, &tag);
                 
+                // rjf: determine whether or not to include this tag
+                B32 include_tag_in_hash = 1;
+                if(top_task->depth > 0)
+                {
+                  if(top_task->root_tag_kind == DW_TagKind_SubProgram)
+                  {
+                    include_tag_in_hash = (tag.kind == DW_TagKind_FormalParameter);
+                  }
+                  else if(top_task->root_tag_kind == DW_TagKind_StructureType ||
+                          top_task->root_tag_kind == DW_TagKind_ClassType ||
+                          top_task->root_tag_kind == DW_TagKind_UnionType)
+                  {
+                    include_tag_in_hash = (tag.kind == DW_TagKind_Member);
+                  }
+                }
+                
                 // rjf: look up this tag's hash / ancestor
                 U64 tag_hash = 0;
                 U64 container_ancestor_info_off = 0;
+                if(include_tag_in_hash)
                 {
                   U64 hash = u64_hash_from_str8(str8_struct(&start_off));
                   U64 slot_idx = hash%tag_hash_slots_count;
@@ -1677,21 +1703,35 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
                 }
                 
                 // rjf: combine tag's hash to tree hash
-                top_task->hash = u64_hash_from_seed_str8(top_task->hash, str8_struct(&tag_hash));
+                if(include_tag_in_hash)
+                {
+                  top_task->hash = u64_hash_from_seed_str8(top_task->hash, str8_struct(&tag_hash));
+                }
+                
+                // rjf: determine if we want to descend to children
+                B32 descend = (tag.kind != DW_TagKind_Namespace);
                 
                 // rjf: tree navigations
-                if(tag.has_children)
+                if(descend)
                 {
-                  top_task->depth += 1;
-                }
-                if(tag.kind == DW_TagKind_Null)
-                {
-                  top_task->depth -= 1;
+                  if(tag.has_children)
+                  {
+                    top_task->depth += 1;
+                  }
+                  if(tag.kind == DW_TagKind_Null)
+                  {
+                    top_task->depth -= 1;
+                  }
                 }
                 
                 // rjf: unpack type reference in this tag
-                DW2_Attrib *type_attrib = dw2_attrib_from_kind(&tag, DW_AttribKind_Type);
-                U64 type_info_off = dw2_reference_info_off_from_form_val(unit_parse_ctx, &type_attrib->val);
+                DW2_Attrib *type_attrib = &dw2_attrib_nil;
+                U64 type_info_off = 0;
+                if(include_tag_in_hash)
+                {
+                  type_attrib = dw2_attrib_from_kind(&tag, DW_AttribKind_Type);
+                  type_info_off = dw2_reference_info_off_from_form_val(unit_parse_ctx, &type_attrib->val);
+                }
                 
                 // rjf: if this type reference is recursive, just merge the referenced type's tag hash
                 B32 type_ref_is_recursive = 0;
@@ -1735,6 +1775,8 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
                   SLLStackPush(top_task, task);
                   task->unit_idx = unit_idx;
                   task->start_off = task->off = type_info_off;
+                  String8 name = dw2_attrib_from_kind(&tag, DW_AttribKind_Name)->val.string;
+                  ProfBegin("%.*s (%.*s)", str8_varg(name), str8_varg(dw_string_from_tag_kind(unit_parse_ctx->version, unit_parse_ctx->exts, tag.kind)));
                 }
                 
                 scratch_end(tag_scratch);
@@ -1750,6 +1792,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
                 {
                   top_task->hash = u64_hash_from_seed_str8(top_task->hash, str8_struct(&popped->hash));
                 }
+                ProfEnd();
               }
             }
             hash = start_task.hash;
@@ -1871,6 +1914,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
           }
           
           scratch_end(dedup_root_scratch);
+          ProfEnd();
         }
         // ProfMsg("work_idx %I64u: %I64u tags encountered", work_idx, total_tag_count_this_work);
         ProfEnd();

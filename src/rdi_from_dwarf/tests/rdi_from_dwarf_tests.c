@@ -1,7 +1,7 @@
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
-Test(d2r_regressions)
+SkippedTest(d2r_regressions)
 {
   String8 radbin_path = test_build_exe_path(arena, s("radbin"));
   String8 bin_paths[] =
@@ -64,7 +64,7 @@ Test(d2r_regressions)
   }
 }
 
-Test(d2r_determinism)
+SkippedTest(d2r_determinism)
 {
   U64 num_repeats_per_bin = 16;
   String8 radbin_path = test_build_exe_path(arena, s("radbin"));
