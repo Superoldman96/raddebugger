@@ -1382,14 +1382,14 @@ t_entry_point(CmdLine *cmdline)
       if (slow_count > 1) {
         U64 label_max = 0;
         U64 layer_max = 0;
-        for EachElement(i, slowest) {
+        for EachIndex(i, slow_count) {
           Slowest s = slowest[i];
           label_max = Max(g_sorted_test_infos[s.target_idx]->label.size, label_max);
           layer_max = Max(g_sorted_test_infos[s.target_idx]->layer.size, layer_max);
         }
         
         fprintf(stderr, "  \nSlow Tests\n");
-        for EachElement(i, slowest) {
+        for EachIndex(i, slow_count) {
           Slowest s = slowest[i];
           if (s.target_idx >= test_infos_count) { break; }
           

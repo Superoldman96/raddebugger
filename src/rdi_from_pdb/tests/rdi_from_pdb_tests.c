@@ -1,36 +1,15 @@
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
-internal String8
-p2r_test__test_path(Arena *arena, TestCtx *ctx, String8 id, String8 name)
-{
-  String8 path = str8f(arena, "%S/%S/%S", ctx->input_data_path, id, name);
-  return path;
-}
-
 Test(p2r_determinism)
 {
   U64 num_repeats_per_pdb = 16;
   String8 pdb_paths[] =
   {
-    p2r_test__test_path(arena, ctx, s("mule_main_9ff1e58f"), s("mule_main.pdb")),
-    p2r_test__test_path(arena, ctx, s("mule_main_9ff1e58f"), s("mule_module.pdb")),
+    test_input_path(arena, ctx, s("mule_main_9ff1e58f/mule_main.pdb")),
+    test_input_path(arena, ctx, s("mule_main_9ff1e58f/mule_module.pdb")),
   };
-  B32 all_pdbs_exist_locally = 1;
   for EachElement(pdb_idx, pdb_paths)
-  {
-    String8 pdb_path = pdb_paths[pdb_idx];
-    if(properties_from_file_path(pdb_path).modified == 0)
-    {
-      all_pdbs_exist_locally = 0;
-      break;
-    }
-  }
-  if(!all_pdbs_exist_locally)
-  {
-    TestSkip();
-  }
-  else for EachElement(pdb_idx, pdb_paths)
   {
     // rjf: unpack paths, make output directory
     String8 pdb_path = pdb_paths[pdb_idx];

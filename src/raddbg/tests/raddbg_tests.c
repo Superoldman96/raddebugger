@@ -5,13 +5,6 @@
 //~ rjf: Debugger Testing IPC Driving Helpers
 
 internal String8
-rd_test__test_binary_path(Arena *arena, TestCtx *ctx, String8 name)
-{
-  String8 path = str8f(arena, "%S/%S/%S%S", ctx->input_data_path, name, name, program_ext_postfix_from_os(OperatingSystem_CURRENT, 1));
-  return path;
-}
-
-internal String8
 rd_test__raddbg_path(Arena *arena, CmdLine *cmdline)
 {
   String8 raddbg_exe_name = cmd_line_has_flag(cmdline, s("gui")) ? s("raddbg") : s("raddbg_non_graphical");
@@ -114,7 +107,7 @@ rd_test__stepping_regressions(Arena *arena, TestCtx *ctx, String8 target_binary,
   String8List test_log_strings = {0};
   
   // rjf: get binary path
-  String8 binary_path = rd_test__test_binary_path(arena, ctx, target_binary);
+  String8 binary_path = test_input_exe_path(arena, ctx, str8f(scratch.arena, "%S/%S", target_binary, target_binary));
   B32 binary_exists_locally = (properties_from_file_path(binary_path).modified != 0);
   
   // rjf: if binary does not exist -> skip this test, 
@@ -233,7 +226,7 @@ rd_test__eval_regressions(Arena *arena, TestCtx *ctx, String8 target_binary, Str
   String8List test_log_strings = {0};
   
   // rjf: get binary path
-  String8 binary_path = rd_test__test_binary_path(arena, ctx, target_binary);
+  String8 binary_path = test_input_exe_path(arena, ctx, str8f(scratch.arena, "%S/%S", target_binary, target_binary));
   B32 binary_exists_locally = (properties_from_file_path(binary_path).modified != 0);
   
   // rjf: if binary does not exist -> skip this test, 
