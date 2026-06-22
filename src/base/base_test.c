@@ -4,6 +4,14 @@
 #if BUILD_TESTS
 
 internal String8
+test_build_exe_path(Arena *arena, String8 name)
+{
+  String8 folder = get_process_info()->binary_path;
+  String8 path = str8f(arena, "%S/%S%S", folder, name, program_ext_postfix_from_os(OperatingSystem_CURRENT, 0));
+  return path;
+}
+
+internal String8
 test_input_path(Arena *arena, TestCtx *ctx, String8 name)
 {
   String8 path = str8f(arena, "%S/%S", ctx->input_data_path, name);

@@ -1,9 +1,74 @@
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
+Test(p2r_regressions)
+{
+  String8 radbin_path = test_build_exe_path(arena, s("radbin"));
+  String8 pdb_paths[] =
+  {
+    test_input_path(arena, ctx, s("mule_main_9ff1e58f/mule_main.pdb")),
+    test_input_path(arena, ctx, s("mule_main_9ff1e58f/mule_module.pdb")),
+  };
+  
+  // rjf: generate RDIs
+  {
+    ProcessList processes = {0};
+    for EachElement(pdb_idx, pdb_paths)
+    {
+      String8 pdb_path = pdb_paths[pdb_idx];
+      String8 rdi_path = str8f(arena, "%S/%I64u.rdi", ctx->artifacts_path, pdb_idx);
+      Process process = launch_cmd_line(str8f(arena, "%S --rdi --deterministic %S --out:%S", radbin_path, pdb_path, rdi_path));
+      process_list_push(arena, &processes, process);
+    }
+    for EachNode(n, ProcessNode, processes.first)
+    {
+      process_join(n->v, max_U64, 0);
+    }
+  }
+  
+  // rjf: generate dumps
+  {
+    ProcessList processes = {0};
+    for EachElement(pdb_idx, pdb_paths)
+    {
+      String8 rdi_path = str8f(arena, "%S/%I64u.rdi", ctx->artifacts_path, pdb_idx);
+      String8 dump_path = str8f(arena, "%S/current_%I64u", ctx->artifacts_path, pdb_idx);
+      Process process = launch_cmd_line(str8f(arena, "%S --dump --deterministic %S --out:%S", radbin_path, rdi_path, dump_path));
+      process_list_push(arena, &processes, process);
+    }
+    for EachNode(n, ProcessNode, processes.first)
+    {
+      process_join(n->v, max_U64, 0);
+    }
+  }
+  
+  // rjf: check against exemplars
+  {
+    for EachElement(pdb_idx, pdb_paths)
+    {
+      Temp scratch = scratch_begin(&arena, 1);
+      String8 dump_path_current = str8f(scratch.arena, "%S/current_%I64u", ctx->artifacts_path, pdb_idx);
+      String8 dump_data_current = data_from_file_path(scratch.arena, dump_path_current);
+      String8 dump_path_exemplar = test_exemplar_path(scratch.arena, ctx, str8f(scratch.arena, "exemplar_%I64u", pdb_idx));
+      String8 dump_data_exemplar = data_from_file_path(scratch.arena, dump_path_exemplar);
+      B32 dump_matches = str8_match(dump_data_current, dump_data_exemplar, 0);
+      if(!dump_matches)
+      {
+        String8 diff_cmd = str8f(scratch.arena, "diff %S %S",
+                                 path_normalized_from_string(scratch.arena, dump_path_current),
+                                 path_normalized_from_string(scratch.arena, dump_path_exemplar));
+        test_outf("Current log does not match exemplar; run `%S`\n", diff_cmd);
+      }
+      TestCheck(dump_matches);
+      scratch_end(scratch);
+    }
+  }
+}
+
 Test(p2r_determinism)
 {
   U64 num_repeats_per_pdb = 16;
+  String8 radbin_path = test_build_exe_path(arena, s("radbin"));
   String8 pdb_paths[] =
   {
     test_input_path(arena, ctx, s("mule_main_9ff1e58f/mule_main.pdb")),
@@ -24,7 +89,7 @@ Test(p2r_determinism)
         String8 rdi_name = str8f(arena, "repeat_%I64u.rdi", repeat_idx);
         String8 rdi_path = str8f(arena, "%S/%S", ctx->artifacts_path, rdi_name);
         str8_list_push(arena, &rdi_paths, rdi_path);
-        String8 cmdl = str8f(arena, "%S --rdi --deterministic %S --out:%S", t_radbin_path(), pdb_path, rdi_path);
+        String8 cmdl = str8f(arena, "%S --rdi --deterministic %S --out:%S", radbin_path, pdb_path, rdi_path);
         Process process = launch_cmd_line(cmdl);
         TestCheck(!process_match(process_zero(), process));
         process_list_push(arena, &processes, process);
@@ -43,7 +108,7 @@ Test(p2r_determinism)
         String8 rdi_path = n->string;
         String8 dump_path = str8f(arena, "%S.dump", rdi_path);
         str8_list_push(arena, &dump_paths, dump_path);
-        Process process_handle = launch_cmd_linef("%S --dump --deterministic %S --out:%S", t_radbin_path(), rdi_path, dump_path);
+        Process process_handle = launch_cmd_linef("%S --dump --deterministic %S --out:%S", radbin_path, rdi_path, dump_path);
         TestCheck(!process_match(process_zero(), process_handle));
         process_list_push(arena, &processes, process_handle);
       }

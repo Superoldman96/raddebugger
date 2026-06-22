@@ -54,6 +54,7 @@ struct TestInfo
 global U16      test_infos_count    = 0;
 global TestInfo test_infos[0xffff] = {0};
 
+internal String8 test_build_exe_path(Arena *arena, String8 name);
 internal String8 test_input_path(Arena *arena, TestCtx *ctx, String8 name);
 internal String8 test_input_exe_path(Arena *arena, TestCtx *ctx, String8 name);
 internal String8 test_exemplar_path(Arena *arena, TestCtx *ctx, String8 name);
