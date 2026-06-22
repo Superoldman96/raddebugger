@@ -17,7 +17,7 @@ popd
 :: Check if we need new test data version
 pushd local
 set need_test_data=0
-curl -s -o test_data_version_latest.txt https://data.raddbg.com/public/raddbg_test_data_version.txt
+curl -sfL -o test_data_version_latest.txt https://data.raddbg.com/public/raddbg_test_data_version.txt || exit /b 1
 if exist "test_data_version_current.txt" (
   fc /b "test_data_version_latest.txt" "test_data_version_current.txt" > nul
 ) else (
@@ -35,8 +35,8 @@ if "%need_test_data%"=="1" (
   echo Downloading test data...
   pushd local
   pushd test_data
-  curl -s -o test_data.zip https://data.raddbg.com/public/raddbg_test_data.zip
-  tar -xf test_data.zip
+  curl -sfL -o test_data.zip https://data.raddbg.com/public/raddbg_test_data.zip || exit /b 1
+  tar -xf test_data.zip || exit /b 1
   del test_data.zip
   popd
   copy /y test_data_version_latest.txt test_data_version_current.txt
