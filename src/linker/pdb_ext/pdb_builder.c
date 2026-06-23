@@ -1845,7 +1845,7 @@ gsi_symbol_is_before(void *raw_a, void *raw_b)
   return is_before;
 }
 
-internal int
+force_inline int
 gsi_pub_symbol_is_before(void *raw_a, void *raw_b)
 {
   CV_Symbol *a = *(CV_Symbol **)raw_a;
@@ -1870,7 +1870,6 @@ gsi_pub_symbol_is_before(void *raw_a, void *raw_b)
         }
       }
     }
-
     is_before = cmp < 0;
   }
 
@@ -1888,10 +1887,8 @@ THREAD_POOL_TASK_FUNC(gsi_serialize_pub32)
   CV_SymbolList bucket = task->bucket_arr[bucket_idx];
 
   CV_Symbol **symbol_arr = push_array(scratch.arena, CV_Symbol *, bucket.count); 
-  {
-    U64 i = 0;
-    for EachNode(n, CV_SymbolNode, bucket.first) { symbol_arr[i++] = &n->data; }
-  }
+  U64 symbol_arr_count = 0;
+  for EachNode(n, CV_SymbolNode, bucket.first) { symbol_arr[symbol_arr_count++] = &n->data; }
 
   // sort symbols within bucket
   radsort(symbol_arr, bucket.count, gsi_pub_symbol_is_before);
@@ -1906,10 +1903,10 @@ THREAD_POOL_TASK_FUNC(gsi_serialize_pub32)
   for EachIndex(i, bucket.count) {
     Assert(symbol_arr[i]->kind == CV_SymKind_PUB32);
 
-    CV_SymPub32 *pub32    = (CV_SymPub32 *)symbol_arr[i]->data.str;
-    U8          *str_ptr  = (U8 *)(pub32 + 1);
-    U64          str_size = symbol_arr[i]->data.size - sizeof(*pub32);
-    String8      name     = str8(str_ptr, str_size);
+    CV_SymPub32 *pub32   = (CV_SymPub32 *)symbol_arr[i]->data.str;
+    U8          *str_ptr = (U8 *)(pub32 + 1);
+    U64          str_cap = symbol_arr[i]->data.size - sizeof(*pub32);
+    String8      name    = str8_cstring_capped(str_ptr, str_ptr + str_cap);
 
     // init sort record
     PDB_GsiSortRecord *sr = &sort_record_arr[sort_idx];

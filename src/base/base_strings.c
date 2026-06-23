@@ -3076,43 +3076,38 @@ str8_deserial_read_sleb128(String8 string, U64 off, S64 *value_out)
 
 ////////////////////////////////
 
-internal int
+force_inline int
 str8_compar(String8 a, String8 b, B32 ignore_case)
 {
-  int cmp  = 0;
   U64 size = Min(a.size, b.size);
-  if (ignore_case)
-  {
-    cmp = MemCompareI(a.str, b.str, size);
-  }
-  else
-  {
-    cmp = MemCompare(a.str, b.str, size);
-    cmp = cmp > 0 ? 1 : cmp < 0 ? -1 : 0;
-  }
-  
+  int cmp = ignore_case ? MemCompareI(a.str, b.str, size) : MemCompare(a.str, b.str, size);
+
+  // normalize compar result
+  cmp = cmp > 0 ? 1 : cmp < 0 ? -1 : 0;
+
   // shorter prefix must precede longer prefixes
   if (cmp == 0)
   {
-    cmp = (a.size > b.size) - (b.size - a.size);
+    cmp = a.size < b.size ? -1 :
+          a.size > b.size ? +1 : 0;
   }
   
   return cmp;
 }
 
-internal int
+force_inline int
 str8_compar_ignore_case(const void *a, const void *b)
 {
   return str8_compar(*(String8*)a, *(String8*)b, 1);
 }
 
-internal int
+force_inline int
 str8_compar_case_sensitive(const void *a, const void *b)
 {
   return str8_compar(*(String8*)a, *(String8*)b, 0);
 }
 
-internal int
+force_inline int
 str8_is_before_case_sensitive(const void *a, const void *b)
 {
   int cmp = str8_compar_case_sensitive(a, b);
