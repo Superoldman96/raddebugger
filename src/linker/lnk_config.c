@@ -92,6 +92,7 @@ global read_only LNK_CmdSwitch g_cmd_switch_map[] =
   { LNK_CmdSwitch_Rad_RemoveSection,                0, "RAD_REMOVE_SECTION",                   ":NAME",     "Removes a section from the image."                                                },
   { LNK_CmdSwitch_Rad_SharedThreadPool,             0, "RAD_SHARED_THREAD_POOL",               "[:STRING]", "Default value \"" LNK_DEFAULT_THREAD_POOL_NAME "\""                               },
   { LNK_CmdSwitch_Rad_SharedThreadPoolMaxWorkers,   0, "RAD_SHARED_THREAD_POOL_MAX_WORKERS",   ":#",        "Set maximum number of workers in a thread pool."                                  },
+  { LNK_CmdSwitch_Rad_SortImports,                  0, "RAD_SORT_IMPORTS",                     "[:NO]",     "Sort static and delayed import tables by their order of appearance in libs, without assuming link order." },
   { LNK_CmdSwitch_Rad_Ignore,                       0, "RAD_IGNORE",                           ":#",        "Ignore the specified RAD linker warning."                                         },
   { LNK_CmdSwitch_Rad_ImageAltPath,                 0, "RAD_IMAGEALTPATH",                     ":FILENAME", "Alternative name for the image"                                                   },
   { LNK_CmdSwitch_Rad_WriteTempFiles,               0, "RAD_WRITE_TEMP_FILES",                 "[:NO]",     "When speicifed linker writes image and debug info to temporary files and renames after link is done." },
@@ -2079,6 +2080,10 @@ lnk_apply_cmd_option_to_config(LNK_Config *config, String8 cmd_name, String8List
         config->max_worker_count = sysinfo->logical_processor_count;
       }
     }
+  } break;
+
+  case LNK_CmdSwitch_Rad_SortImports: {
+    lnk_cmd_switch_parse_flag(obj, cmd_switch, value_strings, &config->sort_imports);
   } break;
 
   case LNK_CmdSwitch_Rad_Ignore: {

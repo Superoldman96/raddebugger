@@ -168,6 +168,7 @@ lnk_make_default_cmd_line(Arena *arena, LNK_CmdLine user_cmd_line)
     "/RAD_MAP_LINES_FOR_UNRESOLVED_SYMBOLS",
     "/RAD_UNRESOLVED_SYMBOL_LIMIT:1000",
     "/RAD_UNRESOLVED_SYMBOL_REF_LIMIT:10",
+    "/RAD_SORT_IMPORTS",
     (char*)str8f(scratch.arena, "/RAD_MT_PATH:%s",        LNK_MANIFEST_MERGE_TOOL_NAME).str,
     (char*)str8f(scratch.arena, "/RAD_DATA_DIR_COUNT:%u", PE_DataDirectoryIndex_COUNT).str,
   };
@@ -1247,11 +1248,27 @@ lnk_lib_member_ref_list_concat_in_place_array(LNK_LibMemberRefList *list, LNK_Li
 
 static LNK_LibMemberInfo *g_sort_lib_member_context;
 
-internal int
+force_inline int
 lnk_lib_member_ref_is_before(void *raw_a, void *raw_b)
 {
   LNK_LibMemberRef **a = raw_a, **b = raw_b;
-  return lnk_symbol_is_before(g_sort_lib_member_context[(*a)->member_idx].link, g_sort_lib_member_context[(*b)->member_idx].link);
+  return lnk_symbol_is_before(g_sort_lib_member_context[(*a)->member_idx].link,
+                              g_sort_lib_member_context[(*b)->member_idx].link);
+}
+
+force_inline int
+lnk_import_ref_is_before(void *raw_a, void *raw_b)
+{
+  LNK_LibMemberRef **a_ptr = raw_a, **b_ptr = raw_b;
+  LNK_LibMemberRef *a = *a_ptr, *b = *b_ptr;
+  int cmp = u64_compar(&a->lib->input_idx, &b->lib->input_idx);
+  if (cmp == 0) {
+    cmp = u32_compar(&a->member_idx, &b->member_idx);
+  }
+#if LNK_PARANOID
+  if (a != b) Assert(cmp != 0);
+#endif
+  return cmp < 0;
 }
 
 internal LNK_LibMemberRef **
@@ -2002,12 +2019,20 @@ lnk_link_image(TP_Context *tp, TP_Arena *arena, LNK_Config *config, LNK_Inputer 
   // make imports
   //
   {
-    HashMap      static_imports_hm  = {0};
-    HashMap      delayed_imports_hm = {0};
-    String8List  delayed_dll_names  = {0};
-    String8List  static_dll_names   = {0};
+    HashMap     static_imports_hm  = {0};
+    HashMap     delayed_imports_hm = {0};
+    String8List delayed_dll_names  = {0};
+    String8List static_dll_names   = {0};
 
-    for EachNode(member_ref, LNK_LibMemberRef, link->imports.first) {
+    LNK_LibMemberRef **import_member_refs = lnk_array_from_lib_member_list(scratch.arena, link->imports);
+
+    // optionally sort import library member refs by input index
+    if (config->sort_imports == LNK_SwitchState_Yes) {
+      radsort(import_member_refs, link->imports.count, lnk_import_ref_is_before);
+    }
+
+    for EachIndex(import_member_idx, link->imports.count) {
+      LNK_LibMemberRef  *member_ref   = import_member_refs[import_member_idx];
       LNK_Lib           *lib          = member_ref->lib;
       U64                member_idx   = member_ref->member_idx;
       LNK_LibMemberInfo *member_infos = hash_map_search_raw_raw(&link->lib_member_infos_hm, lib);

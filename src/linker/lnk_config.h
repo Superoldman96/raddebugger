@@ -96,14 +96,14 @@ typedef enum
   LNK_CmdSwitch_WholeArchive,
 
   LNK_CmdSwitch_Rad_Age,
+  LNK_CmdSwitch_Rad_BootMode,
   LNK_CmdSwitch_Rad_BuildExp,
-  LNK_CmdSwitch_Rad_BuildInfo,
   LNK_CmdSwitch_Rad_BuildImpLib,
+  LNK_CmdSwitch_Rad_BuildInfo,
   LNK_CmdSwitch_Rad_CheckUnusedDelayLoadDll,
   LNK_CmdSwitch_Rad_DataDirCount,
   LNK_CmdSwitch_Rad_Debug,
   LNK_CmdSwitch_Rad_DebugAltPath,
-  LNK_CmdSwitch_Rad_BootMode,
   LNK_CmdSwitch_Rad_DebugName,
   LNK_CmdSwitch_Rad_DelayBind,
   LNK_CmdSwitch_Rad_DoMerge,
@@ -130,13 +130,14 @@ typedef enum
   LNK_CmdSwitch_Rad_RemoveSection,
   LNK_CmdSwitch_Rad_SharedThreadPool,
   LNK_CmdSwitch_Rad_SharedThreadPoolMaxWorkers,
+  LNK_CmdSwitch_Rad_SortImports,
   LNK_CmdSwitch_Rad_TimeStamp,
   LNK_CmdSwitch_Rad_TypeHashAlg,
   LNK_CmdSwitch_Rad_UnresolvedSymbolLimit,
   LNK_CmdSwitch_Rad_UnresolvedSymbolRefLimit,
   LNK_CmdSwitch_Rad_Version,
-  LNK_CmdSwitch_Rad_Workers,
   LNK_CmdSwitch_Rad_WorkDir,
+  LNK_CmdSwitch_Rad_Workers,
   LNK_CmdSwitch_Rad_WriteTempFiles,
 
   LNK_CmdSwitch_RadTypeServer,
@@ -385,6 +386,7 @@ typedef struct LNK_Config
   LLVM_GHashAlg               type_hash_alg;
   String8                     type_server_name;
   LNK_SwitchState             type_server;
+  LNK_SwitchState             sort_imports;
 } LNK_Config;
 
 // --- MSVC Error Codes --------------------------------------------------------
