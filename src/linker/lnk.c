@@ -2002,8 +2002,8 @@ lnk_link_image(TP_Context *tp, TP_Arena *arena, LNK_Config *config, LNK_Inputer 
   // make imports
   //
   {
-    HashTable   *static_imports_ht  = hash_table_init(scratch.arena, 0x1000);
-    HashTable   *delayed_imports_ht = hash_table_init(scratch.arena, 0x1000);
+    HashMap      static_imports_hm  = {0};
+    HashMap      delayed_imports_hm = {0};
     String8List  delayed_dll_names  = {0};
     String8List  static_dll_names   = {0};
 
@@ -2035,36 +2035,36 @@ lnk_link_image(TP_Context *tp, TP_Arena *arena, LNK_Config *config, LNK_Inputer 
       // find DLL with import symbols
       B32                is_delay_load  = lnk_is_dll_delay_load(config, import_header.dll_name);
       String8List       *dll_names      = is_delay_load ? &delayed_dll_names : &static_dll_names;
-      HashTable         *imports_ht     = is_delay_load ? delayed_imports_ht : static_imports_ht;
-      PE_MakeImportList *import_symbols = hash_table_search_path_raw(imports_ht, import_header.dll_name);
+      HashMap           *imports_hm     = is_delay_load ? &delayed_imports_hm : &static_imports_hm;
+      PE_MakeImportList *import_symbols = hash_map_search_path_raw(imports_hm, import_header.dll_name);
 
       // create record for a first time-DLL
       if (import_symbols == 0) {
         import_symbols = push_array(scratch.arena, PE_MakeImportList, 1);
         str8_list_push(scratch.arena, dll_names, import_header.dll_name);
-        hash_table_push_path_raw(scratch.arena, imports_ht, import_header.dll_name, import_symbols);
+        hash_map_push_path_raw(scratch.arena, imports_hm, import_header.dll_name, import_symbols);
       }
 
       // push make import info
       B32 make_jump_thunk = !!(member_infos[member_idx].flags & LNK_LibMemberFlag_LinkedRegular);
       pe_make_import_header_list_push(scratch.arena, import_symbols, (PE_MakeImport){ .header = member_info.data, .make_jump_thunk = make_jump_thunk });
     }
-    AssertAlways(delayed_dll_names.node_count == delayed_imports_ht->count);
-    AssertAlways(static_dll_names.node_count == static_imports_ht->count);
+    AssertAlways(delayed_dll_names.node_count == delayed_imports_hm.count);
+    AssertAlways(static_dll_names.node_count == static_imports_hm.count);
 
     // make and input delayed imports
-    if (delayed_imports_ht->count) {
+    if (delayed_imports_hm.count) {
       ProfBegin("Build Delay Import Table");
 
       COFF_TimeStamp time_stamp = COFF_TimeStamp_Max;
       B32            emit_biat  = config->import_table_emit_biat == LNK_SwitchState_Yes;
       B32            emit_uiat  = config->import_table_emit_uiat == LNK_SwitchState_Yes;
 
-      for (String8Node *dll_name_n = delayed_dll_names.first; dll_name_n != 0; dll_name_n = dll_name_n->next) {
-        PE_MakeImportList *imports              = hash_table_search_path_raw(delayed_imports_ht, dll_name_n->string);
-        String8            import_debug_symbols = lnk_make_dll_import_debug_symbols(scratch.arena, config->machine, dll_name_n->string);
-        String8            import_obj           = pe_make_import_dll_obj_delayed(arena->v[0], time_stamp, config->machine, dll_name_n->string, config->delay_load_helper_name, import_debug_symbols, *imports, emit_biat, emit_uiat);
-        lnk_inputer_push_obj(inputer, 0, str8f(inputer->arena, "Import:%S", dll_name_n->string), import_obj);
+      for EachNode(name, String8Node, delayed_dll_names.first) {
+        PE_MakeImportList *imports              = hash_map_search_path_raw(&delayed_imports_hm, name->string);
+        String8            import_debug_symbols = lnk_make_dll_import_debug_symbols(scratch.arena, config->machine, name->string);
+        String8            import_obj           = pe_make_import_dll_obj_delayed(arena->v[0], time_stamp, config->machine, name->string, config->delay_load_helper_name, import_debug_symbols, *imports, emit_biat, emit_uiat);
+        lnk_inputer_push_obj(inputer, 0, str8f(inputer->arena, "Import:%S", name->string), import_obj);
       }
 
       String8 linker_debug_symbols = lnk_make_linker_debug_symbols(arena->v[0], config->machine);
@@ -2077,13 +2077,13 @@ lnk_link_image(TP_Context *tp, TP_Arena *arena, LNK_Config *config, LNK_Inputer 
     }
 
     // make and input static imports
-    if (static_imports_ht->count) {
+    if (static_imports_hm.count) {
       ProfBegin("Build Static Import Table");
 
       COFF_TimeStamp time_stamp = COFF_TimeStamp_Max;
 
       for (String8Node *dll_name_n = static_dll_names.first; dll_name_n != 0; dll_name_n = dll_name_n->next) {
-        PE_MakeImportList *imports              = hash_table_search_path_raw(static_imports_ht, dll_name_n->string);
+        PE_MakeImportList *imports              = hash_map_search_path_raw(&static_imports_hm, dll_name_n->string);
         String8            import_debug_symbols = lnk_make_dll_import_debug_symbols(scratch.arena, config->machine, dll_name_n->string);
         String8            import_obj           = pe_make_import_dll_obj_static(arena->v[0], time_stamp, config->machine, dll_name_n->string, import_debug_symbols, *imports);
         lnk_inputer_push_obj(inputer, 0, str8f(inputer->arena, "Import:%S", dll_name_n->string), import_obj);
@@ -2100,9 +2100,9 @@ lnk_link_image(TP_Context *tp, TP_Arena *arena, LNK_Config *config, LNK_Inputer 
     
     // warn about unused delayloads
     if (config->flags & LNK_ConfigFlag_CheckUnusedDelayLoadDll) {
-      for (String8Node *dll_name_n = config->delay_load_dll_list.first; dll_name_n != 0; dll_name_n = dll_name_n->next) {
-        if (!hash_table_search_path_raw(delayed_imports_ht, dll_name_n->string)) {
-          lnk_error(LNK_Warning_UnusedDelayLoadDll, "/DELAYLOAD: %S found no imports", dll_name_n->string);
+      for EachNode(name, String8Node, config->delay_load_dll_list.first) {
+        if (!hash_map_search_path_raw(&delayed_imports_hm, name->string)) {
+          lnk_error(LNK_Warning_UnusedDelayLoadDll, "/DELAYLOAD: found no imports in %S", name->string);
         }
       }
     }
