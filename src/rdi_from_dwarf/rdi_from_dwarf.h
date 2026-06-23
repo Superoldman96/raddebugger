@@ -35,6 +35,7 @@ struct D2R_UniqueTagNode
   U64 hash;
   U64 info_off;
   U64 container_ancestor_info_off;
+  U64 dependency_count;
   U64 order_idx;
 };
 

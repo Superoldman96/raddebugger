@@ -206,7 +206,7 @@ dw_input_from_writer(Arena *arena, DW_Writer *writer)
   PE_BinInfo          pe            = pe_bin_info_from_data(scratch.arena, exe);
   COFF_SectionHeader *section_table = (COFF_SectionHeader *)(exe.str + pe.section_table_range.min);
   String8             string_table  = str8_substr(exe, pe.string_table_range);
-  DW_Raw            input         = dw_input_from_coff_section_table(arena, exe, string_table, pe.section_count, section_table);
+  DW_Raw            input         = dw_raw_from_coff_section_table(arena, exe, string_table, pe.section_count, section_table);
   
   obj_release(&obj);
   scratch_end(scratch);

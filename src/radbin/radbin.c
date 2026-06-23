@@ -824,7 +824,7 @@ rb_thread_entry_point(void *p)
                 String8 string_table = str8_substr(exe_data, pe.string_table_range);
                 convert_params.arch = pe.arch;
                 convert_params.base_vaddr = pe.image_base;
-                convert_params.raw = dw_input_from_coff_section_table(scratch.arena, exe_data, string_table, pe.section_count, section_table);
+                convert_params.raw = dw_raw_from_coff_section_table(arena, exe_data, string_table, pe.section_count, section_table);
                 convert_params.path_style = PathStyle_WindowsAbsolute;
                 convert_params.binary_sections = c2r_rdi_binary_sections_from_coff_sections(arena, exe_data, string_table, pe.section_count, section_table);
                 scratch_end(scratch);
@@ -836,7 +836,7 @@ rb_thread_entry_point(void *p)
                 ELF_Bin bin = elf_bin_from_data(scratch.arena, dbg_data);
                 convert_params.arch = arch_from_elf_machine(bin.hdr.e_machine);
                 convert_params.base_vaddr = elf_base_addr_from_bin(&bin);
-                convert_params.raw = dw_raw_from_elf_bin(scratch.arena, dbg_data, &bin);
+                convert_params.raw = dw_raw_from_elf_bin(arena, dbg_data, &bin);
                 convert_params.path_style = PathStyle_UnixAbsolute;
                 convert_params.binary_sections = e2r_rdi_binary_sections_from_elf_section_table(arena, dbg_data, &bin, &bin.shdrs);
                 scratch_end(scratch);
@@ -1333,7 +1333,7 @@ rb_thread_entry_point(void *p)
         fprintf(stderr, "-------------------------------------------------------------------------------\n\n");
         
         fprintf(stderr, "DWARF Sections:\n");
-#define X(_N, _L, ...) fprintf(stderr, _L "\n");
+#define X(_N, _L, ...) if(DW_SectionKind_##_N != DW_SectionKind_Null) { fprintf(stderr, " - " _L "\n"); }
         DW_SectionKind_XList
 #undef X
         fprintf(stderr, "\n");
@@ -1389,7 +1389,7 @@ rb_thread_entry_point(void *p)
         }
       }
       
-      //- rjf: dump input files in ordere
+      //- rjf: dump input files in order
       for(RB_FileNode *n = input_files.first; n != 0; n = n->next)
       {
         RB_File *f = n->v;
@@ -1403,15 +1403,15 @@ rb_thread_entry_point(void *p)
         lane_sync();
         
         //- rjf: unpack file parses
-        Arch                arch               = Arch_Null;
-        PE_BinInfo          pe                 = {0};
-        ELF_Bin             elf                = {0};
-        COFF_FileHeaderInfo coff_obj           = {0};
-        DW_Raw              dw                 = {0};
-        U64                 eh_frame_hdr_vaddr = 0;
-        U64                 eh_frame_vaddr     = 0;
-        String8             eh_frame_hdr       = {0};
-        String8             eh_frame           = {0};
+        Arch arch = Arch_Null;
+        PE_BinInfo pe = {0};
+        ELF_Bin elf = {0};
+        COFF_FileHeaderInfo coff_obj = {0};
+        DW_Raw dw = {0};
+        U64 eh_frame_hdr_vaddr = 0;
+        U64 eh_frame_vaddr = 0;
+        String8 eh_frame_hdr = {0};
+        String8 eh_frame = {0};
         {
           if(f->format == RB_FileFormat_PE)
           {
@@ -1424,7 +1424,7 @@ rb_thread_entry_point(void *p)
             String8             string_table  = str8_substr(f->data, coff_obj.string_table_range);
             U64                 section_count = coff_obj.section_count_no_null;
             COFF_SectionHeader *section_table = (COFF_SectionHeader *)str8_substr(f->data, coff_obj.section_table_range).str;
-            dw = dw_input_from_coff_section_table(arena, f->data, string_table, section_count, section_table);
+            dw = dw_raw_from_coff_section_table(arena, f->data, string_table, section_count, section_table);
           }
           else if(f->format == RB_FileFormat_ELF32 || f->format == RB_FileFormat_ELF64)
           {
@@ -1454,7 +1454,7 @@ rb_thread_entry_point(void *p)
               U64                 section_count = raw_sections.size / sizeof(COFF_SectionHeader);
               COFF_SectionHeader *section_table = (COFF_SectionHeader *)raw_sections.str;
               String8 string_table = str8_substr(f->data, pe.string_table_range);
-              dw = dw_input_from_coff_section_table(arena, f->data, string_table, section_count, section_table);
+              dw = dw_raw_from_coff_section_table(arena, f->data, string_table, section_count, section_table);
             }
             else if(f->format == RB_FileFormat_ELF32 ||
                     f->format == RB_FileFormat_ELF64)
