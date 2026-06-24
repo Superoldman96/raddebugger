@@ -10,6 +10,13 @@ target:
 }
 target:
 {
+  executable: "build/raddbg.exe"
+  working_directory: "../raddebugger"
+  arguments: "--user:test123"
+  debug_subprocesses: 0
+}
+target:
+{
   executable: "build/mule_main.exe"
   working_directory: build
   output_label: output_a
@@ -18,6 +25,7 @@ target:
 {
   executable: "build/torture.exe"
   working_directory: build
+  arguments: "raddbg/*"
 }
 target:
 {
@@ -32,13 +40,31 @@ target:
 }
 target:
 {
-  executable: "build/ryan_scratch.exe"
-  working_directory: build
-  enabled: 1
+  executable: "build/release_version/raddbg.exe"
+  working_directory: "build/release_version"
 }
 target:
 {
-  executable: "build/raddbg.exe"
-  working_directory: "build/"
-  arguments: "--bin --dump test123.rdi"
+  executable: "build/radbin.exe"
+  working_directory: build
+  arguments: "--rdi fat.so --capture"
+}
+target:
+{
+  executable: "build/radbin.exe"
+  working_directory: build
+  arguments: "--rdi fat.debug --capture"
+}
+target:
+{
+  executable: "build/radbin.exe"
+  working_directory: build
+  arguments: "--rdi raddbg"
+}
+watch_pin: expression: tag_hash_slots
+target:
+{
+  executable: "build/ryan_scratch.exe"
+  working_directory: build
+  enabled: 1
 }

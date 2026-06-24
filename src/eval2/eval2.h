@@ -54,11 +54,13 @@ typedef enum E2_ParseStatus
   
   //- rjf: caller-provided info
   E2_ParseStatus_MissedIdentifierResolution,
+  E2_ParseStatus_NewIdentifierDefinition,
   E2_ParseStatus_MemberAccess,
   E2_ParseStatus_IndexAccess,
   E2_ParseStatus_Call,
+  E2_ParseStatus_CompileTimeEval,
   E2_ParseStatus_FirstCallerRequest = E2_ParseStatus_MissedIdentifierResolution,
-  E2_ParseStatus_LastCallerRequest = E2_ParseStatus_Call,
+  E2_ParseStatus_LastCallerRequest = E2_ParseStatus_CompileTimeEval,
 }
 E2_ParseStatus;
 
@@ -315,6 +317,7 @@ struct E2_Expr
   E2_Expr *first;
   E2_Expr *last;
   E2_Expr *next;
+  U64 child_count;
   Rng1U64 src_range;
   String8 string;
   RDI_EvalOp op;
@@ -356,6 +359,7 @@ struct E2_ParseTask
   U64 child_count_target;
   S64 max_precedence;
   E2_OpKind op_kind;
+  String8 identifier;
   String8 expected_closer;
   String8 expected_splitter;
   B32 splitter_is_required;
@@ -393,7 +397,7 @@ typedef struct E2_Parse E2_Parse;
 struct E2_Parse
 {
   E2_ParseStatus status;
-  String8 missed_identifier;
+  String8 identifier;
   E2_Expr *expr;
   String8 member_name;
   E2_Expr *params_expr;
@@ -566,6 +570,7 @@ internal E2_Expr *e2_expr_binary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalO
 internal E2_Expr *e2_expr_resolve_to_value(Arena *arena, E2_Expr *expr);
 internal E2_Expr *e2_expr_truncate(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key);
 internal E2_Expr *e2_expr_convert_if_possible(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key);
+internal E2_Expr *e2_expr_type(Arena *arena, E2_TypeKey type_key);
 internal void e2_expr_push_child(E2_Expr *parent, E2_Expr *expr);
 
 ////////////////////////////////
@@ -574,7 +579,7 @@ internal void e2_expr_push_child(E2_Expr *parent, E2_Expr *expr);
 internal E2_Token e2_token_from_string_off(String8 string, U64 start_off);
 internal U64 e2_read_token(String8 string, U64 off, E2_Token *token_out);
 internal B32 e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *off_out, E2_Token *token_out);
-internal E2_Parse e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E2_Expr *access_result, String8 string);
+internal E2_Parse e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E2_Expr *access_result, E2_Val compile_time_eval_result, String8 string);
 
 ////////////////////////////////
 //~ rjf: Expression -> Bytecode

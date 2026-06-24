@@ -4,7 +4,7 @@
 //- GENERATED CODE
 
 C_LINKAGE_BEGIN
-E2_OpInfo e2_op_kind_info_table[32] =
+E2_OpInfo e2_op_kind_info_table[34] =
 {
 {0},
 {E2_OpParseKind_Binary, 1, str8_lit_comp(""), str8_lit_comp("."), str8_lit_comp(""), str8_lit_comp("")},
@@ -12,6 +12,8 @@ E2_OpInfo e2_op_kind_info_table[32] =
 {E2_OpParseKind_Call, 1, str8_lit_comp(""), str8_lit_comp("("), str8_lit_comp(")"), str8_lit_comp(",")},
 {E2_OpParseKind_UnaryPrefix, 1, str8_lit_comp("["), str8_lit_comp(""), str8_lit_comp("]"), str8_lit_comp("")},
 {E2_OpParseKind_UnaryPrefix, 1, str8_lit_comp("sizeof "), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
+{E2_OpParseKind_UnaryPrefix, 1, str8_lit_comp("typeof "), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
+{E2_OpParseKind_UnaryPrefix, 1, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_OpParseKind_UnaryPrefix, 2, str8_lit_comp("*"), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_OpParseKind_UnaryPrefix, 2, str8_lit_comp("&"), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_OpParseKind_UnaryPrefix, 2, str8_lit_comp("+"), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},

@@ -14,6 +14,8 @@ E2_OpKind_Index,
 E2_OpKind_Call,
 E2_OpKind_DerefAsm,
 E2_OpKind_SizeOf,
+E2_OpKind_TypeOf,
+E2_OpKind_CCast,
 E2_OpKind_Deref,
 E2_OpKind_Address,
 E2_OpKind_Pos,
@@ -122,7 +124,7 @@ E2_TypeKind_LastMeta        = E2_TypeKind_MetaDescription,
 } E2_TypeKind;
 
 C_LINKAGE_BEGIN
-extern E2_OpInfo e2_op_kind_info_table[32];
+extern E2_OpInfo e2_op_kind_info_table[34];
 extern U8 e2_type_kind_basic_byte_size_table[61];
 extern String8 e2_type_kind_basic_string_table[61];
 

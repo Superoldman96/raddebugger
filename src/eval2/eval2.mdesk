@@ -9,6 +9,8 @@ E2_OpTable:
   {Call     Call          1 ""        "("  ")" ","}
   {DerefAsm UnaryPrefix   1 "["       ""   "]" "" }
   {SizeOf   UnaryPrefix   1 "sizeof " ""   ""  "" }
+  {TypeOf   UnaryPrefix   1 "typeof " ""   ""  "" }
+  {CCast    UnaryPrefix   1 ""        ""   ""  "" }
   {Deref    UnaryPrefix   2 "*"       ""   ""  "" }
   {Address  UnaryPrefix   2 "&"       ""   ""  "" }
   {Pos      UnaryPrefix   2 "+"       ""   ""  "" }
@@ -33,7 +35,7 @@ E2_OpTable:
   {BitOr    Binary       10 ""        "|"  ""  "" }
   {LogAnd   Binary       11 ""        "&&" ""  "" }
   {LogOr    Binary       12 ""        "||" ""  "" }
-  {Define   Binary       13 ""        "="  ""  "" }
+  {Define   Null         13 ""        "="  ""  "" }
   {Cond     Ternary      14 ""        "?"  ""  ":"}
 }
 
