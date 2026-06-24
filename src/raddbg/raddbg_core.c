@@ -10088,7 +10088,7 @@ rd_stop_explanation_fstrs_from_ctrl_event(Arena *arena, D_Event *event)
 //~ rjf: Source File Checksum Calculations
 
 internal AC_Artifact
-rd_md5_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_out)
+rd_md5_artifact_create(String8 key, B32 *cancel_out, AC_Status *status_out, U64 *gen_out)
 {
   AC_Artifact result = {0};
   {
@@ -10105,7 +10105,7 @@ rd_md5_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_ou
 }
 
 internal AC_Artifact
-rd_sha1_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_out)
+rd_sha1_artifact_create(String8 key, B32 *cancel_out, AC_Status *status_out, U64 *gen_out)
 {
   AC_Artifact result = {0};
   {
@@ -10122,7 +10122,7 @@ rd_sha1_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_o
 }
 
 internal AC_Artifact
-rd_sha256_artifact_create(String8 key, B32 *cancel_out, B32 *retry_out, U64 *gen_out)
+rd_sha256_artifact_create(String8 key, B32 *cancel_out, AC_Status *status_out, U64 *gen_out)
 {
   AC_Artifact result = {0};
   {

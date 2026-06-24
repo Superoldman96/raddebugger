@@ -2685,7 +2685,7 @@ struct TXT_ArtifactCreateShared
 };
 
 internal AC_Artifact
-txt_artifact_create(String8 key, B32 *cancel_signal, B32 *retry_out, U64 *gen_out)
+txt_artifact_create(String8 key, B32 *cancel_signal, AC_Status *status_out, U64 *gen_out)
 {
   ProfBeginFunction();
   Temp scratch = scratch_begin(0, 0);

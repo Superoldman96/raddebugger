@@ -4504,7 +4504,7 @@ struct RD_BitmapCanvasBoxDrawData
 };
 
 internal AC_Artifact
-rd_bitmap_artifact_create(String8 key, B32 *cancel_signal, B32 *retry_out, U64 *gen_out)
+rd_bitmap_artifact_create(String8 key, B32 *cancel_signal, AC_Status *status_out, U64 *gen_out)
 {
   Access *access = access_open();
   
@@ -5130,7 +5130,7 @@ struct RD_Geo3DBoxDrawData
 };
 
 internal AC_Artifact
-rd_geo3d_artifact_create(String8 key, B32 *cancel_signal, B32 *retry_out, U64 *gen_out)
+rd_geo3d_artifact_create(String8 key, B32 *cancel_signal, AC_Status *status_out, U64 *gen_out)
 {
   Access *access = access_open();
   U128 hash = {0};
