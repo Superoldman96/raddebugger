@@ -2816,7 +2816,14 @@ d_ctrl_thread__module_close(D_Handle process, D_Handle module, U64 base_vaddr)
         arena_release(node->arena);
         break;
       }
-      cond_var_wait_rw_w(stripe->cv, stripe->rw_mutex, max_U64);
+      if(node)
+      {
+        cond_var_wait_rw_w(stripe->cv, stripe->rw_mutex, max_U64);
+      }
+      else
+      {
+        break;
+      }
     }
   }
   
