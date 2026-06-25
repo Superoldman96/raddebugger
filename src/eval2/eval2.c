@@ -550,6 +550,19 @@ e2_arch_from_type_key(E2_TypeKey k)
   return arch;
 }
 
+//- rjf: type deep matches
+
+internal B32
+e2_type_deep_match(E2_TypeKey l, E2_TypeKey r)
+{
+  B32 result = e2_type_key_match(l, r);
+  if(!result)
+  {
+    // TODO(rjf)
+  }
+  return result;
+}
+
 //- rjf: type graph traversal primitives
 
 internal E2_TypeKey
@@ -1985,13 +1998,54 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
                   //- rjf: pointer-add arithmetic
                   case ArithKind_PtrAdd:
                   {
-                    // TODO(rjf)
+                    // rjf: l/r -> ptr + int
+                    E2_Expr *ptr_expr = lhs;
+                    E2_Expr *int_expr = rhs;
+                    if(e2_type_kind_is_ptr_or_ref(rhs_type_kind))
+                    {
+                      ptr_expr = rhs;
+                      int_expr = lhs;
+                    }
+                    
+                    // rjf: unpack ptee type
+                    E2_TypeKey ptee_type_key = e2_type_key_direct(e2_type_key_undecorate(ptr_expr->type_key));
+                    U64 ptee_byte_size = e2_byte_size_from_type_key(ptee_type_key);
+                    
+                    // rjf: form tree
+                    E2_Expr *base_addr_expr = e2_expr_resolve_to_value(arena, ptr_expr);
+                    E2_Expr *index_expr = e2_expr_resolve_to_value(arena, int_expr);
+                    E2_Expr *offset_expr = index_expr;
+                    if(ptee_byte_size > 1)
+                    {
+                      E2_Expr *size_expr = e2_expr_const_u64_or_smaller(arena, ptee_byte_size);
+                      offset_expr = e2_expr_binary_op(arena, e2_type_key_basic(E2_TypeKind_U64), RDI_EvalOp_Mul, index_expr, size_expr);
+                    }
+                    E2_Expr *addr_value_expr = e2_expr_binary_op(arena, e2_type_key_basic(E2_TypeKind_U64), RDI_EvalOp_Add, base_addr_expr, offset_expr);
+                    addr_value_expr->mode = E2_Mode_Address;
+                    addr_value_expr->type_key = ptr_expr->type_key;
+                    finished_root = addr_value_expr;
                   }break;
                   
                   //- rjf: pointer-sub arithmetic
                   case ArithKind_PtrSub:
                   {
-                    // TODO(rjf)
+                    E2_Expr *lhs_addr_value_expr = e2_expr_resolve_to_value(arena, lhs);
+                    E2_Expr *rhs_addr_value_expr = e2_expr_resolve_to_value(arena, rhs);
+                    E2_Expr *sub_expr = e2_expr_binary_op(arena, e2_type_key_basic(E2_TypeKind_U64), RDI_EvalOp_Sub, lhs_addr_value_expr, rhs_addr_value_expr);
+                    E2_Expr *sub_divided_expr = sub_expr;
+                    E2_TypeKey lhs_ptr_type = e2_type_key_undecorate(lhs->type_key);
+                    E2_TypeKey rhs_ptr_type = e2_type_key_undecorate(rhs->type_key);
+                    E2_TypeKey lhs_ptee_type = e2_type_key_direct(lhs_ptr_type);
+                    E2_TypeKey rhs_ptee_type = e2_type_key_direct(rhs_ptr_type);
+                    if(e2_type_deep_match(lhs_ptee_type, rhs_ptee_type))
+                    {
+                      U64 ptee_byte_size = e2_byte_size_from_type_key(lhs_ptee_type);
+                      if(ptee_byte_size != 0)
+                      {
+                        sub_divided_expr = e2_expr_binary_op(arena, e2_type_key_basic(E2_TypeKind_U64), RDI_EvalOp_Div, sub_expr, e2_expr_const_u64_or_smaller(arena, ptee_byte_size));
+                      }
+                    }
+                    finished_root = sub_divided_expr;
                   }break;
                   
                   //- rjf: pointer-array comparisons
@@ -2003,7 +2057,24 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
                   //- rjf: type comparisons
                   case ArithKind_TypeCompare:
                   {
-                    // TODO(rjf)
+                    if(completed_task->op_kind == E2_OpKind_EqEq ||
+                       completed_task->op_kind == E2_OpKind_NtEq)
+                    {
+                      E2_TypeKey lhs_type_key = e2_type_key_unwrap(lhs->type_key, E2_TypeUnwrapFlag_Meta);
+                      E2_TypeKey rhs_type_key = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_Meta);
+                      B32 types_match = e2_type_deep_match(lhs_type_key, rhs_type_key);
+                      B32 result = types_match;
+                      if(completed_task->op_kind == E2_OpKind_NtEq)
+                      {
+                        result = !result;
+                      }
+                      finished_root = e2_expr_const_u64_or_smaller(arena, (U64)result);
+                      finished_root->type_key = e2_type_key_basic(E2_TypeKind_Bool);
+                    }
+                    else
+                    {
+                      e2_msgf(arena, &parse.msgs, completed_task->src_range, "Cannot use `%S` on types.", str8_skip_chop_whitespace(e2_op_kind_info_table[completed_task->op_kind].sep));
+                    }
                   }break;
                 }
               }break;

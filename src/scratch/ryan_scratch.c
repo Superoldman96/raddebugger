@@ -41,6 +41,7 @@ entry_point(CmdLine *cmdline)
     // (A)
     // int & B
     // (1 + (int)&B)
+    s("int32 == int32"),
     s("foo = 123"),
     s("1 > 2"),
     s("1 ? \"Test\" : 888"),
