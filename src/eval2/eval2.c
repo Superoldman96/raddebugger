@@ -432,7 +432,14 @@ e2_byte_size_from_type_key(E2_TypeKey k)
     }break;
     case E2_TypeKeyKind_Reg:
     {
-      // TODO(rjf)
+      Arch arch = (Arch)k.u32[0];
+      ARCH_Info *arch_info = arch_info_from_arch(arch);
+      ARCH_RegCode regcode = k.u32[1];
+      if(regcode < arch_info->reg_code_count)
+      {
+        Rng1U16 regrng = arch_info->reg_code_rng_table[regcode];
+        result = (U64)dim_1u16(regrng);
+      }
     }break;
   }
   return result;
@@ -485,10 +492,7 @@ e2_shift_from_type_key(E2_TypeKey k)
         RDI_TypeNode *type_node = rdi_element_from_name_idx(dbgi->rdi, TypeNodes, dbgi_type_idx);
         result = type_node->bitfield.off;
       }break;
-      case E2_TypeKeyKind_Cons:
-      {
-        // TODO(rjf)
-      }break;
+      case E2_TypeKeyKind_Cons:{}break;
       case E2_TypeKeyKind_Reg:{}break;
     }
   }
@@ -512,10 +516,7 @@ e2_mask_count_from_type_key(E2_TypeKey k)
         RDI_TypeNode *type_node = rdi_element_from_name_idx(dbgi->rdi, TypeNodes, dbgi_type_idx);
         result = type_node->bitfield.size;
       }break;
-      case E2_TypeKeyKind_Cons:
-      {
-        // TODO(rjf)
-      }break;
+      case E2_TypeKeyKind_Cons:{}break;
       case E2_TypeKeyKind_Reg:{}break;
     }
   }
@@ -543,7 +544,7 @@ e2_arch_from_type_key(E2_TypeKey k)
     }break;
     case E2_TypeKeyKind_Reg:
     {
-      arch = k.u32[0];
+      arch = (Arch)k.u32[0];
     }break;
   }
   return arch;
@@ -608,10 +609,7 @@ e2_type_key_owner(E2_TypeKey k)
         U32 owner_type_idx = type_node->constructed.owner_type_idx;
         result = e2_type_key_dbgi(e2_type_kind_from_rdi(type_node->kind), dbgi_num, owner_type_idx);
       }break;
-      case E2_TypeKeyKind_Cons:
-      {
-        // TODO(rjf)
-      }break;
+      case E2_TypeKeyKind_Cons:{}break;
       case E2_TypeKeyKind_Reg:{}break;
     }
   }
@@ -1700,10 +1698,15 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
                   }
                   else
                   {
+                    E2_Expr *params_expr = e2_expr(arena);
+                    for(E2_ExprNode *n = completed_task->first_child->next; n != 0; n = n->next)
+                    {
+                      e2_expr_push_child(params_expr, n->v);
+                    }
                     done = 1;
                     parse.status = E2_ParseStatus_Call;
                     parse.expr = lhs;
-                    parse.params_expr = rhs;
+                    parse.params_expr = params_expr;
                     state->caller_info_completes_task = 1;
                   }
                 }
@@ -2201,6 +2204,10 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
       else if(t->child_count == 2 && t->child_count_target == 2 && t->op_kind == E2_OpKind_Index)
       {
         e2_msgf(arena, &parse.msgs, t->src_range, "Couldn't index into this type.");
+      }
+      else if(t->child_count >= 1 && t->op_kind == E2_OpKind_Call)
+      {
+        e2_msgf(arena, &parse.msgs, t->src_range, "Couldn't call into this type.");
       }
       else if(t->child_count == 1 && t->child_count_target == 2 && t->op_kind != E2_OpKind_Null)
       {

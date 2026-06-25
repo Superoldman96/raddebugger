@@ -135,67 +135,35 @@ struct E2_TypeKeyList
 };
 
 ////////////////////////////////
-//~ rjf: Unpacked Type Info
+//~ rjf: Constructed Type Cache Types
 
-typedef enum E2_MemberKind
+typedef struct E2_ConsTypeParams E2_ConsTypeParams;
+struct E2_ConsTypeParams
 {
-  E2_MemberKind_Null,
-  E2_MemberKind_DataField,
-  E2_MemberKind_StaticData,
-  E2_MemberKind_Method,
-  E2_MemberKind_StaticMethod,
-  E2_MemberKind_VirtualMethod,
-  E2_MemberKind_VTablePtr,
-  E2_MemberKind_Base,
-  E2_MemberKind_VirtualBase,
-  E2_MemberKind_NestedType,
-  E2_MemberKind_Padding,
-  E2_MemberKind_COUNT
-}
-E2_MemberKind;
-
-typedef U32 E2_TypeFlags;
-enum
-{
-  E2_TypeFlag_Const    = (1<<0),
-  E2_TypeFlag_Volatile = (1<<1),
-  E2_TypeFlag_Restrict = (1<<2),
-};
-
-typedef struct E2_EnumVal E2_EnumVal;
-struct E2_EnumVal
-{
-  String8 name;
-  U64 val;
-};
-
-typedef struct E2_Member E2_Member;
-struct E2_Member
-{
-  E2_MemberKind kind;
-  E2_TypeKey type_key;
-  String8 name;
-  U64 off;
-  E2_TypeKeyList inheritees;
-};
-
-typedef struct E2_Type E2_Type;
-struct E2_Type
-{
+  Arch arch;
   E2_TypeKind kind;
-  E2_TypeFlags flags;
   String8 name;
-  U64 byte_size;
+  E2_TypeKey direct;
   U64 count;
   U64 depth;
-  U32 off;
-  Arch arch;
-  E2_TypeKey direct_type_key;
-  E2_TypeKey owner_type_key;
-  E2_TypeKey *param_type_keys;
-  E2_Member *members;
-  E2_EnumVal *enum_vals;
   struct E2_Expr **args;
+};
+
+typedef struct E2_ConsTypeNode E2_ConsTypeNode;
+struct E2_ConsTypeNode
+{
+  E2_ConsTypeNode *key_next;
+  E2_ConsTypeNode *content_next;
+  E2_TypeKey key;
+  E2_ConsTypeParams params;
+  U64 byte_size;
+};
+
+typedef struct E2_ConsTypeSlot E2_ConsTypeSlot;
+struct E2_ConsTypeSlot
+{
+  E2_ConsTypeNode *first;
+  E2_ConsTypeNode *last;
 };
 
 ////////////////////////////////
@@ -502,24 +470,12 @@ internal E2_TypeKey e2_type_key_dbgi(E2_TypeKind kind, U32 dbg_info_num, U32 typ
 internal E2_TypeKey e2_type_key_reg(Arch arch, ARCH_RegCode reg_code);
 
 //- rjf: constructed type constructor
-typedef struct E2_ConsTypeParams E2_ConsTypeParams;
-struct E2_ConsTypeParams
-{
-  Arch arch;
-  E2_TypeKind kind;
-  E2_TypeFlags flags;
-  String8 name;
-  E2_TypeKey direct_type_key;
-  U64 count;
-  U64 depth;
-  E2_Expr **args;
-};
 internal E2_TypeKey e2_type_key_cons_(E2_ConsTypeParams *params);
 #define e2_type_key_cons(k, ...) e2_type_key_cons_(&(E2_ConsTypeParams){.kind = (k), __VA_ARGS__})
 
 //- rjf: constructed type constructor helpers
-#define e2_type_key_cons_array(element_type_key, count_, ...) e2_type_key_cons(E2_TypeKind_Array, .direct_type_key = (element_type_key), .count = (count_), __VA_ARGS__)
-#define e2_type_key_cons_ptr(arch, ptee_type_key, ...) e2_type_key_cons(E2_TypeKind_Ptr, .direct_type_key = (ptee_type_key), __VA_ARGS__)
+#define e2_type_key_cons_array(element_type_key, count_, ...) e2_type_key_cons(E2_TypeKind_Array, .direct = (element_type_key), .count = (count_), __VA_ARGS__)
+#define e2_type_key_cons_ptr(arch, ptee_type_key, ...) e2_type_key_cons(E2_TypeKind_Ptr, .direct = (ptee_type_key), __VA_ARGS__)
 
 //- rjf: basic type key type functions
 internal B32 e2_type_key_match(E2_TypeKey a, E2_TypeKey b);
