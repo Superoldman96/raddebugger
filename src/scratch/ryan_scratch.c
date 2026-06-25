@@ -34,6 +34,8 @@
 internal void
 entry_point(CmdLine *cmdline)
 {
+  E2_ConsTypeMap *cons_types = e2_cons_type_map_alloc();
+  e2_select_cons_type_map(cons_types);
   String8 strings[] =
   {
     // (A)B
@@ -44,6 +46,7 @@ entry_point(CmdLine *cmdline)
     s("123, 456"),
     s("int32 == int32"),
     s("foo = 123"),
+    s("bar(a, b) = a + b"),
     s("1 > 2"),
     s("1 ? \"Test\" : 888"),
     s("'a'"),

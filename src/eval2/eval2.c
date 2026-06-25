@@ -164,6 +164,153 @@ e2_dbgi_from_num(U32 num)
 }
 
 ////////////////////////////////
+//~ rjf: Constructed Types
+
+internal E2_ConsTypeMap *
+e2_cons_type_map_alloc(void)
+{
+  Arena *arena = arena_alloc();
+  E2_ConsTypeMap *map = push_array(arena, E2_ConsTypeMap, 1);
+  map->arena = arena;
+  map->table_start_arena_pos = arena_pos(arena);
+  return map;
+}
+
+internal void
+e2_select_cons_type_map(E2_ConsTypeMap *map)
+{
+  arena_pop_to(map->arena, map->table_start_arena_pos);
+  map->slots_count = 256;
+  map->content_slots = push_array(map->arena, E2_ConsTypeSlot, map->slots_count);
+  map->id_slots = push_array(map->arena, E2_ConsTypeSlot, map->slots_count);
+  e2_cons_type_map = map;
+}
+
+internal B32
+e2_cons_type_params_match(E2_ConsTypeParams *a, E2_ConsTypeParams *b)
+{
+  B32 result = (a->arch == b->arch &&
+                a->kind == b->kind &&
+                str8_match(a->name, b->name, 0) &&
+                e2_type_key_match(a->direct, b->direct) &&
+                a->count == b->count &&
+                a->depth == b->depth &&
+                a->args == 0 && b->args == 0);
+  return result;
+}
+
+internal E2_ConsTypeNode *
+e2_cons_type_node_from_params(E2_ConsTypeParams *params)
+{
+  E2_ConsTypeMap *map = e2_cons_type_map;
+  
+  // rjf: params -> hash
+  U64 hash = 0;
+  {
+    hash = u64_hash_from_seed_str8(hash, str8_struct(&params->arch));
+    hash = u64_hash_from_seed_str8(hash, str8_struct(&params->kind));
+    hash = u64_hash_from_seed_str8(hash, str8_struct(&params->name));
+    hash = u64_hash_from_seed_str8(hash, str8_struct(&params->direct));
+    hash = u64_hash_from_seed_str8(hash, str8_struct(&params->count));
+    hash = u64_hash_from_seed_str8(hash, str8_struct(&params->depth));
+  }
+  
+  // rjf: hash -> content slot
+  U64 content_slot_idx = hash%map->slots_count;
+  E2_ConsTypeSlot *content_slot = &map->content_slots[content_slot_idx];
+  
+  // rjf: parameters -> existing node
+  E2_ConsTypeNode *node = 0;
+  for(E2_ConsTypeNode *n = content_slot->first; n != 0; n = n->content_next)
+  {
+    if(e2_cons_type_params_match(&n->params, params))
+    {
+      node = n;
+      break;
+    }
+  }
+  
+  // rjf: if node wasn't found -> push into the map
+  if(node == 0)
+  {
+    // rjf: form node ID
+    map->id_gen += 1;
+    U64 id = map->id_gen;
+    
+    // rjf: build the node
+    node = push_array(map->arena, E2_ConsTypeNode, 1);
+    SLLQueuePush_N(content_slot->first, content_slot->last, node, content_next);
+    node->id = id;
+    MemoryCopyStruct(&node->params, params);
+    node->params.name = str8_copy(map->arena, node->params.name);
+    // TODO(rjf): double check once we're doing type expression
+    // arguments that we don't need a deep copy of the args here.
+    switch(node->params.kind)
+    {
+      default:
+      {
+        node->byte_size = e2_byte_size_from_type_key(node->params.direct);
+      }break;
+      case E2_TypeKind_Ptr:
+      case E2_TypeKind_Function:
+      case E2_TypeKind_Method:
+      case E2_TypeKind_MemberPtr:
+      case E2_TypeKind_RRef:
+      case E2_TypeKind_LRef:
+      {
+        node->byte_size = byte_size_from_arch(node->params.arch);
+      }break;
+      case E2_TypeKind_Array:
+      {
+        node->byte_size = node->params.count * e2_byte_size_from_type_key(node->params.direct);
+      }break;
+    }
+    
+    // rjf: insert node into the ID slots
+    {
+      U64 id_hash = u64_hash_from_str8(str8_struct(&id));
+      U64 id_slot_idx = id_hash%map->slots_count;
+      E2_ConsTypeSlot *id_slot = &map->id_slots[id_slot_idx];
+      SLLQueuePush_N(id_slot->first, id_slot->last, node, id_next);
+    }
+  }
+  
+  return node;
+}
+
+internal E2_ConsTypeNode *
+e2_cons_type_node_from_id(U64 id)
+{
+  E2_ConsTypeMap *map = e2_cons_type_map;
+  U64 id_hash = u64_hash_from_str8(str8_struct(&id));
+  U64 id_slot_idx = id_hash%map->slots_count;
+  E2_ConsTypeSlot *id_slot = &map->id_slots[id_slot_idx];
+  E2_ConsTypeNode *node = &e2_cons_type_node_nil;
+  for(E2_ConsTypeNode *n = id_slot->first; n != 0; n = n->id_next)
+  {
+    if(n->id == id)
+    {
+      node = n;
+      break;
+    }
+  }
+  return node;
+}
+
+internal E2_TypeKey
+e2_type_key_from_cons_type_node(E2_ConsTypeNode *node)
+{
+  E2_TypeKey key =
+  {
+    .kind = E2_TypeKeyKind_Cons,
+    .u32[0] = node->params.kind,
+    .u32[1] = (U32)((node->id&0xffffffff00000000ull) >> 32),
+    .u32[2] = node->id&0xffffffffull,
+  };
+  return key;
+}
+
+////////////////////////////////
 //~ rjf: Type Keys
 
 //- rjf: RDI -> eval enum conversions
@@ -371,8 +518,8 @@ e2_type_key_reg(Arch arch, ARCH_RegCode reg_code)
 internal E2_TypeKey
 e2_type_key_cons_(E2_ConsTypeParams *params)
 {
-  E2_TypeKey result = {E2_TypeKeyKind_Null};
-  // TODO(rjf)
+  E2_ConsTypeNode *node = e2_cons_type_node_from_params(params);
+  E2_TypeKey result = e2_type_key_from_cons_type_node(node);
   return result;
 }
 
@@ -428,7 +575,9 @@ e2_byte_size_from_type_key(E2_TypeKey k)
     }break;
     case E2_TypeKeyKind_Cons:
     {
-      // TODO(rjf)
+      U64 id = e2_cons_type_id_from_key(k);
+      E2_ConsTypeNode *node = e2_cons_type_node_from_id(id);
+      result = node->byte_size;
     }break;
     case E2_TypeKeyKind_Reg:
     {
@@ -471,6 +620,17 @@ e2_dbgi_type_idx_from_key(E2_TypeKey k)
   if(k.kind == E2_TypeKeyKind_DbgInfo)
   {
     result = k.u32[2];
+  }
+  return result;
+}
+
+internal U64
+e2_cons_type_id_from_key(E2_TypeKey k)
+{
+  U64 result = 0;
+  if(k.kind == E2_TypeKeyKind_Cons)
+  {
+    result = ((U64)k.u32[1] << 32) | k.u32[2];
   }
   return result;
 }
@@ -540,7 +700,9 @@ e2_arch_from_type_key(E2_TypeKey k)
     }break;
     case E2_TypeKeyKind_Cons:
     {
-      // TODO(rjf)
+      U64 id = e2_cons_type_id_from_key(k);
+      E2_ConsTypeNode *node = e2_cons_type_node_from_id(id);
+      arch = node->params.arch;
     }break;
     case E2_TypeKeyKind_Reg:
     {
@@ -558,7 +720,104 @@ e2_type_deep_match(E2_TypeKey l, E2_TypeKey r)
   B32 result = e2_type_key_match(l, r);
   if(!result)
   {
-    // TODO(rjf)
+    Temp scratch = scratch_begin(0, 0);
+    typedef struct Task Task;
+    struct Task
+    {
+      Task *next;
+      E2_TypeKey k;
+      U64 member_num;
+    };
+    Task *free_task = 0;
+    Task l_start_task = {0, l};
+    Task r_start_task = {0, r};
+    Task *l_top = &l_start_task;
+    Task *r_top = &r_start_task;
+    U64 l_hash = 0;
+    U64 r_hash = 0;
+    result = 1;
+    for(;l_top != 0 || r_top != 0;)
+    {
+      // rjf: mismatched task structures -> immediately mark as a non-match & break
+      if((l_top && !r_top) || (!l_top && r_top))
+      {
+        result = 0;
+        break;
+      }
+      
+      // rjf: mismatched hashes -> immediately mark as a non-match & break
+      if(l_hash != r_hash)
+      {
+        result = 0;
+        break;
+      }
+      
+      // rjf: do next step of hash
+      Task **task_tops[] = {&l_top, &r_top};
+      E2_TypeKey keys[] = {l_top->k, r_top->k};
+      U64 *hash_ptrs[] = {&l_hash, &r_hash};
+      for EachElement(key_idx, keys)
+      {
+        Task *top = task_tops[key_idx][0];
+        E2_TypeKey key = keys[key_idx];
+        E2_TypeKind kind = e2_type_kind_from_key(key);
+        
+        // rjf: have not advanced to members -> mix in kind / byte size
+        if(top->member_num == 0)
+        {
+          U64 byte_size = e2_byte_size_from_type_key(key);
+          hash_ptrs[key_idx][0] = u64_hash_from_seed_str8(hash_ptrs[key_idx][0], str8_struct(&kind));
+          hash_ptrs[key_idx][0] = u64_hash_from_seed_str8(hash_ptrs[key_idx][0], str8_struct(&byte_size));
+        }
+        
+        // rjf: advance to next member
+        B32 has_next_member = 0;
+        if(kind == E2_TypeKind_Struct ||
+           kind == E2_TypeKind_Union ||
+           kind == E2_TypeKind_Class ||
+           kind == E2_TypeKind_Enum)
+        {
+          U32 dbgi_num = e2_dbgi_num_from_type_key(key);
+          U32 type_idx = e2_dbgi_type_idx_from_key(key);
+          E2_DbgInfo *dbgi = e2_dbgi_from_num(dbgi_num);
+          RDI_TypeNode *type_node = rdi_element_from_name_idx(dbgi->rdi, TypeNodes, type_idx);
+          String8 name = str8_from_rdi_string_idx(dbgi->rdi, type_node->user_defined.name_string_idx);
+          hash_ptrs[key_idx][0] = u64_hash_from_seed_str8(hash_ptrs[key_idx][0], name);
+          RDI_UDT *udt = rdi_element_from_name_idx(dbgi->rdi, UDTs, type_node->user_defined.udt_idx);
+          U64 next_member_num = top->member_num + 1;
+          if(next_member_num <= udt->member_count)
+          {
+            has_next_member = 1;
+            RDI_Member *member = rdi_element_from_name_idx(dbgi->rdi, Members, next_member_num-1);
+            RDI_TypeNode *member_type_node = rdi_element_from_name_idx(dbgi->rdi, TypeNodes, member->type_idx);
+            String8 member_name = str8_from_rdi_string_idx(dbgi->rdi, member->name_string_idx);
+            hash_ptrs[key_idx][0] = u64_hash_from_seed_str8(hash_ptrs[key_idx][0], str8_struct(&member->off));
+            hash_ptrs[key_idx][0] = u64_hash_from_seed_str8(hash_ptrs[key_idx][0], member_name);
+            Task *member_task = free_task;
+            if(member_task != 0)
+            {
+              SLLStackPop(free_task);
+            }
+            else
+            {
+              member_task = push_array_no_zero(scratch.arena, Task, 1);
+            }
+            MemoryZeroStruct(&member_task);
+            member_task->k = e2_type_key_dbgi(e2_type_kind_from_rdi(member_type_node->kind), dbgi_num, member->type_idx);
+            SLLStackPush(task_tops[key_idx][0], member_task);
+          }
+        }
+        
+        // rjf: if we don't have a subsequent member, pop this task
+        if(!has_next_member)
+        {
+          Task *popped = task_tops[key_idx][0];
+          SLLStackPop(task_tops[key_idx][0]);
+          SLLStackPush(free_task, popped);
+        }
+      }
+    }
+    scratch_end(scratch);
   }
   return result;
 }
@@ -596,7 +855,9 @@ e2_type_key_direct(E2_TypeKey k)
     }break;
     case E2_TypeKeyKind_Cons:
     {
-      // TODO(rjf)
+      U64 id = e2_cons_type_id_from_key(k);
+      E2_ConsTypeNode *node = e2_cons_type_node_from_id(id);
+      result = node->params.direct;
     }break;
     case E2_TypeKeyKind_Reg:{}break;
   }
@@ -953,6 +1214,235 @@ e2_expr_push_child(Arena *arena, E2_Expr *parent, E2_Expr *expr)
   E2_ExprNode *n = push_array(arena, E2_ExprNode, 1);
   n->v = expr;
   e2_expr_push_child_node(parent, n);
+}
+
+////////////////////////////////
+//~ rjf: Expression Constructors
+
+internal E2_IRNode *
+e2_irnode(Arena *arena)
+{
+  E2_IRNode *expr = push_array(arena, E2_IRNode, 1);
+  MemoryCopyStruct(expr, &e2_irnode_nil);
+  return expr;
+}
+
+internal E2_IRNode *
+e2_irnode_const_u64_or_smaller(Arena *arena, U64 u)
+{
+  E2_IRNode *e = e2_irnode(arena);
+  {
+    e->mode = E2_Mode_Value;
+    e->val.u64 = u;
+    if(u <= 0x7fffffff)
+    {
+      e->op = RDI_EvalOp_ConstU32;
+      e->type_key = e2_type_key_basic(E2_TypeKind_S32);
+    }
+    else if(u <= 0xffffffff)
+    {
+      e->op = RDI_EvalOp_ConstU32;
+      e->type_key = e2_type_key_basic(E2_TypeKind_U32);
+    }
+    else if(u <= 0x7fffffffffffffffull)
+    {
+      e->op = RDI_EvalOp_ConstU64;
+      e->type_key = e2_type_key_basic(E2_TypeKind_S64);
+    }
+    else if(u <= 0xffffffffffffffffull)
+    {
+      e->op = RDI_EvalOp_ConstU64;
+      e->type_key = e2_type_key_basic(E2_TypeKind_U64);
+    }
+  }
+  return e;
+}
+
+internal E2_IRNode *
+e2_irnode_const_f32(Arena *arena, F32 f32)
+{
+  E2_IRNode *e = e2_irnode(arena);
+  e->mode = E2_Mode_Value;
+  e->val.f32 = f32;
+  e->op = RDI_EvalOp_ConstU32;
+  e->type_key = e2_type_key_basic(E2_TypeKind_F32);
+  return e;
+}
+
+internal E2_IRNode *
+e2_irnode_const_f64(Arena *arena, F64 f64)
+{
+  E2_IRNode *e = e2_irnode(arena);
+  e->mode = E2_Mode_Value;
+  e->val.f64 = f64;
+  e->op = RDI_EvalOp_ConstU64;
+  e->type_key = e2_type_key_basic(E2_TypeKind_F64);
+  return e;
+}
+
+internal E2_IRNode *
+e2_irnode_unary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_IRNode *operand)
+{
+  E2_IRNode *e = e2_irnode(arena);
+  e->type_key = type_key;
+  e->op = op;
+  e->mode = E2_Mode_Value;
+  e->val.u512.u8[0] = e2_type_group_from_kind(e2_type_kind_from_key(type_key));
+  e->val.u512.u8[1] = 8*e2_byte_size_from_type_key(type_key);
+  e2_irnode_push_child(arena, e, operand);
+  return e;
+}
+
+internal E2_IRNode *
+e2_irnode_binary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_IRNode *lhs, E2_IRNode *rhs)
+{
+  E2_IRNode *e = e2_irnode(arena);
+  E2_TypeKey arith_type_key = type_key;
+  if(RDI_EvalOp_FirstLogical <= op && op <= RDI_EvalOp_LastLogical)
+  {
+    arith_type_key = lhs->type_key;
+  }
+  e->type_key = type_key;
+  e->op = op;
+  e->mode = E2_Mode_Value;
+  e->val.u512.u8[0] = e2_type_group_from_kind(e2_type_kind_from_key(arith_type_key));
+  e->val.u512.u8[1] = 8*e2_byte_size_from_type_key(arith_type_key);
+  e2_irnode_push_child(arena, e, lhs);
+  e2_irnode_push_child(arena, e, rhs);
+  return e;
+}
+
+internal E2_IRNode *
+e2_irnode_resolve_to_value(Arena *arena, E2_IRNode *expr)
+{
+  E2_IRNode *result = expr;
+  
+  // rjf: address evaluations of arrays -> create value of pointer to first element
+  if(expr->mode == E2_Mode_Address && e2_type_kind_from_key(e2_type_key_undecorate(expr->type_key)) == E2_TypeKind_Array)
+  {
+    result = e2_irnode(arena);
+    result->type_key = e2_type_key_direct(e2_type_key_undecorate(expr->type_key));
+    result->mode = E2_Mode_Value;
+    e2_irnode_push_child(arena, result, expr);
+  }
+  
+  // rjf: address evaluations -> read value from space
+  else if(expr->mode == E2_Mode_Address)
+  {
+    U64 memread_byte_size = e2_byte_size_from_type_key(expr->type_key);
+    memread_byte_size = Min(64, memread_byte_size);
+    E2_IRNode *memread_expr = e2_irnode(arena);
+    memread_expr->op = RDI_EvalOp_MemRead;
+    memread_expr->mode = E2_Mode_Value;
+    memread_expr->type_key = expr->type_key;
+    memread_expr->val.u64 = memread_byte_size;
+    e2_irnode_push_child(arena, memread_expr, expr);
+    result = memread_expr;
+  }
+  
+  // rjf: bitfields -> shift & mask
+  E2_TypeKey core_type_key = e2_type_key_undecorate(expr->type_key);
+  if(e2_type_kind_from_key(core_type_key) == E2_TypeKind_Bitfield)
+  {
+    // rjf: unpack bitfield params
+    U64 shift = e2_shift_from_type_key(result->type_key);
+    U64 mask_count = e2_mask_count_from_type_key(result->type_key);
+    U64 valid_bits_mask = 0;
+    for EachIndex(idx, mask_count)
+    {
+      valid_bits_mask |= (1ull<<idx);
+    }
+    
+    // rjf: mask(shift(expr, count), bitmask)
+    E2_IRNode *shift_expr = e2_irnode_binary_op(arena, e2_type_key_basic(E2_TypeKind_U64), RDI_EvalOp_RShift, result, e2_irnode_const_u64_or_smaller(arena, shift));
+    E2_IRNode *mask_expr = e2_irnode_binary_op(arena, e2_type_key_direct(core_type_key), RDI_EvalOp_BitAnd, shift_expr, e2_irnode_const_u64_or_smaller(arena, valid_bits_mask));
+    result = mask_expr;
+  }
+  
+  return result;
+}
+
+internal E2_IRNode *
+e2_irnode_truncate(Arena *arena, E2_IRNode *expr, E2_TypeKey dst_type_key)
+{
+  E2_IRNode *result = expr;
+  E2_TypeKind dst_type_kind = e2_type_kind_from_key(dst_type_key);
+  U64 dst_type_byte_size = e2_byte_size_from_type_key(dst_type_key);
+  B32 dst_type_is_signed = e2_type_kind_is_signed(dst_type_kind);
+  if(dst_type_byte_size < 64)
+  {
+    result = e2_irnode(arena);
+    result->type_key = dst_type_key;
+    result->op = dst_type_is_signed ? RDI_EvalOp_TruncSigned : RDI_EvalOp_Trunc;
+    result->val.u64 = dst_type_byte_size*8;
+    e2_irnode_push_child(arena, result, expr);
+  }
+  return result;
+}
+
+internal E2_IRNode *
+e2_irnode_convert_if_possible(Arena *arena, E2_IRNode *expr, E2_TypeKey dst_type_key)
+{
+  E2_IRNode *result = expr;
+  {
+    // rjf: unpack src / dst types
+    E2_TypeKey src_type_key = expr->type_key;
+    E2_TypeKind src_type_kind = e2_type_kind_from_key(src_type_key);
+    E2_TypeKind dst_type_kind = e2_type_kind_from_key(dst_type_key);
+    RDI_EvalTypeGroup src_type_group = e2_type_group_from_kind(src_type_kind);
+    RDI_EvalTypeGroup dst_type_group = e2_type_group_from_kind(dst_type_kind);
+    U64 src_byte_size = e2_byte_size_from_type_key(src_type_key);
+    U64 dst_byte_size = e2_byte_size_from_type_key(dst_type_key);
+    
+    // rjf: convert from src -> dst
+    RDI_EvalConversionKind conversion_kind = rdi_eval_conversion_kind_from_typegroups(src_type_group, dst_type_group);
+    if(conversion_kind == RDI_EvalConversionKind_Legal)
+    {
+      result = e2_irnode(arena);
+      result->mode     = E2_Mode_Value;
+      result->type_key = dst_type_key;
+      result->op       = RDI_EvalOp_Convert;
+      result->val.u64  = src_type_group | (dst_type_group << 8);
+      e2_irnode_push_child(arena, result, expr);
+    }
+    
+    // rjf: no-op from src -> dst
+    if(conversion_kind == RDI_EvalConversionKind_Noop)
+    {
+      result->type_key = dst_type_key;
+    }
+    
+    // rjf: if shrinking integer sizes, truncate
+    if(dst_byte_size < src_byte_size && e2_type_kind_is_integer(dst_type_kind))
+    {
+      result = e2_irnode_truncate(arena, expr, dst_type_key);
+    }
+  }
+  return result;
+}
+
+internal E2_IRNode *
+e2_irnode_type(Arena *arena, E2_TypeKey type_key)
+{
+  E2_IRNode *expr = e2_irnode(arena);
+  expr->type_key = type_key;
+  expr->mode = E2_Mode_Type;
+  return expr;
+}
+
+internal void
+e2_irnode_push_child_node(E2_IRNode *parent, E2_IRNodePtrNode *node)
+{
+  SLLQueuePush(parent->first_child, parent->last_child, node);
+  parent->child_count += 1;
+}
+
+internal void
+e2_irnode_push_child(Arena *arena, E2_IRNode *parent, E2_IRNode *expr)
+{
+  E2_IRNodePtrNode *n = push_array(arena, E2_IRNodePtrNode, 1);
+  n->v = expr;
+  e2_irnode_push_child_node(parent, n);
 }
 
 ////////////////////////////////
@@ -1319,9 +1809,29 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
     {
       String8 identifier = str8_substr(string, token.range);
       B32 identifier_mapped = 0;
+      B32 definitions_are_allowed = (state->top_task == 0 || state->top_task->op_kind != E2_OpKind_Macro);
+      
+      // rjf: if we're currently parsing a macro definition, then we first want to try
+      // resolving identifiers as macro arguments
+      if(!identifier_mapped && state->top_task != 0 && state->top_task->op_kind == E2_OpKind_Macro)
+      {
+        U64 arg_num = 1;
+        for(String8Node *n = state->top_task->macro_arg_names.first; n != 0; n = n->next, arg_num += 1)
+        {
+          if(str8_match(n->string, identifier, 0))
+          {
+            identifier_mapped = 1;
+            expr = e2_expr(arena);
+            expr->op = E2_EvalOp_LeafMacroArgument;
+            expr->val.u64 = arg_num;
+            expr->mode = E2_Mode_Value;
+            break;
+          }
+        }
+      }
       
       // rjf: first try to resolve as a definition
-      if(!identifier_mapped && e2_try_token(string, E2_TokenKind_Symbol, s("="), &off, 0))
+      if(definitions_are_allowed && !identifier_mapped && e2_try_token(string, E2_TokenKind_Symbol, s("="), &off, 0))
       {
         identifier_mapped = 1;
         E2_ParseTask *task = state->free_task;
@@ -1340,6 +1850,74 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
         task->max_precedence = e2_op_kind_info_table[E2_OpKind_Define].precedence;
         task->identifier = identifier;
         SLLStackPush(state->top_task, task);
+      }
+      
+      // rjf: try to resolve it as a macro definition
+      if(definitions_are_allowed && !identifier_mapped)
+      {
+        U64 macro_off = off;
+        if(e2_try_token(string, E2_TokenKind_Symbol, s("("), &macro_off, 0))
+        {
+          U64 post_macro_paren_off = macro_off;
+          B32 looks_like_macro_def = 1;
+          U64 macro_arg_count = 0;
+          for(;macro_off < string.size;)
+          {
+            if(!e2_try_token(string, E2_TokenKind_Identifier, s(""), &macro_off, 0))
+            {
+              looks_like_macro_def = 0;
+              break;
+            }
+            macro_arg_count += 1;
+            e2_try_token(string, E2_TokenKind_Symbol, s(","), &macro_off, 0);
+            if(e2_try_token(string, E2_TokenKind_Symbol, s(")"), &macro_off, 0))
+            {
+              break;
+            }
+          }
+          if(looks_like_macro_def && e2_try_token(string, E2_TokenKind_Symbol, s("="), &macro_off, 0))
+          {
+            // rjf: push task to fill macro definition
+            identifier_mapped = 1;
+            E2_ParseTask *task = state->free_task;
+            if(task != 0)
+            {
+              SLLStackPop(state->free_task);
+            }
+            else
+            {
+              task = push_array_no_zero(arena, E2_ParseTask, 1);
+            }
+            MemoryZeroStruct(task);
+            task->src_range = token.range;
+            task->child_count_target = 1;
+            task->op_kind = E2_OpKind_Macro;
+            task->max_precedence = max_S64;
+            task->identifier = identifier;
+            SLLStackPush(state->top_task, task);
+            
+            // rjf: gather argument names
+            macro_off = post_macro_paren_off;
+            for(;macro_off < string.size;)
+            {
+              E2_Token next_token = {0};
+              if(!e2_try_token(string, E2_TokenKind_Identifier, s(""), &macro_off, &next_token))
+              {
+                break;
+              }
+              str8_list_push(arena, &task->macro_arg_names, str8_substr(string, next_token.range));
+              e2_try_token(string, E2_TokenKind_Symbol, s(","), &macro_off, 0);
+              if(e2_try_token(string, E2_TokenKind_Symbol, s(")"), &macro_off, 0))
+              {
+                break;
+              }
+            }
+            e2_try_token(string, E2_TokenKind_Symbol, s("="), &macro_off, 0);
+            
+            // rjf: advance offset to past '='
+            off = macro_off;
+          }
+        }
       }
       
       // rjf: first try to resolve as an operator name
@@ -2102,6 +2680,23 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
                 }
               }break;
               
+              //- rjf: macros
+              case E2_OpKind_Macro:
+              {
+                if(completed_with_caller_info)
+                {
+                  finished_root = &e2_expr_nil;
+                }
+                else
+                {
+                  done = 1;
+                  parse.status = E2_ParseStatus_NewIdentifierDefinition;
+                  parse.expr = lhs;
+                  parse.identifier = completed_task->identifier;
+                  state->caller_info_completes_task = 1;
+                }
+              }break;
+              
               //- rjf: conditionals
               case E2_OpKind_Cond:
               {
@@ -2459,7 +3054,11 @@ e2_interp_from_bytecode(Arena *arena, E2_InterpState *state, E2_SpaceMap *space_
       U64 ctx_base_addr = 0;
       switch(op)
       {
-        default:{}break;
+        default:
+        {
+          good = 0;
+          interp.status = E2_InterpStatus_UnsupportedOp;
+        }break;
         
         case E2_EvalOp_SetCtxID:
         {

@@ -39,6 +39,7 @@ struct E2_OpInfo
 enum
 {
   E2_EvalOp_SetCtxID = RDI_EvalOp_COUNT,
+  E2_EvalOp_LeafMacroArgument,
 };
 
 ////////////////////////////////
@@ -66,6 +67,32 @@ E2_ParseStatus;
 
 #define e2_parse_status_is_terminal(s) (E2_ParseStatus_FirstTerminal <= (s) && (s) <= E2_ParseStatus_LastTerminal)
 #define e2_parse_status_is_caller_request(s) (E2_ParseStatus_FirstCallerRequest <= (s) && (s) <= E2_ParseStatus_LastCallerRequest)
+
+////////////////////////////////
+//~ rjf: Compiler Statuses
+
+typedef enum E2_CompileStatus
+{
+  //- rjf: terminals
+  E2_CompileStatus_Good,
+  E2_CompileStatus_Error,
+  E2_CompileStatus_FirstTerminal = E2_CompileStatus_Good,
+  E2_CompileStatus_LastTerminal = E2_CompileStatus_Error,
+  
+  //- rjf: caller-provided info
+  E2_CompileStatus_MissedIdentifierResolution,
+  E2_CompileStatus_NewIdentifierDefinition,
+  E2_CompileStatus_MemberAccess,
+  E2_CompileStatus_IndexAccess,
+  E2_CompileStatus_Call,
+  E2_CompileStatus_CompileTimeEval,
+  E2_CompileStatus_FirstCallerRequest = E2_CompileStatus_MissedIdentifierResolution,
+  E2_CompileStatus_LastCallerRequest = E2_CompileStatus_CompileTimeEval,
+}
+E2_CompileStatus;
+
+#define e2_compile_status_is_terminal(s) (E2_CompileStatus_FirstTerminal <= (s) && (s) <= E2_CompileStatus_LastTerminal)
+#define e2_compile_status_is_caller_request(s) (E2_CompileStatus_FirstCallerRequest <= (s) && (s) <= E2_CompileStatus_LastCallerRequest)
 
 ////////////////////////////////
 //~ rjf: Interpretation Statuses
@@ -152,9 +179,9 @@ struct E2_ConsTypeParams
 typedef struct E2_ConsTypeNode E2_ConsTypeNode;
 struct E2_ConsTypeNode
 {
-  E2_ConsTypeNode *key_next;
+  E2_ConsTypeNode *id_next;
   E2_ConsTypeNode *content_next;
-  E2_TypeKey key;
+  U64 id;
   E2_ConsTypeParams params;
   U64 byte_size;
 };
@@ -169,11 +196,12 @@ struct E2_ConsTypeSlot
 typedef struct E2_ConsTypeMap E2_ConsTypeMap;
 struct E2_ConsTypeMap
 {
+  Arena *arena;
   U64 id_gen;
-  U64 content_slots_count;
+  U64 table_start_arena_pos;
+  U64 slots_count;
   E2_ConsTypeSlot *content_slots;
-  U64 key_slots_count;
-  E2_ConsTypeSlot *key_slots;
+  E2_ConsTypeSlot *id_slots;
 };
 
 ////////////////////////////////
@@ -340,6 +368,7 @@ struct E2_ParseTask
   String8 expected_closer;
   String8 expected_splitter;
   B32 splitter_is_required;
+  String8List macro_arg_names;
 };
 
 typedef struct E2_ParseState E2_ParseState;
@@ -374,6 +403,40 @@ typedef struct E2_Parse E2_Parse;
 struct E2_Parse
 {
   E2_ParseStatus status;
+  String8 identifier;
+  E2_Expr *expr;
+  String8 member_name;
+  E2_Expr *params_expr;
+  E2_MsgList msgs;
+};
+
+////////////////////////////////
+//~ rjf: IR Tree Building
+
+typedef struct E2_IRNodePtrNode E2_IRNodePtrNode;
+struct E2_IRNodePtrNode
+{
+  E2_IRNodePtrNode *next;
+  struct E2_IRNode *v;
+};
+
+typedef struct E2_IRNode E2_IRNode;
+struct E2_IRNode
+{
+  E2_IRNodePtrNode *first_child;
+  E2_IRNodePtrNode *last_child;
+  U64 child_count;
+  RDI_EvalOp op;
+  String8 string;
+  E2_TypeKey type_key;
+  E2_Mode mode;
+  E2_Val val;
+};
+
+typedef struct E2_Compile E2_Compile;
+struct E2_Compile
+{
+  E2_CompileStatus status;
   String8 identifier;
   E2_Expr *expr;
   String8 member_name;
@@ -433,9 +496,11 @@ struct E2_Interp
 //~ rjf: Globals
 
 thread_static E2_Assets *e2_assets = 0;
+thread_static E2_ConsTypeMap *e2_cons_type_map = 0;
 read_only global E2_ConsTypeNode e2_cons_type_node_nil = {&e2_cons_type_node_nil, &e2_cons_type_node_nil}; 
 read_only global E2_DbgInfo e2_dbg_info_nil = {{0}, &rdi_parsed_nil};
 read_only global E2_Expr e2_expr_nil = {0};
+read_only global E2_IRNode e2_irnode_nil = {0};
 
 ////////////////////////////////
 //~ rjf: Space -> Memory Map Helpers
@@ -460,6 +525,16 @@ internal E2_Msg *e2_msgf(Arena *arena, E2_MsgList *msgs, Rng1U64 src_range, char
 
 internal void e2_select_assets(E2_Assets *assets);
 internal E2_DbgInfo *e2_dbgi_from_num(U32 num);
+
+////////////////////////////////
+//~ rjf: Constructed Types
+
+internal E2_ConsTypeMap *e2_cons_type_map_alloc(void);
+internal void e2_select_cons_type_map(E2_ConsTypeMap *map);
+internal B32 e2_cons_type_params_match(E2_ConsTypeParams *a, E2_ConsTypeParams *b);
+internal E2_ConsTypeNode *e2_cons_type_node_from_params(E2_ConsTypeParams *params);
+internal E2_ConsTypeNode *e2_cons_type_node_from_id(U64 id);
+internal E2_TypeKey e2_type_key_from_cons_type_node(E2_ConsTypeNode *node);
 
 ////////////////////////////////
 //~ rjf: Type Keys
@@ -496,6 +571,7 @@ internal U64 e2_byte_size_from_type_key(E2_TypeKey k);
 internal U32 e2_dbgi_num_from_type_key(E2_TypeKey k);
 internal E2_DbgInfo *e2_dbgi_from_type_key(E2_TypeKey k);
 internal U32 e2_dbgi_type_idx_from_key(E2_TypeKey k);
+internal U64 e2_cons_type_id_from_key(E2_TypeKey k);
 internal U64 e2_shift_from_type_key(E2_TypeKey k);
 internal U64 e2_mask_count_from_type_key(E2_TypeKey k);
 internal Arch e2_arch_from_type_key(E2_TypeKey k);
@@ -542,6 +618,22 @@ internal E2_Expr *e2_expr_convert_if_possible(Arena *arena, E2_Expr *expr, E2_Ty
 internal E2_Expr *e2_expr_type(Arena *arena, E2_TypeKey type_key);
 internal void e2_expr_push_child_node(E2_Expr *parent, E2_ExprNode *node);
 internal void e2_expr_push_child(Arena *arena, E2_Expr *parent, E2_Expr *expr);
+
+////////////////////////////////
+//~ rjf: IR Tree Constructors
+
+internal E2_IRNode *e2_irnode(Arena *arena);
+internal E2_IRNode *e2_irnode_const_u64_or_smaller(Arena *arena, U64 u);
+internal E2_IRNode *e2_irnode_const_f32(Arena *arena, F32 f32);
+internal E2_IRNode *e2_irnode_const_f64(Arena *arena, F64 f64);
+internal E2_IRNode *e2_irnode_unary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_IRNode *operand);
+internal E2_IRNode *e2_irnode_binary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_IRNode *lhs, E2_IRNode *rhs);
+internal E2_IRNode *e2_irnode_resolve_to_value(Arena *arena, E2_IRNode *expr);
+internal E2_IRNode *e2_irnode_truncate(Arena *arena, E2_IRNode *expr, E2_TypeKey dst_type_key);
+internal E2_IRNode *e2_irnode_convert_if_possible(Arena *arena, E2_IRNode *expr, E2_TypeKey dst_type_key);
+internal E2_IRNode *e2_irnode_type(Arena *arena, E2_TypeKey type_key);
+internal void e2_irnode_push_child_node(E2_IRNode *parent, E2_IRNodePtrNode *node);
+internal void e2_irnode_push_child(Arena *arena, E2_IRNode *parent, E2_IRNode *expr);
 
 ////////////////////////////////
 //~ rjf: String -> Expression

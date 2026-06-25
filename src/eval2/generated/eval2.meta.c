@@ -4,7 +4,7 @@
 //- GENERATED CODE
 
 C_LINKAGE_BEGIN
-E2_OpInfo e2_op_kind_info_table[34] =
+E2_OpInfo e2_op_kind_info_table[35] =
 {
 {0},
 {E2_OpParseKind_Binary, 1, str8_lit_comp(""), str8_lit_comp("."), str8_lit_comp(""), str8_lit_comp("")},
@@ -38,7 +38,8 @@ E2_OpInfo e2_op_kind_info_table[34] =
 {E2_OpParseKind_Binary, 10, str8_lit_comp(""), str8_lit_comp("|"), str8_lit_comp(""), str8_lit_comp("")},
 {E2_OpParseKind_Binary, 11, str8_lit_comp(""), str8_lit_comp("&&"), str8_lit_comp(""), str8_lit_comp("")},
 {E2_OpParseKind_Binary, 12, str8_lit_comp(""), str8_lit_comp("||"), str8_lit_comp(""), str8_lit_comp("")},
-{E2_OpParseKind_Binary, 13, str8_lit_comp(""), str8_lit_comp("="), str8_lit_comp(""), str8_lit_comp("")},
+{E2_OpParseKind_Null, 13, str8_lit_comp(""), str8_lit_comp("="), str8_lit_comp(""), str8_lit_comp("")},
+{E2_OpParseKind_Null, 14, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_OpParseKind_Ternary, 14, str8_lit_comp(""), str8_lit_comp("?"), str8_lit_comp(""), str8_lit_comp(":")},
 };
 

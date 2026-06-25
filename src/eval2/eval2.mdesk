@@ -36,6 +36,7 @@ E2_OpTable:
   {LogAnd   Binary       11 ""        "&&" ""  "" }
   {LogOr    Binary       12 ""        "||" ""  "" }
   {Define   Null         13 ""        "="  ""  "" }
+  {Macro    Null         14 ""        ""   ""  "" }
   {Cond     Ternary      14 ""        "?"  ""  ":"}
 }
 
