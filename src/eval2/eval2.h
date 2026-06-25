@@ -7,20 +7,20 @@
 ////////////////////////////////
 //~ rjf: Operator Info Tables
 
-typedef enum E2_OpParseKind
+typedef enum E2_ExprParseKind
 {
-  E2_OpParseKind_Null,
-  E2_OpParseKind_UnaryPrefix,
-  E2_OpParseKind_Binary,
-  E2_OpParseKind_Ternary,
-  E2_OpParseKind_Call,
+  E2_ExprParseKind_Null,
+  E2_ExprParseKind_UnaryPrefix,
+  E2_ExprParseKind_Binary,
+  E2_ExprParseKind_Ternary,
+  E2_ExprParseKind_Call,
 }
-E2_OpParseKind;
+E2_ExprParseKind;
 
-typedef struct E2_OpInfo E2_OpInfo;
-struct E2_OpInfo
+typedef struct E2_ExprKindInfo E2_ExprKindInfo;
+struct E2_ExprKindInfo
 {
-  E2_OpParseKind parse_kind;
+  E2_ExprParseKind parse_kind;
   S64 precedence;
   String8 pre;
   String8 sep;
@@ -330,6 +330,7 @@ struct E2_Expr
   E2_ExprNode *first_child;
   E2_ExprNode *last_child;
   U64 child_count;
+  E2_ExprKind kind;
   Rng1U64 src_range;
   String8 string;
   RDI_EvalOp op;
@@ -363,7 +364,7 @@ struct E2_ParseTask
   U64 child_count;
   U64 child_count_target;
   S64 max_precedence;
-  E2_OpKind op_kind;
+  E2_ExprKind expr_kind;
   String8 identifier;
   String8 expected_closer;
   String8 expected_splitter;

@@ -1589,9 +1589,9 @@ e2_token_from_string_off(String8 string, U64 start_off)
         token.range.max = off;
         String8 token_string = str8_substr(string, token.range);
         U64 biggest_match_size = 0;
-        for EachNonZeroEnumVal(E2_OpKind, k)
+        for EachNonZeroEnumVal(E2_ExprKind, k)
         {
-          String8 op_symbol = (e2_op_kind_info_table[k].pre.size != 0) ? e2_op_kind_info_table[k].pre : e2_op_kind_info_table[k].sep;
+          String8 op_symbol = (e2_expr_kind_info_table[k].pre.size != 0) ? e2_expr_kind_info_table[k].pre : e2_expr_kind_info_table[k].sep;
           if(biggest_match_size < op_symbol.size && str8_match(op_symbol, str8_prefix(token_string, op_symbol.size), 0))
           {
             biggest_match_size = op_symbol.size;
@@ -1735,25 +1735,25 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
     else if(need_new_expr && e2_try_token(string, E2_TokenKind_Symbol, s(""), &off, &token))
     {
       // rjf: string -> operator kind
-      E2_OpKind op_kind = E2_OpKind_Null;
+      E2_ExprKind expr_kind = E2_ExprKind_Null;
       String8 closer = {0};
       {
         String8 token_string = str8_substr(string, token.range);
-        for EachNonZeroEnumVal(E2_OpKind, k)
+        for EachNonZeroEnumVal(E2_ExprKind, k)
         {
-          if(e2_op_kind_info_table[k].parse_kind == E2_OpParseKind_UnaryPrefix &&
-             e2_op_kind_info_table[k].precedence <= max_precedence &&
-             str8_match(token_string, e2_op_kind_info_table[k].pre, 0))
+          if(e2_expr_kind_info_table[k].parse_kind == E2_ExprParseKind_UnaryPrefix &&
+             e2_expr_kind_info_table[k].precedence <= max_precedence &&
+             str8_match(token_string, e2_expr_kind_info_table[k].pre, 0))
           {
-            op_kind = k;
-            closer = e2_op_kind_info_table[k].post;
+            expr_kind = k;
+            closer = e2_expr_kind_info_table[k].post;
             break;
           }
         }
       }
       
       // rjf: push task for operand
-      if(op_kind != E2_OpKind_Null)
+      if(expr_kind != E2_ExprKind_Null)
       {
         E2_ParseTask *task = state->free_task;
         if(task != 0)
@@ -1767,14 +1767,14 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
         MemoryZeroStruct(task);
         task->src_range = token.range;
         task->child_count_target = 1;
-        task->op_kind = op_kind;
-        task->max_precedence = e2_op_kind_info_table[op_kind].precedence;
+        task->expr_kind = expr_kind;
+        task->max_precedence = e2_expr_kind_info_table[expr_kind].precedence;
         task->expected_closer = closer;
         SLLStackPush(state->top_task, task);
       }
       
       // rjf: report unexpected symbols
-      if(op_kind == E2_OpKind_Null)
+      if(expr_kind == E2_ExprKind_Null)
       {
         String8 token_string = str8_substr(string, token.range);
         e2_msgf(arena, &parse.msgs, token.range, "Unexpected `%S`.", token_string);
@@ -1782,7 +1782,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
     }
     
     //- rjf: identifiers with an active dot op kind -> member access
-    else if(need_new_expr && state->top_task != 0 && state->top_task->op_kind == E2_OpKind_Dot && e2_try_token(string, E2_TokenKind_Identifier, s(""), &off, &token))
+    else if(need_new_expr && state->top_task != 0 && state->top_task->expr_kind == E2_ExprKind_Dot && e2_try_token(string, E2_TokenKind_Identifier, s(""), &off, &token))
     {
       // rjf: if we have a caller-provided access result, use that as our new expression
       if(next_access_result != &e2_expr_nil)
@@ -1809,11 +1809,11 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
     {
       String8 identifier = str8_substr(string, token.range);
       B32 identifier_mapped = 0;
-      B32 definitions_are_allowed = (state->top_task == 0 || state->top_task->op_kind != E2_OpKind_Macro);
+      B32 definitions_are_allowed = (state->top_task == 0 || state->top_task->expr_kind != E2_ExprKind_Macro);
       
       // rjf: if we're currently parsing a macro definition, then we first want to try
       // resolving identifiers as macro arguments
-      if(!identifier_mapped && state->top_task != 0 && state->top_task->op_kind == E2_OpKind_Macro)
+      if(!identifier_mapped && state->top_task != 0 && state->top_task->expr_kind == E2_ExprKind_Macro)
       {
         U64 arg_num = 1;
         for(String8Node *n = state->top_task->macro_arg_names.first; n != 0; n = n->next, arg_num += 1)
@@ -1846,8 +1846,8 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
         MemoryZeroStruct(task);
         task->src_range = token.range;
         task->child_count_target = 1;
-        task->op_kind = E2_OpKind_Define;
-        task->max_precedence = e2_op_kind_info_table[E2_OpKind_Define].precedence;
+        task->expr_kind = E2_ExprKind_Define;
+        task->max_precedence = e2_expr_kind_info_table[E2_ExprKind_Define].precedence;
         task->identifier = identifier;
         SLLStackPush(state->top_task, task);
       }
@@ -1891,7 +1891,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
             MemoryZeroStruct(task);
             task->src_range = token.range;
             task->child_count_target = 1;
-            task->op_kind = E2_OpKind_Macro;
+            task->expr_kind = E2_ExprKind_Macro;
             task->max_precedence = max_S64;
             task->identifier = identifier;
             SLLStackPush(state->top_task, task);
@@ -1924,23 +1924,23 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
       if(!identifier_mapped)
       {
         // rjf: string -> op kind
-        E2_OpKind op_kind = E2_OpKind_Null;
+        E2_ExprKind expr_kind = E2_ExprKind_Null;
         {
           String8 token_string = str8_substr(string, token.range);
-          for EachNonZeroEnumVal(E2_OpKind, k)
+          for EachNonZeroEnumVal(E2_ExprKind, k)
           {
-            if(e2_op_kind_info_table[k].parse_kind == E2_OpParseKind_UnaryPrefix &&
-               e2_op_kind_info_table[k].precedence <= max_precedence &&
-               str8_match(token_string, str8_skip_chop_whitespace(e2_op_kind_info_table[k].pre), 0))
+            if(e2_expr_kind_info_table[k].parse_kind == E2_ExprParseKind_UnaryPrefix &&
+               e2_expr_kind_info_table[k].precedence <= max_precedence &&
+               str8_match(token_string, str8_skip_chop_whitespace(e2_expr_kind_info_table[k].pre), 0))
             {
-              op_kind = k;
+              expr_kind = k;
               break;
             }
           }
         }
         
         // rjf: push task for operand
-        if(op_kind != E2_OpKind_Null)
+        if(expr_kind != E2_ExprKind_Null)
         {
           identifier_mapped = 1;
           E2_ParseTask *task = state->free_task;
@@ -1955,8 +1955,8 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
           MemoryZeroStruct(task);
           task->src_range = token.range;
           task->child_count_target = 1;
-          task->op_kind = op_kind;
-          task->max_precedence = e2_op_kind_info_table[op_kind].precedence;
+          task->expr_kind = expr_kind;
+          task->max_precedence = e2_expr_kind_info_table[expr_kind].precedence;
           SLLStackPush(state->top_task, task);
         }
       }
@@ -2060,35 +2060,35 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
       if(e2_try_token(string, E2_TokenKind_Symbol, s(""), &trailing_symbol_off, &token))
       {
         // rjf: token string -> operator kind
-        E2_OpKind op_kind = E2_OpKind_Null;
+        E2_ExprKind expr_kind = E2_ExprKind_Null;
         U64 child_count_target = 2;
         String8 splitter = {0};
         String8 closer = {0};
         B32 splitter_is_required = 0;
         {
           String8 token_string = str8_substr(string, token.range);
-          for EachNonZeroEnumVal(E2_OpKind, k)
+          for EachNonZeroEnumVal(E2_ExprKind, k)
           {
-            E2_OpInfo *op_info = &e2_op_kind_info_table[k];
-            if(op_info->precedence <= max_precedence && str8_match(token_string, op_info->sep, 0))
+            E2_ExprKindInfo *expr_kind_info = &e2_expr_kind_info_table[k];
+            if(expr_kind_info->precedence <= max_precedence && str8_match(token_string, expr_kind_info->sep, 0))
             {
-              switch(op_info->parse_kind)
+              switch(expr_kind_info->parse_kind)
               {
                 default:{}break;
-                case E2_OpParseKind_Binary:  {child_count_target = 2;}break;
-                case E2_OpParseKind_Ternary: {child_count_target = 3; splitter_is_required = 1;}break;
-                case E2_OpParseKind_Call:    {child_count_target = max_U64;}break;
+                case E2_ExprParseKind_Binary:  {child_count_target = 2;}break;
+                case E2_ExprParseKind_Ternary: {child_count_target = 3; splitter_is_required = 1;}break;
+                case E2_ExprParseKind_Call:    {child_count_target = max_U64;}break;
               }
-              splitter = op_info->chain;
-              closer = op_info->post;
-              op_kind = k;
+              splitter = expr_kind_info->chain;
+              closer = expr_kind_info->post;
+              expr_kind = k;
               break;
             }
           }
         }
         
         // rjf: non-null operator kind -> build binary expression node, push task to fill other child
-        if(op_kind != E2_OpKind_Null)
+        if(expr_kind != E2_ExprKind_Null)
         {
           E2_ParseTask *task = state->free_task;
           if(task != 0)
@@ -2103,8 +2103,8 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
           task->src_range = token.range;
           task->child_count = 0;
           task->child_count_target = child_count_target;
-          task->op_kind = op_kind;
-          task->max_precedence = e2_op_kind_info_table[op_kind].precedence;
+          task->expr_kind = expr_kind;
+          task->max_precedence = e2_expr_kind_info_table[expr_kind].precedence;
           task->expected_splitter = splitter;
           task->expected_closer = closer;
           task->splitter_is_required = splitter_is_required;
@@ -2177,8 +2177,8 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
             task->src_range = type_expr->src_range;
             task->child_count = 1;
             task->child_count_target = 2;
-            task->op_kind = E2_OpKind_CCast;
-            task->max_precedence = e2_op_kind_info_table[E2_OpKind_CCast].precedence;
+            task->expr_kind = E2_ExprKind_CCast;
+            task->max_precedence = e2_expr_kind_info_table[E2_ExprKind_CCast].precedence;
             SLLStackPush(state->top_task, task);
             expr = &e2_expr_nil;
             E2_ExprNode *child_n = push_array(arena, E2_ExprNode, 1);
@@ -2204,7 +2204,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
           {
             RDI_EvalOp op = RDI_EvalOp_Stop;
             E2_TypeKey dst_type_key = {E2_TypeKeyKind_Null};
-            switch(completed_task->op_kind)
+            switch(completed_task->expr_kind)
             {
               //- rjf: no op -> just a sub-expression
               default:
@@ -2226,13 +2226,13 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
               // expression submitted to us by the user (the parser reports it first)
               // stored as the second child in the list. we just want to use the
               // second expression - the initial child was just the accessed evaluation.
-              case E2_OpKind_Dot:
+              case E2_ExprKind_Dot:
               {
                 finished_root = rhs;
               }break;
               
               //- rjf: indexes
-              case E2_OpKind_Index:
+              case E2_ExprKind_Index:
               {
                 E2_TypeKey lhs_type_key = e2_type_key_undecorate(lhs->type_key);
                 E2_TypeKind lhs_type_kind = e2_type_kind_from_key(lhs_type_key);
@@ -2277,7 +2277,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
               }break;
               
               //- rjf: calls
-              case E2_OpKind_Call:
+              case E2_ExprKind_Call:
               {
                 // rjf: calls of types redirect to casts
                 if(lhs->mode == E2_Mode_Type)
@@ -2310,7 +2310,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
               }break;
               
               //- rjf: sizeof
-              case E2_OpKind_SizeOf:
+              case E2_ExprKind_SizeOf:
               {
                 E2_TypeKey rhs_type_key = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_AllDecorative & ~E2_TypeUnwrapFlag_Enums);
                 U64 rhs_size = e2_byte_size_from_type_key(rhs_type_key);
@@ -2319,7 +2319,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
               }break;
               
               //- rjf: typeof
-              case E2_OpKind_TypeOf:
+              case E2_ExprKind_TypeOf:
               {
                 E2_TypeKey rhs_type_key = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_AllDecorative & ~E2_TypeUnwrapFlag_Enums);
                 finished_root = e2_expr(arena);
@@ -2328,7 +2328,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
               }break;
               
               //- rjf: casts
-              case E2_OpKind_CCast:
+              case E2_ExprKind_CCast:
               cast:;
               {
                 E2_Expr *cast_type_expr = lhs;
@@ -2345,8 +2345,8 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
               }break;
               
               //- rjf: dereferences
-              case E2_OpKind_Deref:
-              case E2_OpKind_DerefAsm:
+              case E2_ExprKind_Deref:
+              case E2_ExprKind_DerefAsm:
               {
                 // rjf: unpack operand
                 E2_TypeKey rhs_type_key = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_AllDecorative & ~E2_TypeUnwrapFlag_Enums);
@@ -2367,7 +2367,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
                   e2_msgf(arena, &parse.msgs, completed_task->src_range, "Cannot dereference arrays of zero-sized types.");
                 }
                 else if(!e2_type_kind_is_ptr_or_ref(rhs_type_kind) && rhs_type_kind != E2_TypeKind_Array &&
-                        completed_task->op_kind != E2_OpKind_DerefAsm)
+                        completed_task->expr_kind != E2_ExprKind_DerefAsm)
                 {
                   malformed = 1;
                   e2_msgf(arena, &parse.msgs, completed_task->src_range, "Cannot dereference this type.");
@@ -2381,7 +2381,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
                 // integer type.
                 //
                 if(!e2_type_kind_is_ptr_or_ref(rhs_type_kind) && rhs_type_kind != E2_TypeKind_Array &&
-                   completed_task->op_kind == E2_OpKind_DerefAsm)
+                   completed_task->expr_kind == E2_ExprKind_DerefAsm)
                 {
                   dereferenced_type = e2_type_key_basic(E2_TypeKind_U64);
                 }
@@ -2405,7 +2405,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
               }break;
               
               //- rjf: address-of
-              case E2_OpKind_Address:
+              case E2_ExprKind_Address:
               {
                 // rjf: determine if malformed
                 B32 malformed = 0;
@@ -2426,15 +2426,15 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
               }break;
               
               //- rjf: positive (no-op, just take the right-hand-side)
-              case E2_OpKind_Pos:
+              case E2_ExprKind_Pos:
               {
                 finished_root = rhs;
               }break;
               
               //- rjf: unary ops
-              case E2_OpKind_Neg:    {op = RDI_EvalOp_Neg;}goto unary_op;
-              case E2_OpKind_LogNot: {op = RDI_EvalOp_LogNot;}goto unary_op;
-              case E2_OpKind_BitNot: {op = RDI_EvalOp_BitNot;}goto unary_op;
+              case E2_ExprKind_Neg:    {op = RDI_EvalOp_Neg;}goto unary_op;
+              case E2_ExprKind_LogNot: {op = RDI_EvalOp_LogNot;}goto unary_op;
+              case E2_ExprKind_BitNot: {op = RDI_EvalOp_BitNot;}goto unary_op;
               unary_op:;
               {
                 // rjf: unpack operand
@@ -2473,24 +2473,24 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
               }break;
               
               //- rjf: binary ops
-              case E2_OpKind_Mul:   {op = RDI_EvalOp_Mul;}goto binary_op;
-              case E2_OpKind_Div:   {op = RDI_EvalOp_Div;}goto binary_op;
-              case E2_OpKind_Mod:   {op = RDI_EvalOp_Mod;}goto binary_op;
-              case E2_OpKind_Add:   {op = RDI_EvalOp_Add;}goto binary_op;
-              case E2_OpKind_Sub:   {op = RDI_EvalOp_Sub;}goto binary_op;
-              case E2_OpKind_LShift:{op = RDI_EvalOp_LShift;}goto binary_op;
-              case E2_OpKind_RShift:{op = RDI_EvalOp_RShift;}goto binary_op;
-              case E2_OpKind_Less:  {op = RDI_EvalOp_Less;}goto binary_op;
-              case E2_OpKind_LtEq:  {op = RDI_EvalOp_LsEq;}goto binary_op;
-              case E2_OpKind_Grtr:  {op = RDI_EvalOp_Grtr;}goto binary_op;
-              case E2_OpKind_GrEq:  {op = RDI_EvalOp_GrEq;}goto binary_op;
-              case E2_OpKind_EqEq:  {op = RDI_EvalOp_EqEq;}goto binary_op;
-              case E2_OpKind_NtEq:  {op = RDI_EvalOp_NtEq;}goto binary_op;
-              case E2_OpKind_BitAnd:{op = RDI_EvalOp_BitAnd;}goto binary_op;
-              case E2_OpKind_BitXor:{op = RDI_EvalOp_BitXor;}goto binary_op;
-              case E2_OpKind_BitOr: {op = RDI_EvalOp_BitOr;}goto binary_op;
-              case E2_OpKind_LogAnd:{op = RDI_EvalOp_LogAnd;}goto binary_op;
-              case E2_OpKind_LogOr: {op = RDI_EvalOp_LogOr;}goto binary_op;
+              case E2_ExprKind_Mul:   {op = RDI_EvalOp_Mul;}goto binary_op;
+              case E2_ExprKind_Div:   {op = RDI_EvalOp_Div;}goto binary_op;
+              case E2_ExprKind_Mod:   {op = RDI_EvalOp_Mod;}goto binary_op;
+              case E2_ExprKind_Add:   {op = RDI_EvalOp_Add;}goto binary_op;
+              case E2_ExprKind_Sub:   {op = RDI_EvalOp_Sub;}goto binary_op;
+              case E2_ExprKind_LShift:{op = RDI_EvalOp_LShift;}goto binary_op;
+              case E2_ExprKind_RShift:{op = RDI_EvalOp_RShift;}goto binary_op;
+              case E2_ExprKind_Less:  {op = RDI_EvalOp_Less;}goto binary_op;
+              case E2_ExprKind_LtEq:  {op = RDI_EvalOp_LsEq;}goto binary_op;
+              case E2_ExprKind_Grtr:  {op = RDI_EvalOp_Grtr;}goto binary_op;
+              case E2_ExprKind_GrEq:  {op = RDI_EvalOp_GrEq;}goto binary_op;
+              case E2_ExprKind_EqEq:  {op = RDI_EvalOp_EqEq;}goto binary_op;
+              case E2_ExprKind_NtEq:  {op = RDI_EvalOp_NtEq;}goto binary_op;
+              case E2_ExprKind_BitAnd:{op = RDI_EvalOp_BitAnd;}goto binary_op;
+              case E2_ExprKind_BitXor:{op = RDI_EvalOp_BitXor;}goto binary_op;
+              case E2_ExprKind_BitOr: {op = RDI_EvalOp_BitOr;}goto binary_op;
+              case E2_ExprKind_LogAnd:{op = RDI_EvalOp_LogAnd;}goto binary_op;
+              case E2_ExprKind_LogOr: {op = RDI_EvalOp_LogOr;}goto binary_op;
               binary_op:;
               {
                 // rjf: resolve lhs / rhs to values
@@ -2641,14 +2641,14 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
                   //- rjf: type comparisons
                   case ArithKind_TypeCompare:
                   {
-                    if(completed_task->op_kind == E2_OpKind_EqEq ||
-                       completed_task->op_kind == E2_OpKind_NtEq)
+                    if(completed_task->expr_kind == E2_ExprKind_EqEq ||
+                       completed_task->expr_kind == E2_ExprKind_NtEq)
                     {
                       E2_TypeKey lhs_type_key = e2_type_key_unwrap(lhs->type_key, E2_TypeUnwrapFlag_Meta);
                       E2_TypeKey rhs_type_key = e2_type_key_unwrap(rhs->type_key, E2_TypeUnwrapFlag_Meta);
                       B32 types_match = e2_type_deep_match(lhs_type_key, rhs_type_key);
                       B32 result = types_match;
-                      if(completed_task->op_kind == E2_OpKind_NtEq)
+                      if(completed_task->expr_kind == E2_ExprKind_NtEq)
                       {
                         result = !result;
                       }
@@ -2657,14 +2657,14 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
                     }
                     else
                     {
-                      e2_msgf(arena, &parse.msgs, completed_task->src_range, "Cannot use `%S` on types.", str8_skip_chop_whitespace(e2_op_kind_info_table[completed_task->op_kind].sep));
+                      e2_msgf(arena, &parse.msgs, completed_task->src_range, "Cannot use `%S` on types.", str8_skip_chop_whitespace(e2_expr_kind_info_table[completed_task->expr_kind].sep));
                     }
                   }break;
                 }
               }break;
               
               //- rjf: definitions
-              case E2_OpKind_Define:
+              case E2_ExprKind_Define:
               {
                 if(completed_with_caller_info)
                 {
@@ -2681,7 +2681,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
               }break;
               
               //- rjf: macros
-              case E2_OpKind_Macro:
+              case E2_ExprKind_Macro:
               {
                 if(completed_with_caller_info)
                 {
@@ -2698,7 +2698,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
               }break;
               
               //- rjf: conditionals
-              case E2_OpKind_Cond:
+              case E2_ExprKind_Cond:
               {
                 // rjf: unpack operands
                 E2_Expr *condition_expr = lhs;
@@ -2869,25 +2869,25 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
   {
     for(E2_ParseTask *t = state->top_task; t != 0; t = t->next)
     {
-      if(t->child_count == 1 && t->child_count_target == 2 && t->op_kind == E2_OpKind_Dot)
+      if(t->child_count == 1 && t->child_count_target == 2 && t->expr_kind == E2_ExprKind_Dot)
       {
         e2_msgf(arena, &parse.msgs, t->src_range, "Couldn't access member `%S`.", state->last_requested_member_name);
       }
-      else if(t->child_count == 2 && t->child_count_target == 2 && t->op_kind == E2_OpKind_Index)
+      else if(t->child_count == 2 && t->child_count_target == 2 && t->expr_kind == E2_ExprKind_Index)
       {
         e2_msgf(arena, &parse.msgs, t->src_range, "Couldn't index into this type.");
       }
-      else if(t->child_count >= 1 && t->op_kind == E2_OpKind_Call)
+      else if(t->child_count >= 1 && t->expr_kind == E2_ExprKind_Call)
       {
         e2_msgf(arena, &parse.msgs, t->src_range, "Couldn't call into this type.");
       }
-      else if(t->child_count == 1 && t->child_count_target == 2 && t->op_kind != E2_OpKind_Null)
+      else if(t->child_count == 1 && t->child_count_target == 2 && t->expr_kind != E2_ExprKind_Null)
       {
-        e2_msgf(arena, &parse.msgs, t->src_range, "Expected expression after binary operator `%S`.", e2_op_kind_info_table[t->op_kind].sep);
+        e2_msgf(arena, &parse.msgs, t->src_range, "Expected expression after binary operator `%S`.", e2_expr_kind_info_table[t->expr_kind].sep);
       }
-      else if(t->child_count == 0 && t->child_count_target == 1 && t->op_kind != E2_OpKind_Null)
+      else if(t->child_count == 0 && t->child_count_target == 1 && t->expr_kind != E2_ExprKind_Null)
       {
-        e2_msgf(arena, &parse.msgs, t->src_range, "Expected expression after unary operator `%S`.", e2_op_kind_info_table[t->op_kind].pre);
+        e2_msgf(arena, &parse.msgs, t->src_range, "Expected expression after unary operator `%S`.", e2_expr_kind_info_table[t->expr_kind].pre);
       }
       else
       {

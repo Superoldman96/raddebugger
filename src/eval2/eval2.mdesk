@@ -2,7 +2,7 @@
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
 @table(name parse_kind precedence pre sep pos chain)
-E2_OpTable:
+E2_ExprKindTable:
 {
   {Dot      Binary        1 ""        "."  ""  "" }
   {Index    Binary        1 ""        "["  "]" "" }
@@ -40,17 +40,17 @@ E2_OpTable:
   {Cond     Ternary      14 ""        "?"  ""  ":"}
 }
 
-@enum E2_OpKind:
+@enum E2_ExprKind:
 {
   Null,
-  @expand(E2_OpTable a) `$(a.name)`,
+  @expand(E2_ExprKindTable a) `$(a.name)`,
   COUNT,
 }
 
-@data(E2_OpInfo) e2_op_kind_info_table:
+@data(E2_ExprKindInfo) e2_expr_kind_info_table:
 {
   `{0}`,
-  @expand(E2_OpTable a) `{E2_OpParseKind_$(a.parse_kind), $(a.precedence), str8_lit_comp("$(a.pre)"), str8_lit_comp("$(a.sep)"), str8_lit_comp("$(a.pos)"), str8_lit_comp("$(a.chain)")}`
+  @expand(E2_ExprKindTable a) `{E2_ExprParseKind_$(a.parse_kind), $(a.precedence), str8_lit_comp("$(a.pre)"), str8_lit_comp("$(a.sep)"), str8_lit_comp("$(a.pos)"), str8_lit_comp("$(a.chain)")}`
 }
 
 @table(name                 basic_string          basic_byte_size)
