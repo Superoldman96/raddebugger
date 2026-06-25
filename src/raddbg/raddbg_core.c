@@ -7197,7 +7197,7 @@ rd_window_frame(void)
                     UI_Row UI_Padding(ui_pct(1, 0)) UI_TextAlignment(UI_TextAlign_Center) UI_PrefWidth(ui_text_dim(ui_top_font_size()*2.f, 1))
                     UI_CornerRadius(ui_top_font_size()*0.5f)
                   {
-                    String8 url = str8_lit("https://github.com/EpicGamesExt/raddebugger/issues");
+                    String8 url = str8_lit("https://github.com/EpicGames/raddebugger/issues");
                     UI_Signal sig = ui_button(str8_lit("Submit request, issue, or bug report"));
                     if(ui_clicked(sig))
                     {
@@ -7655,7 +7655,7 @@ rd_window_frame(void)
           ui_box_equip_display_fstrs(label, &fstrs);
           if(ui_clicked(sig))
           {
-            wm_open_in_browser(s("https://github.com/EpicGamesExt/raddebugger/releases/latest"));
+            wm_open_in_browser(s("https://github.com/EpicGames/raddebugger/releases/latest"));
           }
         }
         
@@ -12841,7 +12841,7 @@ rd_frame(void)
         {
           .id = 1,
           .method = HTTP_Method_Get,
-          .url = s("https://api.github.com/repos/EpicGamesExt/raddebugger/releases/latest"),
+          .url = s("https://api.github.com/repos/EpicGames/raddebugger/releases/latest"),
           .user_agent = s("raddebugger"),
         };
         http_push_request(rd_state->update_check_http_ring, &p, 0);
