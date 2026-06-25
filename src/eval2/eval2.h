@@ -166,6 +166,16 @@ struct E2_ConsTypeSlot
   E2_ConsTypeNode *last;
 };
 
+typedef struct E2_ConsTypeMap E2_ConsTypeMap;
+struct E2_ConsTypeMap
+{
+  U64 id_gen;
+  U64 content_slots_count;
+  E2_ConsTypeSlot *content_slots;
+  U64 key_slots_count;
+  E2_ConsTypeSlot *key_slots;
+};
+
 ////////////////////////////////
 //~ rjf: Evaluation Values
 
@@ -279,12 +289,18 @@ struct E2_Token
 ////////////////////////////////
 //~ rjf: Expression Tree Building
 
+typedef struct E2_ExprNode E2_ExprNode;
+struct E2_ExprNode
+{
+  E2_ExprNode *next;
+  struct E2_Expr *v;
+};
+
 typedef struct E2_Expr E2_Expr;
 struct E2_Expr
 {
-  E2_Expr *first;
-  E2_Expr *last;
-  E2_Expr *next;
+  E2_ExprNode *first_child;
+  E2_ExprNode *last_child;
   U64 child_count;
   Rng1U64 src_range;
   String8 string;
@@ -292,13 +308,6 @@ struct E2_Expr
   E2_TypeKey type_key;
   E2_Mode mode;
   E2_Val val;
-};
-
-typedef struct E2_ExprNode E2_ExprNode;
-struct E2_ExprNode
-{
-  E2_ExprNode *next;
-  E2_Expr *v;
 };
 
 typedef struct E2_ExprMapNode E2_ExprMapNode;
@@ -424,8 +433,9 @@ struct E2_Interp
 //~ rjf: Globals
 
 thread_static E2_Assets *e2_assets = 0;
+read_only global E2_ConsTypeNode e2_cons_type_node_nil = {&e2_cons_type_node_nil, &e2_cons_type_node_nil}; 
 read_only global E2_DbgInfo e2_dbg_info_nil = {{0}, &rdi_parsed_nil};
-read_only global E2_Expr e2_expr_nil = {&e2_expr_nil, &e2_expr_nil, &e2_expr_nil};
+read_only global E2_Expr e2_expr_nil = {0};
 
 ////////////////////////////////
 //~ rjf: Space -> Memory Map Helpers
@@ -530,7 +540,8 @@ internal E2_Expr *e2_expr_resolve_to_value(Arena *arena, E2_Expr *expr);
 internal E2_Expr *e2_expr_truncate(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key);
 internal E2_Expr *e2_expr_convert_if_possible(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key);
 internal E2_Expr *e2_expr_type(Arena *arena, E2_TypeKey type_key);
-internal void e2_expr_push_child(E2_Expr *parent, E2_Expr *expr);
+internal void e2_expr_push_child_node(E2_Expr *parent, E2_ExprNode *node);
+internal void e2_expr_push_child(Arena *arena, E2_Expr *parent, E2_Expr *expr);
 
 ////////////////////////////////
 //~ rjf: String -> Expression

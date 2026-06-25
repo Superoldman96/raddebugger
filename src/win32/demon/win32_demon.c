@@ -2359,7 +2359,10 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
               W32_DMN_Entity *module = w32_dmn_entity_from_kind_id(W32_DMN_EntityKind_Module, module_base);
               W32_DMN_Entity *process = module->parent;
               
-              // rjf: generate event
+              // rjf: generate event, if this is a valid module (in some niche scenarios -
+              // potentially related to antivirus - spurious unload dll events are generated
+              // for modules we've never seen before!)
+              if(module != &w32_dmn_entity_nil)
               {
                 DMN_Event *e = dmn_event_list_push(arena, &events);
                 e->kind = DMN_EventKind_UnloadModule;

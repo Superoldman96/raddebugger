@@ -799,7 +799,7 @@ e2_expr_unary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_Expr *oper
   e->mode = E2_Mode_Value;
   e->val.u512.u8[0] = e2_type_group_from_kind(e2_type_kind_from_key(type_key));
   e->val.u512.u8[1] = 8*e2_byte_size_from_type_key(type_key);
-  e2_expr_push_child(e, operand);
+  e2_expr_push_child(arena, e, operand);
   return e;
 }
 
@@ -817,8 +817,8 @@ e2_expr_binary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_Expr *lhs
   e->mode = E2_Mode_Value;
   e->val.u512.u8[0] = e2_type_group_from_kind(e2_type_kind_from_key(arith_type_key));
   e->val.u512.u8[1] = 8*e2_byte_size_from_type_key(arith_type_key);
-  e2_expr_push_child(e, lhs);
-  e2_expr_push_child(e, rhs);
+  e2_expr_push_child(arena, e, lhs);
+  e2_expr_push_child(arena, e, rhs);
   return e;
 }
 
@@ -833,7 +833,7 @@ e2_expr_resolve_to_value(Arena *arena, E2_Expr *expr)
     result = e2_expr(arena);
     result->type_key = e2_type_key_direct(e2_type_key_undecorate(expr->type_key));
     result->mode = E2_Mode_Value;
-    e2_expr_push_child(result, expr);
+    e2_expr_push_child(arena, result, expr);
   }
   
   // rjf: address evaluations -> read value from space
@@ -846,7 +846,7 @@ e2_expr_resolve_to_value(Arena *arena, E2_Expr *expr)
     memread_expr->mode = E2_Mode_Value;
     memread_expr->type_key = expr->type_key;
     memread_expr->val.u64 = memread_byte_size;
-    e2_expr_push_child(memread_expr, expr);
+    e2_expr_push_child(arena, memread_expr, expr);
     result = memread_expr;
   }
   
@@ -885,7 +885,7 @@ e2_expr_truncate(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key)
     result->type_key = dst_type_key;
     result->op = dst_type_is_signed ? RDI_EvalOp_TruncSigned : RDI_EvalOp_Trunc;
     result->val.u64 = dst_type_byte_size*8;
-    e2_expr_push_child(result, expr);
+    e2_expr_push_child(arena, result, expr);
   }
   return result;
 }
@@ -913,7 +913,7 @@ e2_expr_convert_if_possible(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key
       result->type_key = dst_type_key;
       result->op       = RDI_EvalOp_Convert;
       result->val.u64  = src_type_group | (dst_type_group << 8);
-      e2_expr_push_child(result, expr);
+      e2_expr_push_child(arena, result, expr);
     }
     
     // rjf: no-op from src -> dst
@@ -941,10 +941,18 @@ e2_expr_type(Arena *arena, E2_TypeKey type_key)
 }
 
 internal void
-e2_expr_push_child(E2_Expr *parent, E2_Expr *expr)
+e2_expr_push_child_node(E2_Expr *parent, E2_ExprNode *node)
 {
-  SLLQueuePush_NZ(&e2_expr_nil, parent->first, parent->last, expr, next);
+  SLLQueuePush(parent->first_child, parent->last_child, node);
   parent->child_count += 1;
+}
+
+internal void
+e2_expr_push_child(Arena *arena, E2_Expr *parent, E2_Expr *expr)
+{
+  E2_ExprNode *n = push_array(arena, E2_ExprNode, 1);
+  n->v = expr;
+  e2_expr_push_child_node(parent, n);
 }
 
 ////////////////////////////////
@@ -1626,10 +1634,9 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
                 if(lhs != rhs)
                 {
                   finished_root = e2_expr(arena);
-                  for EachNode(n, E2_ExprNode, completed_task->first_child)
-                  {
-                    e2_expr_push_child(finished_root, n->v);
-                  }
+                  finished_root->first_child = completed_task->first_child;
+                  finished_root->last_child = completed_task->last_child;
+                  finished_root->child_count = completed_task->child_count;
                 }
                 else
                 {
@@ -1712,10 +1719,9 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
                   else
                   {
                     E2_Expr *params_expr = e2_expr(arena);
-                    for(E2_ExprNode *n = completed_task->first_child->next; n != 0; n = n->next)
-                    {
-                      e2_expr_push_child(params_expr, n->v);
-                    }
+                    params_expr->first_child = completed_task->first_child->next;
+                    params_expr->last_child = completed_task->last_child;
+                    params_expr->child_count = completed_task->child_count-1;
                     done = 1;
                     parse.status = E2_ParseStatus_Call;
                     parse.expr = lhs;
@@ -2152,11 +2158,11 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E
                   E2_Expr *cond_root = e2_expr(arena);
                   E2_Expr *cjump_expr = e2_expr(arena);
                   E2_Expr *jump_expr = e2_expr(arena);
-                  e2_expr_push_child(cond_root, condition_expr);
-                  e2_expr_push_child(cond_root, cjump_expr);
-                  e2_expr_push_child(cond_root, fail_expr);
-                  e2_expr_push_child(cond_root, jump_expr);
-                  e2_expr_push_child(cond_root, pass_expr);
+                  e2_expr_push_child(arena, cond_root, condition_expr);
+                  e2_expr_push_child(arena, cond_root, cjump_expr);
+                  e2_expr_push_child(arena, cond_root, fail_expr);
+                  e2_expr_push_child(arena, cond_root, jump_expr);
+                  e2_expr_push_child(arena, cond_root, pass_expr);
                   
                   // rjf: compute # of bytes for pass
                   U64 pass_expr_byte_count = 0;
@@ -2318,10 +2324,10 @@ e2_bytecode_from_expr(Arena *arena, E2_Expr *expr)
     {
       Task *next;
       E2_Expr *e;
-      E2_Expr *last_pushed_child;
+      E2_ExprNode *last_pushed_child_node;
       U64 pushed_child_count;
     };
-    Task start_task = {0, expr, &e2_expr_nil};
+    Task start_task = {0, expr};
     Task *top_task = &start_task;
     Task *free_task = 0;
     for(Task *t = top_task; t != 0; t = top_task)
@@ -2340,7 +2346,7 @@ e2_bytecode_from_expr(Arena *arena, E2_Expr *expr)
       if(t->pushed_child_count < child_count)
       {
         t->pushed_child_count += 1;
-        E2_Expr *next_child = (t->last_pushed_child == &e2_expr_nil ? e->first : t->last_pushed_child->next);
+        E2_ExprNode *next_child_node = (t->last_pushed_child_node == 0 ? e->first_child : t->last_pushed_child_node->next);
         Task *child_task = free_task;
         if(child_task != 0)
         {
@@ -2352,10 +2358,10 @@ e2_bytecode_from_expr(Arena *arena, E2_Expr *expr)
         }
         MemoryZeroStruct(child_task);
         SLLStackPush(top_task, child_task);
-        child_task->e = next_child;
-        child_task->last_pushed_child = &e2_expr_nil;
+        child_task->e = next_child_node ? next_child_node->v : &e2_expr_nil;
+        child_task->last_pushed_child_node = 0;
         child_task->pushed_child_count = 0;
-        t->last_pushed_child = next_child;
+        t->last_pushed_child_node = next_child_node;
       }
       
       //- rjf: did push of all children -> push this expr's op, pop off stack
