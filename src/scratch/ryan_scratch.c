@@ -46,7 +46,7 @@ entry_point(CmdLine *cmdline)
     s("123, 456"),
     s("int32 == int32"),
     s("foo = 123"),
-    s("bar(a, b) = a + b"),
+    // s("bar(a, b) = a + b"),
     s("1 > 2"),
     s("1 ? \"Test\" : 888"),
     s("'a'"),
@@ -88,66 +88,15 @@ entry_point(CmdLine *cmdline)
     E2_Expr *expr = &e2_expr_nil;
     {
       E2_ParseState state = {0};
-      E2_ExprMap expr_map = {0};
-      E2_Expr *access_expr = &e2_expr_nil;
-      E2_Val compile_time_eval_result = {0};
+      B32 identifier_is_type = 0;
       for(;;)
       {
-        E2_Parse parse = e2_parse_from_string(scratch.arena, &state, &expr_map, access_expr, compile_time_eval_result, strings[idx]);
+        E2_Parse parse = e2_parse_from_string(scratch.arena, &state, identifier_is_type, strings[idx]);
+        identifier_is_type = 0;
         expr = parse.expr;
-        access_expr = &e2_expr_nil;
         for EachNode(n, E2_Msg, parse.msgs.first)
         {
           str8_list_push(scratch.arena, &msgs, n->string);
-        }
-        if(parse.status == E2_ParseStatus_MissedIdentifierResolution)
-        {
-          E2_Expr *expr = &e2_expr_nil;
-          if(str8_match(parse.identifier, s("float32"), 0))
-          {
-            expr = e2_expr_type(scratch.arena, e2_type_key_basic(E2_TypeKind_F32));
-          }
-          else if(str8_match(parse.identifier, s("float64"), 0))
-          {
-            expr = e2_expr_type(scratch.arena, e2_type_key_basic(E2_TypeKind_F64));
-          }
-          else if(str8_match(parse.identifier, s("int32"), 0))
-          {
-            expr = e2_expr_type(scratch.arena, e2_type_key_basic(E2_TypeKind_S32));
-          }
-          else if(str8_match(parse.identifier, s("int64"), 0))
-          {
-            expr = e2_expr_type(scratch.arena, e2_type_key_basic(E2_TypeKind_S64));
-          }
-          else
-          {
-            expr = e2_expr_const_u64_or_smaller(scratch.arena, 123);
-          }
-          e2_expr_map_push(scratch.arena, &expr_map, parse.identifier, expr);
-        }
-        if(parse.status == E2_ParseStatus_NewIdentifierDefinition)
-        {
-          e2_expr_map_push(scratch.arena, &expr_map, parse.identifier, expr);
-        }
-        if(parse.status == E2_ParseStatus_MemberAccess)
-        {
-          access_expr = e2_expr_const_u64_or_smaller(scratch.arena, 456);
-        }
-        if(parse.status == E2_ParseStatus_IndexAccess)
-        {
-          access_expr = e2_expr_const_u64_or_smaller(scratch.arena, 111);
-        }
-        if(parse.status == E2_ParseStatus_Call)
-        {
-          access_expr = e2_expr_const_u64_or_smaller(scratch.arena, 123456);
-        }
-        if(parse.status == E2_ParseStatus_CompileTimeEval)
-        {
-          String8 bytecode = e2_bytecode_from_expr(scratch.arena, expr);
-          E2_InterpState interp_state = {0};
-          E2_SpaceMap space_map = {0};
-          E2_Interp interp = e2_interp_from_bytecode(scratch.arena, &interp_state, &space_map, bytecode);
-          compile_time_eval_result = interp.val;
         }
         if(e2_parse_status_is_terminal(parse.status))
         {
@@ -156,8 +105,71 @@ entry_point(CmdLine *cmdline)
       }
     }
     
-    // rjf: expr -> bytecode
-    String8 bytecode = e2_bytecode_from_expr(scratch.arena, expr);
+    // rjf: expr -> ir tree
+    E2_IRNode *irtree = &e2_irnode_nil;
+    {
+      E2_IRNode *resolve_result = &e2_irnode_nil;
+      E2_Val compile_time_eval_result = {0};
+      E2_CompileState state = {0};
+      for(;;)
+      {
+        E2_Compile compile = e2_compile_from_expr(scratch.arena, &state, resolve_result, compile_time_eval_result, expr);
+        irtree = compile.irtree;
+        resolve_result = &e2_irnode_nil;
+        if(compile.status == E2_CompileStatus_MissedIdentifierResolution)
+        {
+          E2_IRNode *irnode = &e2_irnode_nil;
+          if(str8_match(compile.identifier, s("float32"), 0))
+          {
+            irnode = e2_irnode_type(scratch.arena, e2_type_key_basic(E2_TypeKind_F32));
+          }
+          else if(str8_match(compile.identifier, s("float64"), 0))
+          {
+            irnode = e2_irnode_type(scratch.arena, e2_type_key_basic(E2_TypeKind_F64));
+          }
+          else if(str8_match(compile.identifier, s("int32"), 0))
+          {
+            irnode = e2_irnode_type(scratch.arena, e2_type_key_basic(E2_TypeKind_S32));
+          }
+          else if(str8_match(compile.identifier, s("int64"), 0))
+          {
+            irnode = e2_irnode_type(scratch.arena, e2_type_key_basic(E2_TypeKind_S64));
+          }
+          else
+          {
+            irnode = e2_irnode_const_u64_or_smaller(scratch.arena, 123);
+          }
+          resolve_result = irnode;
+        }
+        if(compile.status == E2_CompileStatus_MemberAccess)
+        {
+          resolve_result = e2_irnode_const_u64_or_smaller(scratch.arena, 456);
+        }
+        if(compile.status == E2_CompileStatus_IndexAccess)
+        {
+          resolve_result = e2_irnode_const_u64_or_smaller(scratch.arena, 111);
+        }
+        if(compile.status == E2_CompileStatus_Call)
+        {
+          resolve_result = e2_irnode_const_u64_or_smaller(scratch.arena, 123456);
+        }
+        if(compile.status == E2_CompileStatus_CompileTimeEval)
+        {
+          String8 bytecode = e2_bytecode_from_irnode(scratch.arena, irtree);
+          E2_InterpState interp_state = {0};
+          E2_SpaceMap space_map = {0};
+          E2_Interp interp = e2_interp_from_bytecode(scratch.arena, &interp_state, &space_map, bytecode);
+          compile_time_eval_result = interp.val;
+        }
+        if(e2_compile_status_is_terminal(compile.status))
+        {
+          break;
+        }
+      }
+    }
+    
+    // rjf: ir tree -> bytecode
+    String8 bytecode = e2_bytecode_from_irnode(scratch.arena, irtree);
     
     // rjf: bytecode -> value
     E2_Val val = {0};
@@ -189,8 +201,8 @@ entry_point(CmdLine *cmdline)
                         val.s64,
                         val.f32,
                         val.f64,
-                        expr->mode == E2_Mode_Type ? "type" :
-                        expr->mode == E2_Mode_Value ? "value" :
+                        irtree->mode == E2_Mode_Type ? "type" :
+                        irtree->mode == E2_Mode_Value ? "value" :
                         "address",
                         msgs_string.size != 0 ? " // " : "", msgs_string);
     raddbg_log("%S", log);

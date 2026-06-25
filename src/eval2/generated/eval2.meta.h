@@ -9,6 +9,11 @@
 typedef enum E2_ExprKind
 {
 E2_ExprKind_Null,
+E2_ExprKind_Identifier,
+E2_ExprKind_TypeIdentifier,
+E2_ExprKind_Numeric,
+E2_ExprKind_StringLiteral,
+E2_ExprKind_CharLiteral,
 E2_ExprKind_Dot,
 E2_ExprKind_Index,
 E2_ExprKind_Call,
@@ -22,6 +27,7 @@ E2_ExprKind_Pos,
 E2_ExprKind_Neg,
 E2_ExprKind_LogNot,
 E2_ExprKind_BitNot,
+E2_ExprKind_Ptr,
 E2_ExprKind_Mul,
 E2_ExprKind_Div,
 E2_ExprKind_Mod,
@@ -125,7 +131,7 @@ E2_TypeKind_LastMeta        = E2_TypeKind_MetaDescription,
 } E2_TypeKind;
 
 C_LINKAGE_BEGIN
-extern E2_ExprKindInfo e2_expr_kind_info_table[35];
+extern E2_ExprKindInfo e2_expr_kind_info_table[41];
 extern U8 e2_type_kind_basic_byte_size_table[61];
 extern String8 e2_type_kind_basic_string_table[61];
 

@@ -11,6 +11,7 @@ typedef enum E2_ExprParseKind
 {
   E2_ExprParseKind_Null,
   E2_ExprParseKind_UnaryPrefix,
+  E2_ExprParseKind_UnaryPostfix,
   E2_ExprParseKind_Binary,
   E2_ExprParseKind_Ternary,
   E2_ExprParseKind_Call,
@@ -54,14 +55,10 @@ typedef enum E2_ParseStatus
   E2_ParseStatus_LastTerminal = E2_ParseStatus_Error,
   
   //- rjf: caller-provided info
-  E2_ParseStatus_MissedIdentifierResolution,
-  E2_ParseStatus_NewIdentifierDefinition,
-  E2_ParseStatus_MemberAccess,
-  E2_ParseStatus_IndexAccess,
-  E2_ParseStatus_Call,
-  E2_ParseStatus_CompileTimeEval,
-  E2_ParseStatus_FirstCallerRequest = E2_ParseStatus_MissedIdentifierResolution,
-  E2_ParseStatus_LastCallerRequest = E2_ParseStatus_CompileTimeEval,
+  E2_ParseStatus_CheckIdentifierIsType,
+  E2_ParseStatus_NewMacro,
+  E2_ParseStatus_FirstCallerRequest = E2_ParseStatus_CheckIdentifierIsType,
+  E2_ParseStatus_LastCallerRequest = E2_ParseStatus_NewMacro,
 }
 E2_ParseStatus;
 
@@ -333,10 +330,6 @@ struct E2_Expr
   E2_ExprKind kind;
   Rng1U64 src_range;
   String8 string;
-  RDI_EvalOp op;
-  E2_TypeKey type_key;
-  E2_Mode mode;
-  E2_Val val;
 };
 
 typedef struct E2_ExprMapNode E2_ExprMapNode;
@@ -434,14 +427,48 @@ struct E2_IRNode
   E2_Val val;
 };
 
+typedef struct E2_IdentifierMapNode E2_IdentifierMapNode;
+struct E2_IdentifierMapNode
+{
+  E2_IdentifierMapNode *next;
+  String8 name;
+  E2_IRNode *irtree;
+};
+
+typedef struct E2_IdentifierMap E2_IdentifierMap;
+struct E2_IdentifierMap
+{
+  E2_IdentifierMapNode **slots;
+  U64 slots_count;
+};
+
+typedef struct E2_CompileTask E2_CompileTask;
+struct E2_CompileTask
+{
+  E2_CompileTask *next;
+  E2_Expr *expr;
+  E2_ExprNode *last_compiled_child_node;
+  E2_IRNodePtrNode *first_irtree_child;
+  E2_IRNodePtrNode *last_irtree_child;
+  U64 irtree_child_count;
+};
+
+typedef struct E2_CompileState E2_CompileState;
+struct E2_CompileState
+{
+  E2_CompileTask *top_task;
+  E2_CompileTask *free_task;
+  U64 caller_request_count;
+};
+
 typedef struct E2_Compile E2_Compile;
 struct E2_Compile
 {
   E2_CompileStatus status;
   String8 identifier;
-  E2_Expr *expr;
+  E2_IRNode *irtree;
   String8 member_name;
-  E2_Expr *params_expr;
+  E2_IRNode *params_irtree;
   E2_MsgList msgs;
 };
 
@@ -514,6 +541,12 @@ internal U64 e2_space_map_read(E2_SpaceMap *map, E2_SpaceID space_id, Rng1U64 ad
 
 internal void e2_expr_map_push(Arena *arena, E2_ExprMap *map, String8 name, E2_Expr *expr);
 internal E2_Expr *e2_expr_from_name(E2_ExprMap *map, String8 name);
+
+////////////////////////////////
+//~ rjf: Identifier Map Helpers
+
+internal void e2_identifier_map_push(Arena *arena, E2_IdentifierMap *map, String8 name, E2_IRNode *irtree);
+internal E2_IRNode *e2_irtree_from_identifier(E2_IdentifierMap *map, String8 name);
 
 ////////////////////////////////
 //~ rjf: Messages
@@ -607,7 +640,10 @@ internal E2_TypeKey e2_coerced_type_key_from_operands(E2_TypeKey lhs, E2_TypeKey
 ////////////////////////////////
 //~ rjf: Expression Constructors
 
-internal E2_Expr *e2_expr(Arena *arena);
+internal E2_Expr *e2_expr(Arena *arena, E2_ExprKind kind);
+internal void e2_expr_push_child_node(E2_Expr *parent, E2_ExprNode *node);
+internal void e2_expr_push_child(Arena *arena, E2_Expr *parent, E2_Expr *expr);
+#if 0
 internal E2_Expr *e2_expr_const_u64_or_smaller(Arena *arena, U64 u);
 internal E2_Expr *e2_expr_const_f32(Arena *arena, F32 f32);
 internal E2_Expr *e2_expr_const_f64(Arena *arena, F64 f64);
@@ -617,8 +653,7 @@ internal E2_Expr *e2_expr_resolve_to_value(Arena *arena, E2_Expr *expr);
 internal E2_Expr *e2_expr_truncate(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key);
 internal E2_Expr *e2_expr_convert_if_possible(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key);
 internal E2_Expr *e2_expr_type(Arena *arena, E2_TypeKey type_key);
-internal void e2_expr_push_child_node(E2_Expr *parent, E2_ExprNode *node);
-internal void e2_expr_push_child(Arena *arena, E2_Expr *parent, E2_Expr *expr);
+#endif
 
 ////////////////////////////////
 //~ rjf: IR Tree Constructors
@@ -642,12 +677,17 @@ internal void e2_irnode_push_child(Arena *arena, E2_IRNode *parent, E2_IRNode *e
 internal E2_Token e2_token_from_string_off(String8 string, U64 start_off);
 internal U64 e2_read_token(String8 string, U64 off, E2_Token *token_out);
 internal B32 e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *off_out, E2_Token *token_out);
-internal E2_Parse e2_parse_from_string(Arena *arena, E2_ParseState *state, E2_ExprMap *expr_map, E2_Expr *access_result, E2_Val compile_time_eval_result, String8 string);
+internal E2_Parse e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type, String8 string);
 
 ////////////////////////////////
-//~ rjf: Expression -> Bytecode
+//~ rjf: Expression -> IR Tree
 
-internal String8 e2_bytecode_from_expr(Arena *arena, E2_Expr *expr);
+internal E2_Compile e2_compile_from_expr(Arena *arena, E2_CompileState *state, E2_IRNode *resolve_result, E2_Val compile_time_eval_result, E2_Expr *expr);
+
+////////////////////////////////
+//~ rjf: IR Tree -> Bytecode
+
+internal String8 e2_bytecode_from_irnode(Arena *arena, E2_IRNode *irnode);
 
 ////////////////////////////////
 //~ rjf: Bytecode -> Result

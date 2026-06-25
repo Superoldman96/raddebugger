@@ -4,10 +4,15 @@
 //- GENERATED CODE
 
 C_LINKAGE_BEGIN
-E2_ExprKindInfo e2_expr_kind_info_table[35] =
+E2_ExprKindInfo e2_expr_kind_info_table[41] =
 {
 {0},
-{E2_ExprParseKind_Binary, 1, str8_lit_comp(""), str8_lit_comp("."), str8_lit_comp(""), str8_lit_comp("")},
+{E2_ExprParseKind_Null, 0, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
+{E2_ExprParseKind_Null, 0, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
+{E2_ExprParseKind_Null, 0, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
+{E2_ExprParseKind_Null, 0, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
+{E2_ExprParseKind_Null, 0, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
+{E2_ExprParseKind_Null, 0, str8_lit_comp(""), str8_lit_comp("."), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprParseKind_Binary, 1, str8_lit_comp(""), str8_lit_comp("["), str8_lit_comp("]"), str8_lit_comp("")},
 {E2_ExprParseKind_Call, 1, str8_lit_comp(""), str8_lit_comp("("), str8_lit_comp(")"), str8_lit_comp(",")},
 {E2_ExprParseKind_UnaryPrefix, 1, str8_lit_comp("["), str8_lit_comp(""), str8_lit_comp("]"), str8_lit_comp("")},
@@ -20,6 +25,7 @@ E2_ExprKindInfo e2_expr_kind_info_table[35] =
 {E2_ExprParseKind_UnaryPrefix, 2, str8_lit_comp("-"), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprParseKind_UnaryPrefix, 2, str8_lit_comp("!"), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprParseKind_UnaryPrefix, 2, str8_lit_comp("~"), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
+{E2_ExprParseKind_UnaryPostfix, 1, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("*"), str8_lit_comp("")},
 {E2_ExprParseKind_Binary, 3, str8_lit_comp(""), str8_lit_comp("*"), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprParseKind_Binary, 3, str8_lit_comp(""), str8_lit_comp("/"), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprParseKind_Binary, 3, str8_lit_comp(""), str8_lit_comp("%"), str8_lit_comp(""), str8_lit_comp("")},
