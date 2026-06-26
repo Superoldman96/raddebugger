@@ -9,13 +9,15 @@ E2_LangInfo e2_lang_kind_info_table[1] =
 {ArrayCount(e2_expr_kind_parse_info_table__clike), (e2_expr_kind_parse_info_table__clike)},
 };
 
-E2_ExprKindParseInfo e2_expr_kind_parse_info_table__clike[32] =
+E2_ExprKindParseInfo e2_expr_kind_parse_info_table__clike[34] =
 {
 {E2_ExprKind_Index, E2_ExprParseKind_Binary, 1, str8_lit_comp(""), str8_lit_comp("["), str8_lit_comp("]"), str8_lit_comp("")},
 {E2_ExprKind_Call, E2_ExprParseKind_Call, 1, str8_lit_comp(""), str8_lit_comp("("), str8_lit_comp(")"), str8_lit_comp(",")},
 {E2_ExprKind_DerefAsm, E2_ExprParseKind_UnaryPrefix, 1, str8_lit_comp("["), str8_lit_comp(""), str8_lit_comp("]"), str8_lit_comp("")},
 {E2_ExprKind_SizeOf, E2_ExprParseKind_UnaryPrefix, 1, str8_lit_comp("sizeof "), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprKind_TypeOf, E2_ExprParseKind_UnaryPrefix, 1, str8_lit_comp("typeof "), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
+{E2_ExprKind_SizeOf, E2_ExprParseKind_UnaryPrefix, 1, str8_lit_comp("size_of "), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
+{E2_ExprKind_TypeOf, E2_ExprParseKind_UnaryPrefix, 1, str8_lit_comp("type_of "), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprKind_CCast, E2_ExprParseKind_UnaryPrefix, 1, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprKind_Deref, E2_ExprParseKind_UnaryPrefix, 2, str8_lit_comp("*"), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprKind_Address, E2_ExprParseKind_UnaryPrefix, 2, str8_lit_comp("&"), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},

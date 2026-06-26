@@ -90,38 +90,40 @@ E2_LangKindTable:
 @table(name parse_kind precedence pre sep pos chain)
 E2_ExprKindParseInfoTable_CLike:
 {
-  {Index          Binary        1 ""        "["  "]" "" }
-  {Call           Call          1 ""        "("  ")" ","}
-  {DerefAsm       UnaryPrefix   1 "["       ""   "]" "" }
-  {SizeOf         UnaryPrefix   1 "sizeof " ""   ""  "" }
-  {TypeOf         UnaryPrefix   1 "typeof " ""   ""  "" }
-  {CCast          UnaryPrefix   1 ""        ""   ""  "" }
-  {Deref          UnaryPrefix   2 "*"       ""   ""  "" }
-  {Address        UnaryPrefix   2 "&"       ""   ""  "" }
-  {Pos            UnaryPrefix   2 "+"       ""   ""  "" }
-  {Neg            UnaryPrefix   2 "-"       ""   ""  "" }
-  {LogNot         UnaryPrefix   2 "!"       ""   ""  "" }
-  {BitNot         UnaryPrefix   2 "~"       ""   ""  "" }
-  {Ptr            UnaryPostfix  1 ""        ""   "*" "" }
-  {Mul            Binary        3 ""        "*"  ""  "" }
-  {Div            Binary        3 ""        "/"  ""  "" }
-  {Mod            Binary        3 ""        "%"  ""  "" }
-  {Add            Binary        4 ""        "+"  ""  "" }
-  {Sub            Binary        4 ""        "-"  ""  "" }
-  {LShift         Binary        5 ""        "<<" ""  "" }
-  {RShift         Binary        5 ""        ">>" ""  "" }
-  {Less           Binary        6 ""        "<"  ""  "" }
-  {LtEq           Binary        6 ""        "<=" ""  "" }
-  {Grtr           Binary        6 ""        ">"  ""  "" }
-  {GrEq           Binary        6 ""        ">=" ""  "" }
-  {EqEq           Binary        7 ""        "==" ""  "" }
-  {NtEq           Binary        7 ""        "!=" ""  "" }
-  {BitAnd         Binary        8 ""        "&"  ""  "" }
-  {BitXor         Binary        9 ""        "^"  ""  "" }
-  {BitOr          Binary       10 ""        "|"  ""  "" }
-  {LogAnd         Binary       11 ""        "&&" ""  "" }
-  {LogOr          Binary       12 ""        "||" ""  "" }
-  {Cond           Ternary      14 ""        "?"  ""  ":"}
+  {Index          Binary        1 ""         "["  "]" "" }
+  {Call           Call          1 ""         "("  ")" ","}
+  {DerefAsm       UnaryPrefix   1 "["        ""   "]" "" }
+  {SizeOf         UnaryPrefix   1 "sizeof "  ""   ""  "" }
+  {TypeOf         UnaryPrefix   1 "typeof "  ""   ""  "" }
+  {SizeOf         UnaryPrefix   1 "size_of " ""   ""  "" }
+  {TypeOf         UnaryPrefix   1 "type_of " ""   ""  "" }
+  {CCast          UnaryPrefix   1 ""         ""   ""  "" }
+  {Deref          UnaryPrefix   2 "*"        ""   ""  "" }
+  {Address        UnaryPrefix   2 "&"        ""   ""  "" }
+  {Pos            UnaryPrefix   2 "+"        ""   ""  "" }
+  {Neg            UnaryPrefix   2 "-"        ""   ""  "" }
+  {LogNot         UnaryPrefix   2 "!"        ""   ""  "" }
+  {BitNot         UnaryPrefix   2 "~"        ""   ""  "" }
+  {Ptr            UnaryPostfix  1 ""         ""   "*" "" }
+  {Mul            Binary        3 ""         "*"  ""  "" }
+  {Div            Binary        3 ""         "/"  ""  "" }
+  {Mod            Binary        3 ""         "%"  ""  "" }
+  {Add            Binary        4 ""         "+"  ""  "" }
+  {Sub            Binary        4 ""         "-"  ""  "" }
+  {LShift         Binary        5 ""         "<<" ""  "" }
+  {RShift         Binary        5 ""         ">>" ""  "" }
+  {Less           Binary        6 ""         "<"  ""  "" }
+  {LtEq           Binary        6 ""         "<=" ""  "" }
+  {Grtr           Binary        6 ""         ">"  ""  "" }
+  {GrEq           Binary        6 ""         ">=" ""  "" }
+  {EqEq           Binary        7 ""         "==" ""  "" }
+  {NtEq           Binary        7 ""         "!=" ""  "" }
+  {BitAnd         Binary        8 ""         "&"  ""  "" }
+  {BitXor         Binary        9 ""         "^"  ""  "" }
+  {BitOr          Binary       10 ""         "|"  ""  "" }
+  {LogAnd         Binary       11 ""         "&&" ""  "" }
+  {LogOr          Binary       12 ""         "||" ""  "" }
+  {Cond           Ternary      14 ""         "?"  ""  ":"}
 }
 
 @data(E2_ExprKindParseInfo) e2_expr_kind_parse_info_table__clike:

@@ -4117,7 +4117,7 @@ rd_view_ui(Rng2F32 rect)
                                cells_are_editable &&
                                row->eval.expr == &e_expr_nil)
                             {
-                              ghost_text = str8_lit("Expression");
+                              ghost_text = str8_lit("Add a expression to watch...");
                               is_non_code = (!cell_selected || !ewv->text_editing);
                               cell_params.flags &= ~(RD_CellFlag_Expander|RD_CellFlag_ExpanderSpace|RD_CellFlag_ExpanderPlaceholder);
                             }

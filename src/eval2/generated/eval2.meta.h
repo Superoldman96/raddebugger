@@ -157,7 +157,7 @@ E2_ExprKindParseInfo *expr_kind_parse_infos;
 
 C_LINKAGE_BEGIN
 extern E2_LangInfo e2_lang_kind_info_table[1];
-extern E2_ExprKindParseInfo e2_expr_kind_parse_info_table__clike[32];
+extern E2_ExprKindParseInfo e2_expr_kind_parse_info_table__clike[34];
 extern U8 e2_type_kind_basic_byte_size_table[61];
 extern String8 e2_type_kind_basic_string_table[61];
 
