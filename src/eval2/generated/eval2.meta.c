@@ -4,6 +4,53 @@
 //- GENERATED CODE
 
 C_LINKAGE_BEGIN
+B8 e2_expr_kind_allow_type_operands_table[43] =
+{
+0,
+0,
+0,
+0,
+1,
+1,
+0,
+0,
+0,
+1,
+0,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+1,
+};
+
 B8 e2_expr_kind_is_type_expr_table[43] =
 {
 0,
@@ -150,8 +197,9 @@ E2_LangInfo e2_lang_kind_info_table[1] =
 {ArrayCount(e2_expr_kind_parse_info_table__clike), (e2_expr_kind_parse_info_table__clike)},
 };
 
-E2_ExprKindParseInfo e2_expr_kind_parse_info_table__clike[37] =
+E2_ExprKindParseInfo e2_expr_kind_parse_info_table__clike[38] =
 {
+{E2_ExprKind_Dot, E2_ExprParseKind_Postfix, 1, 0, str8_lit_comp(""), str8_lit_comp("."), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprKind_Index, E2_ExprParseKind_Postfix, 1, 0, str8_lit_comp(""), str8_lit_comp("["), str8_lit_comp("]"), str8_lit_comp("")},
 {E2_ExprKind_Call, E2_ExprParseKind_Postfix, 1, 0, str8_lit_comp(""), str8_lit_comp("("), str8_lit_comp(")"), str8_lit_comp(",")},
 {E2_ExprKind_DerefAsm, E2_ExprParseKind_Prefix, 1, 0, str8_lit_comp("["), str8_lit_comp(""), str8_lit_comp("]"), str8_lit_comp("")},

@@ -341,6 +341,7 @@ struct E2_ParseTask
   Rng1U64 src_range;
   E2_ExprNode *first_child;
   E2_ExprNode *last_child;
+  E2_Expr *next_type_ancestor;
   U64 child_count;
   U64 child_count_target;
   B32 reverse_children;
@@ -349,14 +350,18 @@ struct E2_ParseTask
   String8 identifier;
   String8 expected_closer;
   String8 expected_splitter;
+  U64 splitter_min_child_count;
   B32 splitter_is_required;
   String8List macro_arg_names;
+  B32 do_type_ancestors;
+  E2_Expr *type_lhs;
 };
 
 typedef struct E2_ParseState E2_ParseState;
 struct E2_ParseState
 {
   U64 string_off;
+  E2_ParseTask start_task;
   E2_ParseTask *top_task;
   E2_ParseTask *free_task;
   U64 last_caller_request_string_off;
@@ -632,6 +637,8 @@ internal E2_TypeKey e2_coerced_type_key_from_operands(E2_TypeKey lhs, E2_TypeKey
 internal E2_Expr *e2_expr(Arena *arena, E2_ExprKind kind);
 internal void e2_expr_push_child_node(E2_Expr *parent, E2_ExprNode *node);
 internal void e2_expr_push_child(Arena *arena, E2_Expr *parent, E2_Expr *expr);
+internal void e2_expr_push_child_node_front(E2_Expr *parent, E2_ExprNode *node);
+internal void e2_expr_push_child_front(Arena *arena, E2_Expr *parent, E2_Expr *expr);
 
 ////////////////////////////////
 //~ rjf: IR Tree Constructors

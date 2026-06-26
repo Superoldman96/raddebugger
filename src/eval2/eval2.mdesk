@@ -1,51 +1,51 @@
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
-@table(name  is_type_expression  is_first_operand_type_maybe  target_operand_count)
+@table(name  allow_type_operands  is_type_expression  is_first_operand_type_maybe  target_operand_count)
 E2_ExprKindTable:
 {
-  {Identifier                0   0   0                    }
-  {MacroArg                  0   0   0                    }
-  {TypeIdentifier            1   0   0                    }
-  {Ptr                       1   1   1                    }
-  {Array                     1   1   2                    }
-  {Numeric                   0   0   0                    }
-  {StringLiteral             0   0   0                    }
-  {CharLiteral               0   0   0                    }
-  {Dot                       0   0   1                    }
-  {Index                     0   0   2                    }
-  {Call                      0   0   0xffffffffffffffffull}
-  {DerefAsm                  0   0   1                    }
-  {SizeOf                    0   1   1                    }
-  {TypeOf                    1   1   1                    }
-  {Cast                      0   1   2                    }
-  {Deref                     0   0   1                    }
-  {Address                   0   0   1                    }
-  {Pos                       0   0   1                    }
-  {Neg                       0   0   1                    }
-  {LogNot                    0   0   1                    }
-  {BitNot                    0   0   1                    }
-  {Mul                       0   0   2                    }
-  {Div                       0   0   2                    }
-  {Mod                       0   0   2                    }
-  {Add                       0   0   2                    }
-  {Sub                       0   0   2                    }
-  {LShift                    0   0   2                    }
-  {RShift                    0   0   2                    }
-  {Less                      0   0   2                    }
-  {LtEq                      0   0   2                    }
-  {Grtr                      0   0   2                    }
-  {GrEq                      0   0   2                    }
-  {EqEq                      0   0   2                    }
-  {NtEq                      0   0   2                    }
-  {BitAnd                    0   0   2                    }
-  {BitXor                    0   0   2                    }
-  {BitOr                     0   0   2                    }
-  {LogAnd                    0   0   2                    }
-  {LogOr                     0   0   2                    }
-  {Define                    0   0   1                    }
-  {Macro                     0   0   1                    }
-  {Cond                      0   0   3                    }
+  {Identifier                0   0   0   0                    }
+  {MacroArg                  0   0   0   0                    }
+  {TypeIdentifier            0   1   0   0                    }
+  {Ptr                       1   1   1   1                    }
+  {Array                     1   1   1   2                    }
+  {Numeric                   0   0   0   0                    }
+  {StringLiteral             0   0   0   0                    }
+  {CharLiteral               0   0   0   0                    }
+  {Dot                       1   0   0   1                    }
+  {Index                     0   0   0   2                    }
+  {Call                      1   0   0   0xffffffffffffffffull}
+  {DerefAsm                  1   0   0   1                    }
+  {SizeOf                    1   0   1   1                    }
+  {TypeOf                    1   1   1   1                    }
+  {Cast                      1   0   1   2                    }
+  {Deref                     1   0   0   1                    }
+  {Address                   1   0   0   1                    }
+  {Pos                       1   0   0   1                    }
+  {Neg                       1   0   0   1                    }
+  {LogNot                    1   0   0   1                    }
+  {BitNot                    1   0   0   1                    }
+  {Mul                       1   0   0   2                    }
+  {Div                       1   0   0   2                    }
+  {Mod                       1   0   0   2                    }
+  {Add                       1   0   0   2                    }
+  {Sub                       1   0   0   2                    }
+  {LShift                    1   0   0   2                    }
+  {RShift                    1   0   0   2                    }
+  {Less                      1   0   0   2                    }
+  {LtEq                      1   0   0   2                    }
+  {Grtr                      1   0   0   2                    }
+  {GrEq                      1   0   0   2                    }
+  {EqEq                      1   0   0   2                    }
+  {NtEq                      1   0   0   2                    }
+  {BitAnd                    1   0   0   2                    }
+  {BitXor                    1   0   0   2                    }
+  {BitOr                     1   0   0   2                    }
+  {LogAnd                    1   0   0   2                    }
+  {LogOr                     1   0   0   2                    }
+  {Define                    1   0   0   1                    }
+  {Macro                     1   0   0   1                    }
+  {Cond                      1   0   0   3                    }
 }
 
 @enum E2_ExprKind:
@@ -53,6 +53,12 @@ E2_ExprKindTable:
   Null,
   @expand(E2_ExprKindTable a) `$(a.name)`,
   COUNT,
+}
+
+@data(B8) e2_expr_kind_allow_type_operands_table:
+{
+  0,
+  @expand(E2_ExprKindTable a) `$(a.allow_type_operands)`
 }
 
 @data(B8) e2_expr_kind_is_type_expr_table:
@@ -110,6 +116,7 @@ E2_LangKindTable:
 @table(name parse_kind precedence pre sep pos chain reverse_children)
 E2_ExprKindParseInfoTable_CLike:
 {
+  {Dot            Postfix                 1 ""         "."  ""  ""   0}
   {Index          Postfix                 1 ""         "["  "]" ""   0}
   {Call           Postfix                 1 ""         "("  ")" ","  0}
   {DerefAsm       Prefix                  1 "["        ""   "]" ""   0}

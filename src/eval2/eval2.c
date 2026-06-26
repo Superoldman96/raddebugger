@@ -1070,6 +1070,21 @@ e2_expr_push_child(Arena *arena, E2_Expr *parent, E2_Expr *expr)
   e2_expr_push_child_node(parent, n);
 }
 
+internal void
+e2_expr_push_child_node_front(E2_Expr *parent, E2_ExprNode *node)
+{
+  SLLQueuePushFront(parent->first_child, parent->last_child, node);
+  parent->child_count += 1;
+}
+
+internal void
+e2_expr_push_child_front(Arena *arena, E2_Expr *parent, E2_Expr *expr)
+{
+  E2_ExprNode *n = push_array(arena, E2_ExprNode, 1);
+  n->v = expr;
+  e2_expr_push_child_node_front(parent, n);
+}
+
 ////////////////////////////////
 //~ rjf: Expression Constructors
 
@@ -1539,14 +1554,26 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
   E2_Parse parse = {E2_ParseStatus_Error, .expr = &e2_expr_nil, .params_expr = &e2_expr_nil};
   E2_LangInfo *lang_info = &e2_lang_kind_info_table[lang];
   
+  //- rjf: set up initial parsing task
+  if(state->top_task == 0)
+  {
+    state->top_task = &state->start_task;
+    state->top_task->src_range = r1u64(0, string.size);
+    state->top_task->child_count_target = max_U64;
+    state->top_task->max_precedence = max_S64;
+    state->top_task->expected_splitter = s(",");
+    state->top_task->splitter_min_child_count = 0;
+  }
+  
   //- rjf: parse & attach to top parsing task - if we don't have a top task
   // then it is just the result
   E2_Expr *expr = &e2_expr_nil;
   for(B32 done = 0; !done;)
   {
     U64 start_off = off;
-    S64 max_precedence = state->top_task ? state->top_task->max_precedence : max_S64;
-    B32 need_new_expr = (expr == &e2_expr_nil && !state->caller_info_completes_task);
+    S64 max_precedence = state->top_task->max_precedence;
+    B32 type_ancestors = state->top_task->do_type_ancestors;
+    B32 need_new_expr = (expr == &e2_expr_nil && !type_ancestors && !state->caller_info_completes_task);
     E2_Token token = {0};
     
     //- rjf: skip leading whitespace / comments
@@ -1638,7 +1665,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     }
     
     //- rjf: identifiers with an active dot op kind -> member access
-    else if(need_new_expr && state->top_task != 0 && state->top_task->expr_kind == E2_ExprKind_Dot && e2_try_token(lang, string, E2_TokenKind_Identifier, s(""), &off, &token))
+    else if(need_new_expr && state->top_task->expr_kind == E2_ExprKind_Dot && e2_try_token(lang, string, E2_TokenKind_Identifier, s(""), &off, &token))
     {
       expr = e2_expr(arena, E2_ExprKind_Dot);
       expr->first_child = state->top_task->first_child;
@@ -1656,7 +1683,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     {
       String8 identifier = str8_substr(string, token.range);
       B32 identifier_mapped = 0;
-      B32 definitions_are_allowed = (state->top_task == 0 || state->top_task->expr_kind != E2_ExprKind_Macro);
+      B32 definitions_are_allowed = (state->top_task->expr_kind != E2_ExprKind_Macro);
       
       // rjf: first try to resolve as a definition
       if(definitions_are_allowed && !identifier_mapped && e2_try_token(lang, string, E2_TokenKind_Symbol, s("="), &off, 0))
@@ -1792,7 +1819,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
       }
       
       // rjf: try to resolve it as a macro argument
-      if(!identifier_mapped && state->top_task != 0 && state->top_task->expr_kind == E2_ExprKind_Macro)
+      if(!identifier_mapped && state->top_task->expr_kind == E2_ExprKind_Macro)
       {
         U64 macro_arg_num = 0;
         {
@@ -1862,16 +1889,17 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
       expr->string = raw_string;
     }
     
-    //- rjf: extend parsed expression tree with completed trailing type operators (right-to-left)
-    if(!state->caller_info_completes_task && expr != &e2_expr_nil)
+    //- rjf: parse left-hand-side type operators
+    if(!state->caller_info_completes_task && (expr != &e2_expr_nil || state->top_task->do_type_ancestors))
     {
       U64 trailing_symbol_off = off;
       if(e2_try_token(lang, string, E2_TokenKind_Symbol, s(""), &trailing_symbol_off, &token))
       {
-        B32 is_expr_type = (expr->kind == E2_ExprKind_TypeIdentifier ||
-                            expr->kind == E2_ExprKind_Ptr ||
-                            (state->top_task != 0 && state->top_task->expr_kind == E2_ExprKind_Cast));
-        if(is_expr_type)
+        B32 parent_looking_for_type = (state->top_task->expr_kind != E2_ExprKind_Null &&
+                                       state->top_task->child_count == 0 &&
+                                       e2_expr_kind_is_first_operand_type_maybe_table[state->top_task->expr_kind]);
+        B32 is_expr_type = (e2_expr_kind_is_type_expr_table[expr->kind] || parent_looking_for_type);
+        if(is_expr_type || state->top_task->do_type_ancestors)
         {
           // rjf: token string -> operator kind
           E2_ExprKind expr_kind = E2_ExprKind_Null;
@@ -1893,11 +1921,46 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
           if(expr_kind != E2_ExprKind_Null)
           {
             E2_Expr *op_expr = e2_expr(arena, expr_kind);
-            e2_expr_push_child(arena, op_expr, expr);
+            if(expr != &e2_expr_nil)
+            {
+              e2_expr_push_child(arena, op_expr, expr);
+            }
             expr = op_expr;
             off = trailing_symbol_off;
           }
         }
+      }
+    }
+    
+    //- rjf: if we're parsing a type, and we see a C-style type info recursion (to
+    // express ancestors of the current type), then we need to generate a task to
+    // descend and parse the ancestor type
+    if(!state->caller_info_completes_task && expr != &e2_expr_nil)
+    {
+      B32 parent_looking_for_type = (state->top_task->expr_kind != E2_ExprKind_Null &&
+                                     state->top_task->child_count == 0 &&
+                                     e2_expr_kind_is_first_operand_type_maybe_table[state->top_task->expr_kind]);
+      B32 is_expr_type = (e2_expr_kind_is_type_expr_table[expr->kind] || parent_looking_for_type);
+      if(is_expr_type && e2_try_token(lang, string, E2_TokenKind_Symbol, s("("), &off, &token))
+      {
+        E2_ParseTask *task = state->free_task;
+        if(task != 0)
+        {
+          SLLStackPop(state->free_task);
+        }
+        else
+        {
+          task = push_array_no_zero(arena, E2_ParseTask, 1);
+        }
+        MemoryZeroStruct(task);
+        task->src_range = token.range;
+        task->expected_closer = s(")");
+        task->child_count_target = 1;
+        task->max_precedence = max_S64;
+        task->do_type_ancestors = 1;
+        task->type_lhs = expr;
+        SLLStackPush(state->top_task, task);
+        expr = &e2_expr_nil;
       }
     }
     
@@ -1926,7 +1989,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
             E2_ExprKindParseInfo *expr_kind_info = &lang_info->expr_kind_parse_infos[idx];
             if(expr_kind_info->precedence <= max_precedence &&
                str8_match(token_string, expr_kind_info->sep, 0) &&
-               (!!expr_is_type == !!e2_expr_kind_is_type_expr_table[expr_kind_info->expr_kind]))
+               (!expr_is_type || e2_expr_kind_allow_type_operands_table[expr_kind_info->expr_kind]))
             {
               splitter = expr_kind_info->chain;
               closer = expr_kind_info->post;
@@ -1939,7 +2002,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
           }
         }
         
-        // rjf: non-null operator kind -> build binary expression node, push task to fill other child
+        // rjf: non-null operator kind -> push task to fill other children of this operator node
         if(expr_kind != E2_ExprKind_Null)
         {
           E2_ParseTask *task = state->free_task;
@@ -1959,6 +2022,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
           task->reverse_children = reverse_children;
           task->max_precedence = precedence;
           task->expected_splitter = splitter;
+          task->splitter_min_child_count = 2;
           task->expected_closer = closer;
           task->splitter_is_required = splitter_is_required;
           SLLStackPush(state->top_task, task);
@@ -1974,6 +2038,18 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
       //- rjf: pop finished expressions
       for(B32 task_pushed = 0; state->top_task != 0 && !done && !task_pushed;)
       {
+        //- rjf: if this task has a type ancestor: our finished expression is
+        // actually a descendant of that. we want to push our finished expression
+        // as a child, and then use the next type ancestor as the root expression
+        // which we push to our current task.
+        if(state->top_task->next_type_ancestor != 0 && state->top_task->next_type_ancestor != &e2_expr_nil)
+        {
+          E2_Expr *type_descendant = expr;
+          expr = state->top_task->next_type_ancestor;
+          state->top_task->next_type_ancestor = &e2_expr_nil;
+          e2_expr_push_child_front(arena, expr, type_descendant);
+        }
+        
         //- rjf: gather finished expression to current task; increase task child count
         if(!state->caller_info_completes_task)
         {
@@ -1992,7 +2068,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         
         //- rjf: consume expected splitters
         if(!state->caller_info_completes_task &&
-           state->top_task->child_count > 1 &&
+           state->top_task->child_count >= state->top_task->splitter_min_child_count &&
            state->top_task->expected_splitter.size != 0 &&
            state->top_task->child_count < state->top_task->child_count_target)
         {
@@ -2011,7 +2087,8 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         
         //- rjf: determine if the task above a parenthesized sub-expression is expecting a type
         B32 parent_looking_for_type = 0;
-        if(state->top_task->next != 0 &&
+        if(!state->top_task->do_type_ancestors &&
+           state->top_task->next != 0 &&
            state->top_task->next->expr_kind != E2_ExprKind_Null &&
            state->top_task->next->child_count == 0 &&
            e2_expr_kind_is_first_operand_type_maybe_table[state->top_task->next->expr_kind])
@@ -2021,7 +2098,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         
         //- rjf: determine if first child of a parenthesized sub-expression is a type
         B32 parenthesized_child_is_type = 0;
-        if(!parent_looking_for_type && closer_found && state->top_task->child_count == 1)
+        if(!state->top_task->do_type_ancestors && !parent_looking_for_type && closer_found && state->top_task->child_count == 1)
         {
           E2_Expr *expr = state->top_task->first_child->v;
           parenthesized_child_is_type = 1;
@@ -2094,17 +2171,43 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
           //- rjf: produced finished expression tree, given all children
           E2_Expr *finished_root = &e2_expr_nil;
           {
-            finished_root = e2_expr(arena, completed_task->expr_kind);
-            finished_root->first_child = completed_task->first_child;
-            finished_root->last_child = completed_task->last_child;
-            finished_root->child_count = completed_task->child_count;
-            finished_root->src_range = completed_task->src_range;
+            if(completed_task->expr_kind == E2_ExprKind_Null && completed_task->child_count == 1)
+            {
+              finished_root = completed_task->first_child->v;
+            }
+            else
+            {
+              finished_root = e2_expr(arena, completed_task->expr_kind);
+              finished_root->first_child = completed_task->first_child;
+              finished_root->last_child = completed_task->last_child;
+              finished_root->child_count = completed_task->child_count;
+              finished_root->src_range = completed_task->src_range;
+            }
           }
           
           //- rjf: report missing closers
           if(!completed_with_caller_info && completed_task->expected_closer.size != 0 && !closer_found)
           {
             e2_msgf(arena, &parse.msgs, r1u64(off, off), "Expected `%S`.", completed_task->expected_closer);
+          }
+          
+          //- rjf: if this task parsed type ancestors:
+          //
+          // we need to pop this task, and return to working on the original left-hand-side
+          // type descendant. but, we need to remember the parsed type ancestors, so that
+          // we can apply them to the type once the right-hand-side has been parsed.
+          //
+          // otherwise (normal case): work on the parent of the finished expression next,
+          // using the finished expression as the completed child.
+          //
+          if(completed_task->do_type_ancestors)
+          {
+            expr = completed_task->type_lhs;
+            completed_task->next->next_type_ancestor = finished_root;
+          }
+          else
+          {
+            expr = finished_root;
           }
           
           //- rjf: release task
@@ -2114,14 +2217,25 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
             SLLStackPush(state->free_task, completed_task);
           }
           
-          //- rjf: work on the parent of the finished expression next
-          expr = finished_root;
+          //- rjf: if this task still has potential right-hand-sides, then we need to
+          // break out of the pop-loop and keep parsing at this level.
+          if(state->top_task->expr_kind == E2_ExprKind_Null || completed_task->do_type_ancestors)
+          {
+            break;
+          }
         }
         
-        //- rjf: if the top task is not done -> break & continue - reset expression, because we need to parse another.
+        //- rjf: if the top task is not done -> break & continue.
+        //
+        // if we have an active op kind, reset expression, because we need to parse another.
+        // if we don't, we need to look for extensions of our current expression instead.
+        //
         else
         {
-          expr = &e2_expr_nil;
+          if(state->top_task->expr_kind != E2_ExprKind_Null)
+          {
+            expr = &e2_expr_nil;
+          }
           break;
         }
       }
@@ -2131,16 +2245,13 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     if(off >= string.size || (off == start_off && !e2_parse_status_is_caller_request(parse.status)))
     {
       done = 1;
-      if(state->top_task == 0)
+      if(expr != &e2_expr_nil)
       {
-        if(parse.expr == &e2_expr_nil && expr != &e2_expr_nil)
-        {
-          parse.expr = expr;
-        }
-        if(parse.status == E2_ParseStatus_Error)
-        {
-          parse.status = E2_ParseStatus_Good;
-        }
+        parse.expr = expr;
+      }
+      if(parse.status == E2_ParseStatus_Error)
+      {
+        parse.status = E2_ParseStatus_Good;
       }
     }
   }
@@ -2164,7 +2275,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
   //- rjf: report incomplete tasks
   if(off >= string.size && !e2_parse_status_is_caller_request(parse.status))
   {
-    for(E2_ParseTask *t = state->top_task; t != 0; t = t->next)
+    for(E2_ParseTask *t = state->top_task; t != 0 && t != &state->start_task; t = t->next)
     {
       String8 symbol = {0};
       if(t->expr_kind != E2_ExprKind_Null)
@@ -2410,6 +2521,7 @@ e2_compile_from_expr(Arena *arena, E2_CompileState *state, E2_IRNode *resolve_re
               finished_root->string = e->string;
               finished_root->type_key = e2_type_key_cons_array(e2_type_key_basic(E2_TypeKind_UChar8), e->string.size);
               finished_root->val.u64 = e->string.size;
+              finished_root->mode = E2_Mode_Value;
             }break;
             
             //- rjf: character literals
@@ -2545,16 +2657,8 @@ e2_compile_from_expr(Arena *arena, E2_CompileState *state, E2_IRNode *resolve_re
               {
                 e2_msgf(arena, &compile.msgs, e->src_range, "Cannot cast to this type.");
               }
-              else if(e2_type_kind_is_ptr_or_ref(e2_type_kind_from_key(cast_type_key)))
-              {
-                finished_root = rhs;
-                rhs->mode = E2_Mode_Address;
-              }
-              else
-              {
-                E2_IRNode *castee_ir = rhs;
-                finished_root = e2_irnode_convert_if_possible(arena, castee_ir, cast_type_key);
-              }
+              E2_IRNode *castee_ir = rhs;
+              finished_root = e2_irnode_convert_if_possible(arena, castee_ir, cast_type_key);
             }break;
             
             //- rjf: dereferences
@@ -2912,6 +3016,10 @@ e2_compile_from_expr(Arena *arena, E2_CompileState *state, E2_IRNode *resolve_re
                 {
                   compile_time_cond = 1;
                 }
+                if(pass_ir->mode != fail_ir->mode)
+                {
+                  compile_time_cond = 1;
+                }
               }
               
               // rjf: compile-time conditional -> ask caller to evaluate conditional
@@ -2993,6 +3101,7 @@ e2_compile_from_expr(Arena *arena, E2_CompileState *state, E2_IRNode *resolve_re
                 
                 // rjf: take result
                 finished_root = cond_root;
+                finished_root->mode = pass_ir->mode;
               }
             }break;
           }
