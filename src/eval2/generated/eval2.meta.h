@@ -53,6 +53,11 @@ E2_ExprKind_Cond,
 E2_ExprKind_COUNT,
 } E2_ExprKind;
 
+typedef enum E2_LangKind
+{
+E2_LangKind_CLike,
+} E2_LangKind;
+
 typedef enum E2_TypeKind
 {
 E2_TypeKind_Null,
@@ -131,8 +136,28 @@ E2_TypeKind_FirstMeta       = E2_TypeKind_MetaExpr,
 E2_TypeKind_LastMeta        = E2_TypeKind_MetaDescription,
 } E2_TypeKind;
 
+typedef struct E2_ExprKindParseInfo E2_ExprKindParseInfo;
+struct E2_ExprKindParseInfo
+{
+E2_ExprKind expr_kind;
+E2_ExprParseKind parse_kind;
+S64 precedence;
+String8 pre;
+String8 sep;
+String8 post;
+String8 chain;
+};
+
+typedef struct E2_LangInfo E2_LangInfo;
+struct E2_LangInfo
+{
+U64 expr_kind_parse_infos_count;
+E2_ExprKindParseInfo *expr_kind_parse_infos;
+};
+
 C_LINKAGE_BEGIN
-extern E2_ExprKindInfo e2_expr_kind_info_table[42];
+extern E2_LangInfo e2_lang_kind_info_table[1];
+extern E2_ExprKindParseInfo e2_expr_kind_parse_info_table__clike[32];
 extern U8 e2_type_kind_basic_byte_size_table[61];
 extern String8 e2_type_kind_basic_string_table[61];
 

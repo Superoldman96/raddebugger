@@ -91,7 +91,7 @@ entry_point(CmdLine *cmdline)
       B32 identifier_is_type = 0;
       for(;;)
       {
-        E2_Parse parse = e2_parse_from_string(scratch.arena, &state, identifier_is_type, strings[idx]);
+        E2_Parse parse = e2_parse_from_string(scratch.arena, &state, identifier_is_type, E2_LangKind_CLike, strings[idx]);
         identifier_is_type = 0;
         expr = parse.expr;
         for EachNode(n, E2_Msg, parse.msgs.first)

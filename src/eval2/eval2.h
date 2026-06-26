@@ -5,7 +5,7 @@
 #define EVAL2_H
 
 ////////////////////////////////
-//~ rjf: Operator Info Tables
+//~ rjf: Expression Parse Info Table Types
 
 typedef enum E2_ExprParseKind
 {
@@ -17,17 +17,6 @@ typedef enum E2_ExprParseKind
   E2_ExprParseKind_Call,
 }
 E2_ExprParseKind;
-
-typedef struct E2_ExprKindInfo E2_ExprKindInfo;
-struct E2_ExprKindInfo
-{
-  E2_ExprParseKind parse_kind;
-  S64 precedence;
-  String8 pre;
-  String8 sep;
-  String8 post;
-  String8 chain;
-};
 
 ////////////////////////////////
 //~ rjf: Generated Code
@@ -674,10 +663,10 @@ internal void e2_irnode_push_child(Arena *arena, E2_IRNode *parent, E2_IRNode *e
 ////////////////////////////////
 //~ rjf: String -> Expression
 
-internal E2_Token e2_token_from_string_off(String8 string, U64 start_off);
-internal U64 e2_read_token(String8 string, U64 off, E2_Token *token_out);
-internal B32 e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *off_out, E2_Token *token_out);
-internal E2_Parse e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type, String8 string);
+internal E2_Token e2_token_from_string_off(E2_LangKind lang, String8 string, U64 start_off);
+internal U64 e2_read_token(E2_LangKind lang, String8 string, U64 off, E2_Token *token_out);
+internal B32 e2_try_token(E2_LangKind lang, String8 string, E2_TokenKind kind, String8 expected_string, U64 *off_out, E2_Token *token_out);
+internal E2_Parse e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type, E2_LangKind lang, String8 string);
 
 ////////////////////////////////
 //~ rjf: Expression -> IR Tree

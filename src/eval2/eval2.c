@@ -1508,8 +1508,9 @@ e2_irnode_push_child(Arena *arena, E2_IRNode *parent, E2_IRNode *expr)
 //~ rjf: String -> Expression
 
 internal E2_Token
-e2_token_from_string_off(String8 string, U64 start_off)
+e2_token_from_string_off(E2_LangKind lang, String8 string, U64 start_off)
 {
+  E2_LangInfo *lang_info = &e2_lang_kind_info_table[lang];
   E2_Token token = {E2_TokenKind_Null};
   B32 identifier_tick_mode = 0;
   B32 comment_is_explicit_ender = 0;
@@ -1648,9 +1649,9 @@ e2_token_from_string_off(String8 string, U64 start_off)
         token.range.max = off;
         String8 token_string = str8_substr(string, token.range);
         U64 biggest_match_size = 0;
-        for EachNonZeroEnumVal(E2_ExprKind, k)
+        for EachIndex(idx, lang_info->expr_kind_parse_infos_count)
         {
-          String8 op_symbol = (e2_expr_kind_info_table[k].pre.size != 0) ? e2_expr_kind_info_table[k].pre : e2_expr_kind_info_table[k].sep;
+          String8 op_symbol = (lang_info->expr_kind_parse_infos[idx].pre.size != 0) ? lang_info->expr_kind_parse_infos[idx].pre : lang_info->expr_kind_parse_infos[idx].sep;
           if(biggest_match_size < op_symbol.size && str8_match(op_symbol, str8_prefix(token_string, op_symbol.size), 0))
           {
             biggest_match_size = op_symbol.size;
@@ -1695,9 +1696,9 @@ e2_token_from_string_off(String8 string, U64 start_off)
 }
 
 internal U64
-e2_read_token(String8 string, U64 off, E2_Token *token_out)
+e2_read_token(E2_LangKind lang, String8 string, U64 off, E2_Token *token_out)
 {
-  E2_Token token = e2_token_from_string_off(string, off);
+  E2_Token token = e2_token_from_string_off(lang, string, off);
   if(token_out != 0)
   {
     token_out[0] = token;
@@ -1707,14 +1708,14 @@ e2_read_token(String8 string, U64 off, E2_Token *token_out)
 }
 
 internal B32
-e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *off_out, E2_Token *token_out)
+e2_try_token(E2_LangKind lang, String8 string, E2_TokenKind kind, String8 expected_string, U64 *off_out, E2_Token *token_out)
 {
   B32 result = 0;
   U64 off = off_out[0];
   for(;;)
   {
     E2_Token next_token = {E2_TokenKind_Null};
-    off += e2_read_token(string, off, &next_token);
+    off += e2_read_token(lang, string, off, &next_token);
     if(next_token.kind == kind && (expected_string.size == 0 || str8_match(str8_substr(string, next_token.range), expected_string, 0)))
     {
       result = 1;
@@ -1737,10 +1738,11 @@ e2_try_token(String8 string, E2_TokenKind kind, String8 expected_string, U64 *of
 }
 
 internal E2_Parse
-e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type, String8 string)
+e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type, E2_LangKind lang, String8 string)
 {
   U64 off = state->string_off;
   E2_Parse parse = {E2_ParseStatus_Error, .expr = &e2_expr_nil, .params_expr = &e2_expr_nil};
+  E2_LangInfo *lang_info = &e2_lang_kind_info_table[lang];
   
   //- rjf: parse & attach to top parsing task - if we don't have a top task
   // then it is just the result
@@ -1756,7 +1758,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     for(;;)
     {
       E2_Token next_token = {0};
-      U64 next_off = off + e2_read_token(string, off, &next_token);
+      U64 next_off = off + e2_read_token(lang, string, off, &next_token);
       if(next_token.kind == E2_TokenKind_Whitespace ||
          next_token.kind == E2_TokenKind_Comment)
       {
@@ -1769,7 +1771,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     }
     
     //- rjf: nested sub-expressions
-    if(need_new_expr && e2_try_token(string, E2_TokenKind_Symbol, s("("), &off, &token))
+    if(need_new_expr && e2_try_token(lang, string, E2_TokenKind_Symbol, s("("), &off, &token))
     {
       E2_ParseTask *task = state->free_task;
       if(task != 0)
@@ -1789,21 +1791,23 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     }
     
     //- rjf: symbols (possible prefix unaries, *or* unexpected)
-    else if(need_new_expr && e2_try_token(string, E2_TokenKind_Symbol, s(""), &off, &token))
+    else if(need_new_expr && e2_try_token(lang, string, E2_TokenKind_Symbol, s(""), &off, &token))
     {
       // rjf: string -> operator kind
       E2_ExprKind expr_kind = E2_ExprKind_Null;
       String8 closer = {0};
+      S64 precedence = 0;
       {
         String8 token_string = str8_substr(string, token.range);
-        for EachNonZeroEnumVal(E2_ExprKind, k)
+        for EachIndex(idx, lang_info->expr_kind_parse_infos_count)
         {
-          if(e2_expr_kind_info_table[k].parse_kind == E2_ExprParseKind_UnaryPrefix &&
-             e2_expr_kind_info_table[k].precedence <= max_precedence &&
-             str8_match(token_string, e2_expr_kind_info_table[k].pre, 0))
+          if(lang_info->expr_kind_parse_infos[idx].parse_kind == E2_ExprParseKind_UnaryPrefix &&
+             lang_info->expr_kind_parse_infos[idx].precedence <= max_precedence &&
+             str8_match(token_string, lang_info->expr_kind_parse_infos[idx].pre, 0))
           {
-            expr_kind = k;
-            closer = e2_expr_kind_info_table[k].post;
+            expr_kind = lang_info->expr_kind_parse_infos[idx].expr_kind;
+            closer = lang_info->expr_kind_parse_infos[idx].post;
+            precedence = lang_info->expr_kind_parse_infos[idx].precedence;
             break;
           }
         }
@@ -1825,7 +1829,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         task->src_range = token.range;
         task->child_count_target = 1;
         task->expr_kind = expr_kind;
-        task->max_precedence = e2_expr_kind_info_table[expr_kind].precedence;
+        task->max_precedence = precedence;
         task->expected_closer = closer;
         SLLStackPush(state->top_task, task);
       }
@@ -1839,7 +1843,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     }
     
     //- rjf: identifiers with an active dot op kind -> member access
-    else if(need_new_expr && state->top_task != 0 && state->top_task->expr_kind == E2_ExprKind_Dot && e2_try_token(string, E2_TokenKind_Identifier, s(""), &off, &token))
+    else if(need_new_expr && state->top_task != 0 && state->top_task->expr_kind == E2_ExprKind_Dot && e2_try_token(lang, string, E2_TokenKind_Identifier, s(""), &off, &token))
     {
       expr = e2_expr(arena, E2_ExprKind_Dot);
       expr->first_child = state->top_task->first_child;
@@ -1853,14 +1857,14 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     }
     
     //- rjf: standalone identifiers (also could be definition or operator keyword)
-    else if(need_new_expr && e2_try_token(string, E2_TokenKind_Identifier, s(""), &off, &token))
+    else if(need_new_expr && e2_try_token(lang, string, E2_TokenKind_Identifier, s(""), &off, &token))
     {
       String8 identifier = str8_substr(string, token.range);
       B32 identifier_mapped = 0;
       B32 definitions_are_allowed = (state->top_task == 0 || state->top_task->expr_kind != E2_ExprKind_Macro);
       
       // rjf: first try to resolve as a definition
-      if(definitions_are_allowed && !identifier_mapped && e2_try_token(string, E2_TokenKind_Symbol, s("="), &off, 0))
+      if(definitions_are_allowed && !identifier_mapped && e2_try_token(lang, string, E2_TokenKind_Symbol, s("="), &off, 0))
       {
         identifier_mapped = 1;
         E2_ParseTask *task = state->free_task;
@@ -1876,7 +1880,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         task->src_range = token.range;
         task->child_count_target = 1;
         task->expr_kind = E2_ExprKind_Define;
-        task->max_precedence = e2_expr_kind_info_table[E2_ExprKind_Define].precedence;
+        task->max_precedence = max_S64;
         task->identifier = identifier;
         SLLStackPush(state->top_task, task);
       }
@@ -1885,26 +1889,26 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
       if(definitions_are_allowed && !identifier_mapped)
       {
         U64 macro_off = off;
-        if(e2_try_token(string, E2_TokenKind_Symbol, s("("), &macro_off, 0))
+        if(e2_try_token(lang, string, E2_TokenKind_Symbol, s("("), &macro_off, 0))
         {
           U64 post_macro_paren_off = macro_off;
           B32 looks_like_macro_def = 1;
           U64 macro_arg_count = 0;
           for(;macro_off < string.size;)
           {
-            if(!e2_try_token(string, E2_TokenKind_Identifier, s(""), &macro_off, 0))
+            if(!e2_try_token(lang, string, E2_TokenKind_Identifier, s(""), &macro_off, 0))
             {
               looks_like_macro_def = 0;
               break;
             }
             macro_arg_count += 1;
-            e2_try_token(string, E2_TokenKind_Symbol, s(","), &macro_off, 0);
-            if(e2_try_token(string, E2_TokenKind_Symbol, s(")"), &macro_off, 0))
+            e2_try_token(lang, string, E2_TokenKind_Symbol, s(","), &macro_off, 0);
+            if(e2_try_token(lang, string, E2_TokenKind_Symbol, s(")"), &macro_off, 0))
             {
               break;
             }
           }
-          if(looks_like_macro_def && e2_try_token(string, E2_TokenKind_Symbol, s("="), &macro_off, 0))
+          if(looks_like_macro_def && e2_try_token(lang, string, E2_TokenKind_Symbol, s("="), &macro_off, 0))
           {
             // rjf: push task to fill macro definition
             identifier_mapped = 1;
@@ -1930,18 +1934,18 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
             for(;macro_off < string.size;)
             {
               E2_Token next_token = {0};
-              if(!e2_try_token(string, E2_TokenKind_Identifier, s(""), &macro_off, &next_token))
+              if(!e2_try_token(lang, string, E2_TokenKind_Identifier, s(""), &macro_off, &next_token))
               {
                 break;
               }
               str8_list_push(arena, &task->macro_arg_names, str8_substr(string, next_token.range));
-              e2_try_token(string, E2_TokenKind_Symbol, s(","), &macro_off, 0);
-              if(e2_try_token(string, E2_TokenKind_Symbol, s(")"), &macro_off, 0))
+              e2_try_token(lang, string, E2_TokenKind_Symbol, s(","), &macro_off, 0);
+              if(e2_try_token(lang, string, E2_TokenKind_Symbol, s(")"), &macro_off, 0))
               {
                 break;
               }
             }
-            e2_try_token(string, E2_TokenKind_Symbol, s("="), &macro_off, 0);
+            e2_try_token(lang, string, E2_TokenKind_Symbol, s("="), &macro_off, 0);
             
             // rjf: advance offset to past '='
             off = macro_off;
@@ -1954,15 +1958,17 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
       {
         // rjf: string -> op kind
         E2_ExprKind expr_kind = E2_ExprKind_Null;
+        S64 precedence = 0;
         {
           String8 token_string = str8_substr(string, token.range);
-          for EachNonZeroEnumVal(E2_ExprKind, k)
+          for EachIndex(idx, lang_info->expr_kind_parse_infos_count)
           {
-            if(e2_expr_kind_info_table[k].parse_kind == E2_ExprParseKind_UnaryPrefix &&
-               e2_expr_kind_info_table[k].precedence <= max_precedence &&
-               str8_match(token_string, str8_skip_chop_whitespace(e2_expr_kind_info_table[k].pre), 0))
+            if(lang_info->expr_kind_parse_infos[idx].parse_kind == E2_ExprParseKind_UnaryPrefix &&
+               lang_info->expr_kind_parse_infos[idx].precedence <= max_precedence &&
+               str8_match(token_string, str8_skip_chop_whitespace(lang_info->expr_kind_parse_infos[idx].pre), 0))
             {
-              expr_kind = k;
+              expr_kind = lang_info->expr_kind_parse_infos[idx].expr_kind;
+              precedence = lang_info->expr_kind_parse_infos[idx].precedence;
               break;
             }
           }
@@ -1985,7 +1991,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
           task->src_range = token.range;
           task->child_count_target = 1;
           task->expr_kind = expr_kind;
-          task->max_precedence = e2_expr_kind_info_table[expr_kind].precedence;
+          task->max_precedence = precedence;
           SLLStackPush(state->top_task, task);
         }
       }
@@ -2035,14 +2041,14 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     }
     
     //- rjf: leaf numerics
-    else if(need_new_expr && e2_try_token(string, E2_TokenKind_Numeric, s(""), &off, &token))
+    else if(need_new_expr && e2_try_token(lang, string, E2_TokenKind_Numeric, s(""), &off, &token))
     {
       expr = e2_expr(arena, E2_ExprKind_Numeric);
       expr->string = str8_substr(string, token.range);
     }
     
     //- rjf: leaf string literals
-    else if(need_new_expr && e2_try_token(string, E2_TokenKind_StringLiteral, s(""), &off, &token))
+    else if(need_new_expr && e2_try_token(lang, string, E2_TokenKind_StringLiteral, s(""), &off, &token))
     {
       String8 token_string = str8_substr(string, token.range);
       String8 unquoted_string = str8_skip(str8_chop(token_string, 1), 1);
@@ -2052,7 +2058,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     }
     
     //- rjf: leaf character literals
-    else if(need_new_expr && e2_try_token(string, E2_TokenKind_CharLiteral, s(""), &off, &token))
+    else if(need_new_expr && e2_try_token(lang, string, E2_TokenKind_CharLiteral, s(""), &off, &token))
     {
       String8 token_string = str8_substr(string, token.range);
       String8 unquoted_string = str8_skip(str8_chop(token_string, 1), 1);
@@ -2065,7 +2071,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     if(!state->caller_info_completes_task && expr != &e2_expr_nil)
     {
       U64 trailing_symbol_off = off;
-      if(e2_try_token(string, E2_TokenKind_Symbol, s(""), &trailing_symbol_off, &token))
+      if(e2_try_token(lang, string, E2_TokenKind_Symbol, s(""), &trailing_symbol_off, &token))
       {
         // rjf: token string -> operator kind
         E2_ExprKind expr_kind = E2_ExprKind_Null;
@@ -2073,11 +2079,12 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         String8 splitter = {0};
         String8 closer = {0};
         B32 splitter_is_required = 0;
+        S64 precedence = 0;
         {
           String8 token_string = str8_substr(string, token.range);
-          for EachNonZeroEnumVal(E2_ExprKind, k)
+          for EachIndex(idx, lang_info->expr_kind_parse_infos_count)
           {
-            E2_ExprKindInfo *expr_kind_info = &e2_expr_kind_info_table[k];
+            E2_ExprKindParseInfo *expr_kind_info = &lang_info->expr_kind_parse_infos[idx];
             if(expr_kind_info->precedence <= max_precedence && str8_match(token_string, expr_kind_info->sep, 0))
             {
               switch(expr_kind_info->parse_kind)
@@ -2089,7 +2096,8 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
               }
               splitter = expr_kind_info->chain;
               closer = expr_kind_info->post;
-              expr_kind = k;
+              expr_kind = expr_kind_info->expr_kind;
+              precedence = expr_kind_info->precedence;
               break;
             }
           }
@@ -2112,7 +2120,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
           task->child_count = 0;
           task->child_count_target = child_count_target;
           task->expr_kind = expr_kind;
-          task->max_precedence = e2_expr_kind_info_table[expr_kind].precedence;
+          task->max_precedence = precedence;
           task->expected_splitter = splitter;
           task->expected_closer = closer;
           task->splitter_is_required = splitter_is_required;
@@ -2144,7 +2152,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
            state->top_task->expected_splitter.size != 0 &&
            state->top_task->child_count < state->top_task->child_count_target)
         {
-          if(!e2_try_token(string, E2_TokenKind_Symbol, state->top_task->expected_splitter, &off, 0) && state->top_task->splitter_is_required)
+          if(!e2_try_token(lang, string, E2_TokenKind_Symbol, state->top_task->expected_splitter, &off, 0) && state->top_task->splitter_is_required)
           {
             e2_msgf(arena, &parse.msgs, r1u64(off, off), "Expected `%S`.", state->top_task->expected_splitter);
           }
@@ -2154,7 +2162,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         B32 closer_found = 0;
         if(!state->caller_info_completes_task && state->top_task->expected_closer.size != 0)
         {
-          closer_found = e2_try_token(string, E2_TokenKind_Symbol, state->top_task->expected_closer, &off, 0);
+          closer_found = e2_try_token(lang, string, E2_TokenKind_Symbol, state->top_task->expected_closer, &off, 0);
         }
         
         //- rjf: determine if first child of a parenthesized sub-expression is a type
@@ -2211,7 +2219,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
             task->child_count = 1;
             task->child_count_target = 2;
             task->expr_kind = E2_ExprKind_CCast;
-            task->max_precedence = e2_expr_kind_info_table[E2_ExprKind_CCast].precedence;
+            task->max_precedence = 1;
             SLLStackPush(state->top_task, task);
             expr = &e2_expr_nil;
             E2_ExprNode *child_n = push_array(arena, E2_ExprNode, 1);
@@ -2304,6 +2312,25 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
   {
     for(E2_ParseTask *t = state->top_task; t != 0; t = t->next)
     {
+      String8 symbol = {0};
+      if(t->expr_kind != E2_ExprKind_Null)
+      {
+        for EachIndex(idx, lang_info->expr_kind_parse_infos_count)
+        {
+          if(lang_info->expr_kind_parse_infos[idx].expr_kind == t->expr_kind)
+          {
+            if(lang_info->expr_kind_parse_infos[idx].parse_kind == E2_ExprParseKind_Binary)
+            {
+              symbol = lang_info->expr_kind_parse_infos[idx].sep;
+            }
+            else if(lang_info->expr_kind_parse_infos[idx].parse_kind == E2_ExprParseKind_UnaryPrefix)
+            {
+              symbol = lang_info->expr_kind_parse_infos[idx].pre;
+            }
+            break;
+          }
+        }
+      }
       if(t->child_count == 1 && t->child_count_target == 2 && t->expr_kind == E2_ExprKind_Dot)
       {
         e2_msgf(arena, &parse.msgs, t->src_range, "Couldn't access member `%S`.", state->last_requested_member_name);
@@ -2316,13 +2343,13 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
       {
         e2_msgf(arena, &parse.msgs, t->src_range, "Couldn't call into this type.");
       }
-      else if(t->child_count == 1 && t->child_count_target == 2 && t->expr_kind != E2_ExprKind_Null)
+      else if(t->child_count == 1 && t->child_count_target == 2 && t->expr_kind != E2_ExprKind_Null && symbol.size != 0)
       {
-        e2_msgf(arena, &parse.msgs, t->src_range, "Expected expression after binary operator `%S`.", e2_expr_kind_info_table[t->expr_kind].sep);
+        e2_msgf(arena, &parse.msgs, t->src_range, "Expected expression after binary operator `%S`.", symbol);
       }
-      else if(t->child_count == 0 && t->child_count_target == 1 && t->expr_kind != E2_ExprKind_Null)
+      else if(t->child_count == 0 && t->child_count_target == 1 && t->expr_kind != E2_ExprKind_Null && symbol.size != 0)
       {
-        e2_msgf(arena, &parse.msgs, t->src_range, "Expected expression after unary operator `%S`.", e2_expr_kind_info_table[t->expr_kind].pre);
+        e2_msgf(arena, &parse.msgs, t->src_range, "Expected expression after unary operator `%S`.", symbol);
       }
       else
       {
@@ -2954,7 +2981,7 @@ e2_compile_from_expr(Arena *arena, E2_CompileState *state, E2_IRNode *resolve_re
                   }
                   else
                   {
-                    e2_msgf(arena, &compile.msgs, e->src_range, "Cannot use `%S` on types.", str8_skip_chop_whitespace(e2_expr_kind_info_table[e->kind].sep));
+                    e2_msgf(arena, &compile.msgs, e->src_range, "Cannot use this operator on types.");
                   }
                 }break;
               }

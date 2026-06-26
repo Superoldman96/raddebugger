@@ -1,16 +1,95 @@
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
-@table(name parse_kind precedence pre sep pos chain)
+@table(name)
 E2_ExprKindTable:
 {
-  {Identifier     Null 0}
-  {MacroArg       Null 0}
-  {TypeIdentifier Null 0}
-  {Numeric        Null 0}
-  {StringLiteral  Null 0}
-  {CharLiteral    Null 0}
-  {Dot            Null          0 ""        "."  ""  "" }
+  {Identifier}
+  {MacroArg}
+  {TypeIdentifier}
+  {Numeric}
+  {StringLiteral}
+  {CharLiteral}
+  {Dot}
+  {Index}
+  {Call}
+  {DerefAsm}
+  {SizeOf}
+  {TypeOf}
+  {CCast}
+  {Deref}
+  {Address}
+  {Pos}
+  {Neg}
+  {LogNot}
+  {BitNot}
+  {Ptr}
+  {Mul}
+  {Div}
+  {Mod}
+  {Add}
+  {Sub}
+  {LShift}
+  {RShift}
+  {Less}
+  {LtEq}
+  {Grtr}
+  {GrEq}
+  {EqEq}
+  {NtEq}
+  {BitAnd}
+  {BitXor}
+  {BitOr}
+  {LogAnd}
+  {LogOr}
+  {Define}
+  {Macro}
+  {Cond}
+}
+
+@enum E2_ExprKind:
+{
+  Null,
+  @expand(E2_ExprKindTable a) `$(a.name)`,
+  COUNT,
+}
+
+@struct E2_ExprKindParseInfo:
+{
+  `E2_ExprKind expr_kind`;
+  `E2_ExprParseKind parse_kind`;
+  `S64 precedence`;
+  `String8 pre`;
+  `String8 sep`;
+  `String8 post`;
+  `String8 chain`;
+}
+
+@table(name name_lower)
+E2_LangKindTable:
+{
+  {CLike clike}
+}
+
+@enum E2_LangKind:
+{
+  @expand(E2_LangKindTable a) `$(a.name)`
+}
+
+@struct E2_LangInfo:
+{
+  `U64 expr_kind_parse_infos_count`;
+  `E2_ExprKindParseInfo *expr_kind_parse_infos`;
+}
+
+@data(E2_LangInfo) e2_lang_kind_info_table:
+{
+  @expand(E2_LangKindTable a) `{ArrayCount(e2_expr_kind_parse_info_table__$(a.name_lower)), (e2_expr_kind_parse_info_table__$(a.name_lower))}`
+}
+
+@table(name parse_kind precedence pre sep pos chain)
+E2_ExprKindParseInfoTable_CLike:
+{
   {Index          Binary        1 ""        "["  "]" "" }
   {Call           Call          1 ""        "("  ")" ","}
   {DerefAsm       UnaryPrefix   1 "["       ""   "]" "" }
@@ -42,22 +121,12 @@ E2_ExprKindTable:
   {BitOr          Binary       10 ""        "|"  ""  "" }
   {LogAnd         Binary       11 ""        "&&" ""  "" }
   {LogOr          Binary       12 ""        "||" ""  "" }
-  {Define         Null         13 ""        "="  ""  "" }
-  {Macro          Null         14 ""        ""   ""  "" }
   {Cond           Ternary      14 ""        "?"  ""  ":"}
 }
 
-@enum E2_ExprKind:
+@data(E2_ExprKindParseInfo) e2_expr_kind_parse_info_table__clike:
 {
-  Null,
-  @expand(E2_ExprKindTable a) `$(a.name)`,
-  COUNT,
-}
-
-@data(E2_ExprKindInfo) e2_expr_kind_info_table:
-{
-  `{0}`,
-  @expand(E2_ExprKindTable a) `{E2_ExprParseKind_$(a.parse_kind), $(a.precedence), str8_lit_comp("$(a.pre)"), str8_lit_comp("$(a.sep)"), str8_lit_comp("$(a.pos)"), str8_lit_comp("$(a.chain)")}`
+  @expand(E2_ExprKindParseInfoTable_CLike a) `{E2_ExprKind_$(a.name), E2_ExprParseKind_$(a.parse_kind), $(a.precedence), str8_lit_comp("$(a.pre)"), str8_lit_comp("$(a.sep)"), str8_lit_comp("$(a.pos)"), str8_lit_comp("$(a.chain)")}`
 }
 
 @table(name                 basic_string          basic_byte_size)
