@@ -12,6 +12,8 @@ E2_ExprKind_Null,
 E2_ExprKind_Identifier,
 E2_ExprKind_MacroArg,
 E2_ExprKind_TypeIdentifier,
+E2_ExprKind_Ptr,
+E2_ExprKind_Array,
 E2_ExprKind_Numeric,
 E2_ExprKind_StringLiteral,
 E2_ExprKind_CharLiteral,
@@ -21,14 +23,13 @@ E2_ExprKind_Call,
 E2_ExprKind_DerefAsm,
 E2_ExprKind_SizeOf,
 E2_ExprKind_TypeOf,
-E2_ExprKind_CCast,
+E2_ExprKind_Cast,
 E2_ExprKind_Deref,
 E2_ExprKind_Address,
 E2_ExprKind_Pos,
 E2_ExprKind_Neg,
 E2_ExprKind_LogNot,
 E2_ExprKind_BitNot,
-E2_ExprKind_Ptr,
 E2_ExprKind_Mul,
 E2_ExprKind_Div,
 E2_ExprKind_Mod,
@@ -142,6 +143,7 @@ struct E2_ExprKindParseInfo
 E2_ExprKind expr_kind;
 E2_ExprParseKind parse_kind;
 S64 precedence;
+B8 reverse_children;
 String8 pre;
 String8 sep;
 String8 post;
@@ -156,8 +158,11 @@ E2_ExprKindParseInfo *expr_kind_parse_infos;
 };
 
 C_LINKAGE_BEGIN
+extern B8 e2_expr_kind_is_type_expr_table[43];
+extern B8 e2_expr_kind_is_first_operand_type_maybe_table[43];
+extern U64 e2_expr_kind_target_operand_count_table[43];
 extern E2_LangInfo e2_lang_kind_info_table[1];
-extern E2_ExprKindParseInfo e2_expr_kind_parse_info_table__clike[34];
+extern E2_ExprKindParseInfo e2_expr_kind_parse_info_table__clike[37];
 extern U8 e2_type_kind_basic_byte_size_table[61];
 extern String8 e2_type_kind_basic_string_table[61];
 

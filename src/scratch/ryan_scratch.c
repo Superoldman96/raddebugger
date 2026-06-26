@@ -43,6 +43,11 @@ entry_point(CmdLine *cmdline)
     // (A)
     // int & B
     // (1 + (int)&B)
+    s("int32[100]"),
+    s("123 as float32"),
+    s("cast float32 123"),
+    s("cast (float32) 123"),
+    s("(int32 *)123"),
     s("bar(a, b) = a + b"),
     s("123, 456"),
     s("int32 == int32"),

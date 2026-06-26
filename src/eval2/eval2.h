@@ -10,11 +10,8 @@
 typedef enum E2_ExprParseKind
 {
   E2_ExprParseKind_Null,
-  E2_ExprParseKind_UnaryPrefix,
-  E2_ExprParseKind_UnaryPostfix,
-  E2_ExprParseKind_Binary,
-  E2_ExprParseKind_Ternary,
-  E2_ExprParseKind_Call,
+  E2_ExprParseKind_Prefix,
+  E2_ExprParseKind_Postfix,
 }
 E2_ExprParseKind;
 
@@ -67,6 +64,7 @@ typedef enum E2_CompileStatus
   //- rjf: caller-provided info
   E2_CompileStatus_MissedIdentifierResolution,
   E2_CompileStatus_NewIdentifierDefinition,
+  E2_CompileStatus_NewCtxID,
   E2_CompileStatus_MemberAccess,
   E2_CompileStatus_IndexAccess,
   E2_CompileStatus_Call,
@@ -345,6 +343,7 @@ struct E2_ParseTask
   E2_ExprNode *last_child;
   U64 child_count;
   U64 child_count_target;
+  B32 reverse_children;
   S64 max_precedence;
   E2_ExprKind expr_kind;
   String8 identifier;
@@ -448,6 +447,7 @@ struct E2_CompileState
   E2_CompileTask *top_task;
   E2_CompileTask *free_task;
   U64 caller_request_count;
+  E2_Ctx selected_ctx;
 };
 
 typedef struct E2_Compile E2_Compile;
@@ -632,17 +632,6 @@ internal E2_TypeKey e2_coerced_type_key_from_operands(E2_TypeKey lhs, E2_TypeKey
 internal E2_Expr *e2_expr(Arena *arena, E2_ExprKind kind);
 internal void e2_expr_push_child_node(E2_Expr *parent, E2_ExprNode *node);
 internal void e2_expr_push_child(Arena *arena, E2_Expr *parent, E2_Expr *expr);
-#if 0
-internal E2_Expr *e2_expr_const_u64_or_smaller(Arena *arena, U64 u);
-internal E2_Expr *e2_expr_const_f32(Arena *arena, F32 f32);
-internal E2_Expr *e2_expr_const_f64(Arena *arena, F64 f64);
-internal E2_Expr *e2_expr_unary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_Expr *operand);
-internal E2_Expr *e2_expr_binary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_Expr *lhs, E2_Expr *rhs);
-internal E2_Expr *e2_expr_resolve_to_value(Arena *arena, E2_Expr *expr);
-internal E2_Expr *e2_expr_truncate(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key);
-internal E2_Expr *e2_expr_convert_if_possible(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key);
-internal E2_Expr *e2_expr_type(Arena *arena, E2_TypeKey type_key);
-#endif
 
 ////////////////////////////////
 //~ rjf: IR Tree Constructors

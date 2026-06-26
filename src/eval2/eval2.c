@@ -1069,211 +1069,6 @@ e2_expr_push_child(Arena *arena, E2_Expr *parent, E2_Expr *expr)
   n->v = expr;
   e2_expr_push_child_node(parent, n);
 }
-#if 0
-
-internal E2_Expr *
-e2_expr_const_u64_or_smaller(Arena *arena, U64 u)
-{
-  E2_Expr *e = e2_expr(arena);
-  {
-    e->mode = E2_Mode_Value;
-    e->val.u64 = u;
-    if(u <= 0x7fffffff)
-    {
-      e->op = RDI_EvalOp_ConstU32;
-      e->type_key = e2_type_key_basic(E2_TypeKind_S32);
-    }
-    else if(u <= 0xffffffff)
-    {
-      e->op = RDI_EvalOp_ConstU32;
-      e->type_key = e2_type_key_basic(E2_TypeKind_U32);
-    }
-    else if(u <= 0x7fffffffffffffffull)
-    {
-      e->op = RDI_EvalOp_ConstU64;
-      e->type_key = e2_type_key_basic(E2_TypeKind_S64);
-    }
-    else if(u <= 0xffffffffffffffffull)
-    {
-      e->op = RDI_EvalOp_ConstU64;
-      e->type_key = e2_type_key_basic(E2_TypeKind_U64);
-    }
-  }
-  return e;
-}
-
-internal E2_Expr *
-e2_expr_const_f32(Arena *arena, F32 f32)
-{
-  E2_Expr *e = e2_expr(arena);
-  e->mode = E2_Mode_Value;
-  e->val.f32 = f32;
-  e->op = RDI_EvalOp_ConstU32;
-  e->type_key = e2_type_key_basic(E2_TypeKind_F32);
-  return e;
-}
-
-internal E2_Expr *
-e2_expr_const_f64(Arena *arena, F64 f64)
-{
-  E2_Expr *e = e2_expr(arena);
-  e->mode = E2_Mode_Value;
-  e->val.f64 = f64;
-  e->op = RDI_EvalOp_ConstU64;
-  e->type_key = e2_type_key_basic(E2_TypeKind_F64);
-  return e;
-}
-
-internal E2_Expr *
-e2_expr_unary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_Expr *operand)
-{
-  E2_Expr *e = e2_expr(arena);
-  e->type_key = type_key;
-  e->op = op;
-  e->mode = E2_Mode_Value;
-  e->val.u512.u8[0] = e2_type_group_from_kind(e2_type_kind_from_key(type_key));
-  e->val.u512.u8[1] = 8*e2_byte_size_from_type_key(type_key);
-  e2_expr_push_child(arena, e, operand);
-  return e;
-}
-
-internal E2_Expr *
-e2_expr_binary_op(Arena *arena, E2_TypeKey type_key, RDI_EvalOp op, E2_Expr *lhs, E2_Expr *rhs)
-{
-  E2_Expr *e = e2_expr(arena);
-  E2_TypeKey arith_type_key = type_key;
-  if(RDI_EvalOp_FirstLogical <= op && op <= RDI_EvalOp_LastLogical)
-  {
-    arith_type_key = lhs->type_key;
-  }
-  e->type_key = type_key;
-  e->op = op;
-  e->mode = E2_Mode_Value;
-  e->val.u512.u8[0] = e2_type_group_from_kind(e2_type_kind_from_key(arith_type_key));
-  e->val.u512.u8[1] = 8*e2_byte_size_from_type_key(arith_type_key);
-  e2_expr_push_child(arena, e, lhs);
-  e2_expr_push_child(arena, e, rhs);
-  return e;
-}
-
-internal E2_Expr *
-e2_expr_resolve_to_value(Arena *arena, E2_Expr *expr)
-{
-  E2_Expr *result = expr;
-  
-  // rjf: address evaluations of arrays -> create value of pointer to first element
-  if(expr->mode == E2_Mode_Address && e2_type_kind_from_key(e2_type_key_undecorate(expr->type_key)) == E2_TypeKind_Array)
-  {
-    result = e2_expr(arena);
-    result->type_key = e2_type_key_direct(e2_type_key_undecorate(expr->type_key));
-    result->mode = E2_Mode_Value;
-    e2_expr_push_child(arena, result, expr);
-  }
-  
-  // rjf: address evaluations -> read value from space
-  else if(expr->mode == E2_Mode_Address)
-  {
-    U64 memread_byte_size = e2_byte_size_from_type_key(expr->type_key);
-    memread_byte_size = Min(64, memread_byte_size);
-    E2_Expr *memread_expr = e2_expr(arena);
-    memread_expr->op = RDI_EvalOp_MemRead;
-    memread_expr->mode = E2_Mode_Value;
-    memread_expr->type_key = expr->type_key;
-    memread_expr->val.u64 = memread_byte_size;
-    e2_expr_push_child(arena, memread_expr, expr);
-    result = memread_expr;
-  }
-  
-  // rjf: bitfields -> shift & mask
-  E2_TypeKey core_type_key = e2_type_key_undecorate(expr->type_key);
-  if(e2_type_kind_from_key(core_type_key) == E2_TypeKind_Bitfield)
-  {
-    // rjf: unpack bitfield params
-    U64 shift = e2_shift_from_type_key(result->type_key);
-    U64 mask_count = e2_mask_count_from_type_key(result->type_key);
-    U64 valid_bits_mask = 0;
-    for EachIndex(idx, mask_count)
-    {
-      valid_bits_mask |= (1ull<<idx);
-    }
-    
-    // rjf: mask(shift(expr, count), bitmask)
-    E2_Expr *shift_expr = e2_expr_binary_op(arena, e2_type_key_basic(E2_TypeKind_U64), RDI_EvalOp_RShift, result, e2_expr_const_u64_or_smaller(arena, shift));
-    E2_Expr *mask_expr = e2_expr_binary_op(arena, e2_type_key_direct(core_type_key), RDI_EvalOp_BitAnd, shift_expr, e2_expr_const_u64_or_smaller(arena, valid_bits_mask));
-    result = mask_expr;
-  }
-  
-  return result;
-}
-
-internal E2_Expr *
-e2_expr_truncate(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key)
-{
-  E2_Expr *result = expr;
-  E2_TypeKind dst_type_kind = e2_type_kind_from_key(dst_type_key);
-  U64 dst_type_byte_size = e2_byte_size_from_type_key(dst_type_key);
-  B32 dst_type_is_signed = e2_type_kind_is_signed(dst_type_kind);
-  if(dst_type_byte_size < 64)
-  {
-    result = e2_expr(arena);
-    result->type_key = dst_type_key;
-    result->op = dst_type_is_signed ? RDI_EvalOp_TruncSigned : RDI_EvalOp_Trunc;
-    result->val.u64 = dst_type_byte_size*8;
-    e2_expr_push_child(arena, result, expr);
-  }
-  return result;
-}
-
-internal E2_Expr *
-e2_expr_convert_if_possible(Arena *arena, E2_Expr *expr, E2_TypeKey dst_type_key)
-{
-  E2_Expr *result = expr;
-  {
-    // rjf: unpack src / dst types
-    E2_TypeKey src_type_key = expr->type_key;
-    E2_TypeKind src_type_kind = e2_type_kind_from_key(src_type_key);
-    E2_TypeKind dst_type_kind = e2_type_kind_from_key(dst_type_key);
-    RDI_EvalTypeGroup src_type_group = e2_type_group_from_kind(src_type_kind);
-    RDI_EvalTypeGroup dst_type_group = e2_type_group_from_kind(dst_type_kind);
-    U64 src_byte_size = e2_byte_size_from_type_key(src_type_key);
-    U64 dst_byte_size = e2_byte_size_from_type_key(dst_type_key);
-    
-    // rjf: convert from src -> dst
-    RDI_EvalConversionKind conversion_kind = rdi_eval_conversion_kind_from_typegroups(src_type_group, dst_type_group);
-    if(conversion_kind == RDI_EvalConversionKind_Legal)
-    {
-      result = e2_expr(arena);
-      result->mode     = E2_Mode_Value;
-      result->type_key = dst_type_key;
-      result->op       = RDI_EvalOp_Convert;
-      result->val.u64  = src_type_group | (dst_type_group << 8);
-      e2_expr_push_child(arena, result, expr);
-    }
-    
-    // rjf: no-op from src -> dst
-    if(conversion_kind == RDI_EvalConversionKind_Noop)
-    {
-      result->type_key = dst_type_key;
-    }
-    
-    // rjf: if shrinking integer sizes, truncate
-    if(dst_byte_size < src_byte_size && e2_type_kind_is_integer(dst_type_kind))
-    {
-      result = e2_expr_truncate(arena, expr, dst_type_key);
-    }
-  }
-  return result;
-}
-
-internal E2_Expr *
-e2_expr_type(Arena *arena, E2_TypeKey type_key)
-{
-  E2_Expr *expr = e2_expr(arena);
-  expr->type_key = type_key;
-  expr->mode = E2_Mode_Type;
-  return expr;
-}
-#endif
 
 ////////////////////////////////
 //~ rjf: Expression Constructors
@@ -1801,7 +1596,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         String8 token_string = str8_substr(string, token.range);
         for EachIndex(idx, lang_info->expr_kind_parse_infos_count)
         {
-          if(lang_info->expr_kind_parse_infos[idx].parse_kind == E2_ExprParseKind_UnaryPrefix &&
+          if(lang_info->expr_kind_parse_infos[idx].parse_kind == E2_ExprParseKind_Prefix &&
              lang_info->expr_kind_parse_infos[idx].precedence <= max_precedence &&
              str8_match(token_string, lang_info->expr_kind_parse_infos[idx].pre, 0))
           {
@@ -1826,11 +1621,11 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
           task = push_array_no_zero(arena, E2_ParseTask, 1);
         }
         MemoryZeroStruct(task);
-        task->src_range = token.range;
-        task->child_count_target = 1;
-        task->expr_kind = expr_kind;
-        task->max_precedence = precedence;
-        task->expected_closer = closer;
+        task->src_range          = token.range;
+        task->child_count_target = e2_expr_kind_target_operand_count_table[expr_kind];
+        task->expr_kind          = expr_kind;
+        task->max_precedence     = precedence;
+        task->expected_closer    = closer;
         SLLStackPush(state->top_task, task);
       }
       
@@ -1878,7 +1673,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         }
         MemoryZeroStruct(task);
         task->src_range = token.range;
-        task->child_count_target = 1;
+        task->child_count_target = e2_expr_kind_target_operand_count_table[E2_ExprKind_Define];
         task->expr_kind = E2_ExprKind_Define;
         task->max_precedence = max_S64;
         task->identifier = identifier;
@@ -1923,7 +1718,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
             }
             MemoryZeroStruct(task);
             task->src_range = token.range;
-            task->child_count_target = 1;
+            task->child_count_target = e2_expr_kind_target_operand_count_table[E2_ExprKind_Macro];
             task->expr_kind = E2_ExprKind_Macro;
             task->max_precedence = max_S64;
             task->identifier = identifier;
@@ -1963,7 +1758,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
           String8 token_string = str8_substr(string, token.range);
           for EachIndex(idx, lang_info->expr_kind_parse_infos_count)
           {
-            if(lang_info->expr_kind_parse_infos[idx].parse_kind == E2_ExprParseKind_UnaryPrefix &&
+            if(lang_info->expr_kind_parse_infos[idx].parse_kind == E2_ExprParseKind_Prefix &&
                lang_info->expr_kind_parse_infos[idx].precedence <= max_precedence &&
                str8_match(token_string, str8_skip_chop_whitespace(lang_info->expr_kind_parse_infos[idx].pre), 0))
             {
@@ -1989,7 +1784,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
           }
           MemoryZeroStruct(task);
           task->src_range = token.range;
-          task->child_count_target = 1;
+          task->child_count_target = e2_expr_kind_target_operand_count_table[expr_kind];
           task->expr_kind = expr_kind;
           task->max_precedence = precedence;
           SLLStackPush(state->top_task, task);
@@ -2067,12 +1862,55 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
       expr->string = raw_string;
     }
     
-    //- rjf: extend parsed expression tree with trailing operators
+    //- rjf: extend parsed expression tree with completed trailing type operators (right-to-left)
     if(!state->caller_info_completes_task && expr != &e2_expr_nil)
     {
       U64 trailing_symbol_off = off;
       if(e2_try_token(lang, string, E2_TokenKind_Symbol, s(""), &trailing_symbol_off, &token))
       {
+        B32 is_expr_type = (expr->kind == E2_ExprKind_TypeIdentifier ||
+                            expr->kind == E2_ExprKind_Ptr ||
+                            (state->top_task != 0 && state->top_task->expr_kind == E2_ExprKind_Cast));
+        if(is_expr_type)
+        {
+          // rjf: token string -> operator kind
+          E2_ExprKind expr_kind = E2_ExprKind_Null;
+          {
+            String8 token_string = str8_substr(string, token.range);
+            for EachIndex(idx, lang_info->expr_kind_parse_infos_count)
+            {
+              E2_ExprKindParseInfo *op_info = &lang_info->expr_kind_parse_infos[idx];
+              if(e2_expr_kind_is_type_expr_table[op_info->expr_kind] &&
+                 str8_match(op_info->post, token_string, 0))
+              {
+                expr_kind = op_info->expr_kind;
+                break;
+              }
+            }
+          }
+          
+          // rjf: got an expression kind -> build new operator node
+          if(expr_kind != E2_ExprKind_Null)
+          {
+            E2_Expr *op_expr = e2_expr(arena, expr_kind);
+            e2_expr_push_child(arena, op_expr, expr);
+            expr = op_expr;
+            off = trailing_symbol_off;
+          }
+        }
+      }
+    }
+    
+    //- rjf: extend parsed expression tree with trailing operators
+    if(!state->caller_info_completes_task && expr != &e2_expr_nil)
+    {
+      U64 trailing_symbol_off = off;
+      if(e2_try_token(lang, string, E2_TokenKind_Symbol, s(""), &trailing_symbol_off, &token) ||
+         e2_try_token(lang, string, E2_TokenKind_Identifier, s(""), &trailing_symbol_off, &token))
+      {
+        // rjf: determine if the expression is a type
+        B32 expr_is_type = e2_expr_kind_is_type_expr_table[expr->kind];
+        
         // rjf: token string -> operator kind
         E2_ExprKind expr_kind = E2_ExprKind_Null;
         U64 child_count_target = 2;
@@ -2080,24 +1918,22 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         String8 closer = {0};
         B32 splitter_is_required = 0;
         S64 precedence = 0;
+        B32 reverse_children = 0;
         {
           String8 token_string = str8_substr(string, token.range);
           for EachIndex(idx, lang_info->expr_kind_parse_infos_count)
           {
             E2_ExprKindParseInfo *expr_kind_info = &lang_info->expr_kind_parse_infos[idx];
-            if(expr_kind_info->precedence <= max_precedence && str8_match(token_string, expr_kind_info->sep, 0))
+            if(expr_kind_info->precedence <= max_precedence &&
+               str8_match(token_string, expr_kind_info->sep, 0) &&
+               (!!expr_is_type == !!e2_expr_kind_is_type_expr_table[expr_kind_info->expr_kind]))
             {
-              switch(expr_kind_info->parse_kind)
-              {
-                default:{}break;
-                case E2_ExprParseKind_Binary:  {child_count_target = 2;}break;
-                case E2_ExprParseKind_Ternary: {child_count_target = 3; splitter_is_required = 1;}break;
-                case E2_ExprParseKind_Call:    {child_count_target = max_U64;}break;
-              }
               splitter = expr_kind_info->chain;
               closer = expr_kind_info->post;
               expr_kind = expr_kind_info->expr_kind;
               precedence = expr_kind_info->precedence;
+              reverse_children = expr_kind_info->reverse_children;
+              child_count_target = e2_expr_kind_target_operand_count_table[expr_kind];
               break;
             }
           }
@@ -2120,6 +1956,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
           task->child_count = 0;
           task->child_count_target = child_count_target;
           task->expr_kind = expr_kind;
+          task->reverse_children = reverse_children;
           task->max_precedence = precedence;
           task->expected_splitter = splitter;
           task->expected_closer = closer;
@@ -2141,7 +1978,14 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         if(!state->caller_info_completes_task)
         {
           E2_ExprNode *n = push_array(arena, E2_ExprNode, 1);
-          SLLQueuePush(state->top_task->first_child, state->top_task->last_child, n);
+          if(state->top_task->reverse_children)
+          {
+            SLLQueuePushFront(state->top_task->first_child, state->top_task->last_child, n);
+          }
+          else
+          {
+            SLLQueuePush(state->top_task->first_child, state->top_task->last_child, n);
+          }
           n->v = expr;
           state->top_task->child_count += 1;
         }
@@ -2165,9 +2009,19 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
           closer_found = e2_try_token(lang, string, E2_TokenKind_Symbol, state->top_task->expected_closer, &off, 0);
         }
         
+        //- rjf: determine if the task above a parenthesized sub-expression is expecting a type
+        B32 parent_looking_for_type = 0;
+        if(state->top_task->next != 0 &&
+           state->top_task->next->expr_kind != E2_ExprKind_Null &&
+           state->top_task->next->child_count == 0 &&
+           e2_expr_kind_is_first_operand_type_maybe_table[state->top_task->next->expr_kind])
+        {
+          parent_looking_for_type = 1;
+        }
+        
         //- rjf: determine if first child of a parenthesized sub-expression is a type
         B32 parenthesized_child_is_type = 0;
-        if(closer_found && state->top_task->child_count == 1)
+        if(!parent_looking_for_type && closer_found && state->top_task->child_count == 1)
         {
           E2_Expr *expr = state->top_task->first_child->v;
           parenthesized_child_is_type = 1;
@@ -2193,7 +2047,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         //- rjf: closer found, completed child count == 1 & completed child is a
         // type evaluation - then this is cast. push a task to fill the operand
         B32 is_cast = parenthesized_child_is_type;
-        if(is_cast)
+        if(!parent_looking_for_type && is_cast)
         {
           // rjf: pop the sub-task for the type expression
           E2_Expr *type_expr = state->top_task->first_child->v;
@@ -2217,8 +2071,8 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
             MemoryZeroStruct(task);
             task->src_range = type_expr->src_range;
             task->child_count = 1;
-            task->child_count_target = 2;
-            task->expr_kind = E2_ExprKind_CCast;
+            task->child_count_target = e2_expr_kind_target_operand_count_table[E2_ExprKind_Cast];
+            task->expr_kind = E2_ExprKind_Cast;
             task->max_precedence = 1;
             SLLStackPush(state->top_task, task);
             expr = &e2_expr_nil;
@@ -2319,11 +2173,12 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         {
           if(lang_info->expr_kind_parse_infos[idx].expr_kind == t->expr_kind)
           {
-            if(lang_info->expr_kind_parse_infos[idx].parse_kind == E2_ExprParseKind_Binary)
+            U64 target_operand_count = e2_expr_kind_target_operand_count_table[t->expr_kind];
+            if(target_operand_count == 2)
             {
               symbol = lang_info->expr_kind_parse_infos[idx].sep;
             }
-            else if(lang_info->expr_kind_parse_infos[idx].parse_kind == E2_ExprParseKind_UnaryPrefix)
+            else if(target_operand_count == 1)
             {
               symbol = lang_info->expr_kind_parse_infos[idx].pre;
             }
@@ -2465,6 +2320,35 @@ e2_compile_from_expr(Arena *arena, E2_CompileState *state, E2_IRNode *resolve_re
                 done = 1;
                 compile.status = E2_CompileStatus_MissedIdentifierResolution;
                 compile.identifier = e->string;
+              }
+            }break;
+            
+            //- rjf: pointer type operators
+            case E2_ExprKind_Ptr:
+            {
+              Arch arch = state->selected_ctx.arch;
+              E2_TypeKey ptee_type_key = lhs->type_key;
+              E2_TypeKey ptr_type_key = e2_type_key_cons_ptr(arch, ptee_type_key);
+              finished_root = e2_irnode(arena);
+              finished_root->type_key = ptr_type_key;
+            }break;
+            
+            //- rjf: array type operator
+            case E2_ExprKind_Array:
+            {
+              if(state->caller_request_count == 0)
+              {
+                done = 1;
+                compile.status = E2_CompileStatus_CompileTimeEval;
+                compile.irtree = rhs;
+              }
+              else
+              {
+                U64 array_count = compile_time_eval_result.u64;
+                E2_TypeKey element_type_key = lhs->type_key;
+                E2_TypeKey array_type_key = e2_type_key_cons_array(element_type_key, array_count);
+                finished_root = e2_irnode(arena);
+                finished_root->type_key = array_type_key;
               }
             }break;
             
@@ -2652,7 +2536,7 @@ e2_compile_from_expr(Arena *arena, E2_CompileState *state, E2_IRNode *resolve_re
             }break;
             
             //- rjf: casts
-            case E2_ExprKind_CCast:
+            case E2_ExprKind_Cast:
             cast:;
             {
               E2_IRNode *cast_type_ir = lhs;
@@ -2660,6 +2544,11 @@ e2_compile_from_expr(Arena *arena, E2_CompileState *state, E2_IRNode *resolve_re
               if(e2_type_key_match(e2_type_key_zero(), cast_type_key))
               {
                 e2_msgf(arena, &compile.msgs, e->src_range, "Cannot cast to this type.");
+              }
+              else if(e2_type_kind_is_ptr_or_ref(e2_type_kind_from_key(cast_type_key)))
+              {
+                finished_root = rhs;
+                rhs->mode = E2_Mode_Address;
               }
               else
               {
