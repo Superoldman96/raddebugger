@@ -43,10 +43,10 @@ entry_point(CmdLine *cmdline)
     // (A)
     // int & B
     // (1 + (int)&B)
+    s("bar(a, b) = a + b"),
     s("123, 456"),
     s("int32 == int32"),
     s("foo = 123"),
-    // s("bar(a, b) = a + b"),
     s("1 > 2"),
     s("1 ? \"Test\" : 888"),
     s("'a'"),
@@ -97,6 +97,12 @@ entry_point(CmdLine *cmdline)
         for EachNode(n, E2_Msg, parse.msgs.first)
         {
           str8_list_push(scratch.arena, &msgs, n->string);
+        }
+        if(parse.status == E2_ParseStatus_CheckIdentifierIsType)
+        {
+          identifier_is_type = identifier_is_type || str8_match(parse.identifier, s("int32"), 0);
+          identifier_is_type = identifier_is_type || str8_match(parse.identifier, s("float32"), 0);
+          identifier_is_type = identifier_is_type || str8_match(parse.identifier, s("float64"), 0);
         }
         if(e2_parse_status_is_terminal(parse.status))
         {

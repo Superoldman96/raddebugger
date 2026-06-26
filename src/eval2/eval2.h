@@ -56,9 +56,8 @@ typedef enum E2_ParseStatus
   
   //- rjf: caller-provided info
   E2_ParseStatus_CheckIdentifierIsType,
-  E2_ParseStatus_NewMacro,
   E2_ParseStatus_FirstCallerRequest = E2_ParseStatus_CheckIdentifierIsType,
-  E2_ParseStatus_LastCallerRequest = E2_ParseStatus_NewMacro,
+  E2_ParseStatus_LastCallerRequest = E2_ParseStatus_CheckIdentifierIsType,
 }
 E2_ParseStatus;
 
@@ -328,6 +327,7 @@ struct E2_Expr
   E2_ExprNode *last_child;
   U64 child_count;
   E2_ExprKind kind;
+  U32 macro_arg_num;
   Rng1U64 src_range;
   String8 string;
 };

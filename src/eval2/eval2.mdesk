@@ -5,6 +5,7 @@
 E2_ExprKindTable:
 {
   {Identifier     Null 0}
+  {MacroArg       Null 0}
   {TypeIdentifier Null 0}
   {Numeric        Null 0}
   {StringLiteral  Null 0}

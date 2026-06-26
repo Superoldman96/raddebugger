@@ -10,6 +10,7 @@ typedef enum E2_ExprKind
 {
 E2_ExprKind_Null,
 E2_ExprKind_Identifier,
+E2_ExprKind_MacroArg,
 E2_ExprKind_TypeIdentifier,
 E2_ExprKind_Numeric,
 E2_ExprKind_StringLiteral,
@@ -131,7 +132,7 @@ E2_TypeKind_LastMeta        = E2_TypeKind_MetaDescription,
 } E2_TypeKind;
 
 C_LINKAGE_BEGIN
-extern E2_ExprKindInfo e2_expr_kind_info_table[41];
+extern E2_ExprKindInfo e2_expr_kind_info_table[42];
 extern U8 e2_type_kind_basic_byte_size_table[61];
 extern String8 e2_type_kind_basic_string_table[61];
 

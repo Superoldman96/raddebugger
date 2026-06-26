@@ -1990,6 +1990,30 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
         }
       }
       
+      // rjf: try to resolve it as a macro argument
+      if(!identifier_mapped && state->top_task != 0 && state->top_task->expr_kind == E2_ExprKind_Macro)
+      {
+        U64 macro_arg_num = 0;
+        {
+          U64 num = 1;
+          for(String8Node *n = state->top_task->macro_arg_names.first; n != 0; n = n->next, num += 1)
+          {
+            if(str8_match(n->string, identifier, 0))
+            {
+              macro_arg_num = num;
+              break;
+            }
+          }
+        }
+        if(macro_arg_num != 0)
+        {
+          identifier_mapped = 1;
+          expr = e2_expr(arena, E2_ExprKind_MacroArg);
+          expr->macro_arg_num = (U32)macro_arg_num;
+          expr->string = identifier;
+        }
+      }
+      
       // rjf: build this as a leaf identifier expression - ask the caller if it's a type
       if(!identifier_mapped)
       {

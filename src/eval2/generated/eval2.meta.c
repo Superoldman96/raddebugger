@@ -4,9 +4,10 @@
 //- GENERATED CODE
 
 C_LINKAGE_BEGIN
-E2_ExprKindInfo e2_expr_kind_info_table[41] =
+E2_ExprKindInfo e2_expr_kind_info_table[42] =
 {
 {0},
+{E2_ExprParseKind_Null, 0, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprParseKind_Null, 0, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprParseKind_Null, 0, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
 {E2_ExprParseKind_Null, 0, str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp(""), str8_lit_comp("")},
