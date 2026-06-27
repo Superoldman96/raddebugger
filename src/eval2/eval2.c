@@ -269,6 +269,13 @@ e2_cons_type_node_from_params(E2_ConsTypeParams *params)
     hash = u64_hash_from_seed_str8(hash, str8_struct(&params->direct));
     hash = u64_hash_from_seed_str8(hash, str8_struct(&params->count));
     hash = u64_hash_from_seed_str8(hash, str8_struct(&params->depth));
+    if(params->param_types != 0)
+    {
+      for EachIndex(idx, params->count)
+      {
+        hash = u64_hash_from_seed_str8(hash, str8_struct(&params->param_types[idx]));
+      }
+    }
   }
   
   // rjf: hash -> content slot
@@ -299,6 +306,11 @@ e2_cons_type_node_from_params(E2_ConsTypeParams *params)
     node->id = id;
     MemoryCopyStruct(&node->params, params);
     node->params.name = str8_copy(map->arena, node->params.name);
+    if(node->params.param_types != 0)
+    {
+      node->params.param_types = push_array(map->arena, E2_TypeKey, node->params.count);
+      MemoryCopy(node->params.param_types, params->param_types, sizeof(params->param_types[0])*params->count);
+    }
     // TODO(rjf): double check once we're doing type expression
     // arguments that we don't need a deep copy of the args here.
     switch(node->params.kind)
@@ -1914,6 +1926,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
             {
               E2_ExprKindParseInfo *op_info = &lang_info->expr_kind_parse_infos[idx];
               if(e2_expr_kind_is_type_expr_table[op_info->expr_kind] &&
+                 op_info->sep.size == 0 &&
                  str8_match(op_info->post, token_string, 0))
               {
                 expr_kind = op_info->expr_kind;
@@ -2449,6 +2462,28 @@ e2_compile_from_expr(Arena *arena, E2_CompileState *state, E2_IRNode *resolve_re
                 finished_root = e2_irnode(arena);
                 finished_root->type_key = array_type_key;
               }
+            }break;
+            
+            //- rjf: function type operator
+            case E2_ExprKind_Function:
+            {
+              Temp scratch = scratch_begin(&arena, 1);
+              U64 params_count = 0;
+              E2_TypeKey *param_types = 0;
+              if(task->irtree_child_count != 0)
+              {
+                params_count = task->irtree_child_count-1;
+                param_types = push_array(scratch.arena, E2_TypeKey, params_count);
+                U64 idx = 0;
+                for(E2_IRNodePtrNode *n = task->first_irtree_child->next; n != 0; n = n->next, idx += 1)
+                {
+                  param_types[idx] = n->v->type_key;
+                }
+              }
+              E2_TypeKey fn_type_key = e2_type_key_cons(E2_TypeKind_Function, .direct = lhs->type_key, .count = params_count, .param_types = param_types);
+              finished_root = e2_irnode(arena);
+              finished_root->type_key = fn_type_key;
+              scratch_end(scratch);
             }break;
             
             //- rjf: leaf numerics

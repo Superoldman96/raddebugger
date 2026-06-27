@@ -156,6 +156,7 @@ struct E2_ConsTypeParams
   E2_TypeKey direct;
   U64 count;
   U64 depth;
+  E2_TypeKey *param_types;
   struct E2_Expr **args;
 };
 

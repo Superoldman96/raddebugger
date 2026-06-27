@@ -43,11 +43,15 @@ entry_point(CmdLine *cmdline)
     // (A)
     // int & B
     // (1 + (int)&B)
-    s("int32 *"),
-    s("int32[100]"),
+    s("int32(*)(int32, int32)"),
+#if 0
+    s("123(1, 2, 3)"),
     s("int32 (*) [100]"),
-    s("3 * 4 + 2"),
     s("(3 * 4) + 2"),
+    s("cast (float32) 123"),
+    s("int32 *"),
+    s("3 * 4 + 2"),
+    s("int32[100]"),
     s("3 * 4"),
     s("foo"),
     s("foo.bar"),
@@ -59,7 +63,6 @@ entry_point(CmdLine *cmdline)
     s("222.f"),
     s("123 as float32"),
     s("cast float32 123"),
-    s("cast (float32) 123"),
     s("(int32 *)123"),
     s("bar(a, b) = a + b"),
     s("foo = 123"),
@@ -82,8 +85,7 @@ entry_point(CmdLine *cmdline)
     s("123 + "),
     s("-123"),
     s("sizeof 123"),
-    s("123(1, 2, 3)"),
-#if 0
+    // TODO(rjf): these are ambiguous with regular C type expressions with a naive parse:
     // s("float32(111)"),
     // s("float64(111)"),
 #endif

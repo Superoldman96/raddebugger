@@ -164,7 +164,7 @@ extern B8 e2_expr_kind_is_type_expr_table[44];
 extern B8 e2_expr_kind_is_first_operand_type_maybe_table[44];
 extern U64 e2_expr_kind_target_operand_count_table[44];
 extern E2_LangInfo e2_lang_kind_info_table[1];
-extern E2_ExprKindParseInfo e2_expr_kind_parse_info_table__clike[38];
+extern E2_ExprKindParseInfo e2_expr_kind_parse_info_table__clike[39];
 extern U8 e2_type_kind_basic_byte_size_table[61];
 extern String8 e2_type_kind_basic_string_table[61];
 

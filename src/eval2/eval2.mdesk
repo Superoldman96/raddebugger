@@ -26,7 +26,7 @@ E2_ExprKindTable:
   {Neg                       1   0   0   1                    }
   {LogNot                    1   0   0   1                    }
   {BitNot                    1   0   0   1                    }
-  {Mul                       1   0   0   2                    }
+  {Mul                       0   0   0   2                    }
   {Div                       1   0   0   2                    }
   {Mod                       1   0   0   2                    }
   {Add                       1   0   0   2                    }
@@ -120,6 +120,7 @@ E2_ExprKindParseInfoTable_CLike:
   {Dot            Postfix                 1 ""         "."  ""  ""   0}
   {Index          Postfix                 1 ""         "["  "]" ""   0}
   {Call           Postfix                 1 ""         "("  ")" ","  0}
+  {Function       Postfix                 1 ""         "("  ")" ","  0}
   {DerefAsm       Prefix                  1 "["        ""   "]" ""   0}
   {SizeOf         Prefix                  1 "sizeof "  ""   ""  ""   0}
   {TypeOf         Prefix                  1 "typeof "  ""   ""  ""   0}
