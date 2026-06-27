@@ -1571,6 +1571,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
   for(B32 done = 0; !done;)
   {
     U64 start_off = off;
+    E2_ParseTask *start_task = state->top_task;
     S64 max_precedence = state->top_task->max_precedence;
     B32 type_ancestors = state->top_task->do_type_ancestors;
     B32 need_new_expr = (expr == &e2_expr_nil && !type_ancestors && !state->caller_info_completes_task);
@@ -1615,22 +1616,27 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     //- rjf: symbols (possible prefix unaries, *or* unexpected)
     else if(need_new_expr && e2_try_token(lang, string, E2_TokenKind_Symbol, s(""), &off, &token))
     {
+      String8 token_string = str8_substr(string, token.range);
+      
       // rjf: string -> operator kind
+      B32 unexpected = !str8_match(token_string, state->top_task->expected_closer, 0);
       E2_ExprKind expr_kind = E2_ExprKind_Null;
       String8 closer = {0};
       S64 precedence = 0;
       {
-        String8 token_string = str8_substr(string, token.range);
         for EachIndex(idx, lang_info->expr_kind_parse_infos_count)
         {
           if(lang_info->expr_kind_parse_infos[idx].parse_kind == E2_ExprParseKind_Prefix &&
-             lang_info->expr_kind_parse_infos[idx].precedence <= max_precedence &&
              str8_match(token_string, lang_info->expr_kind_parse_infos[idx].pre, 0))
           {
-            expr_kind = lang_info->expr_kind_parse_infos[idx].expr_kind;
-            closer = lang_info->expr_kind_parse_infos[idx].post;
-            precedence = lang_info->expr_kind_parse_infos[idx].precedence;
-            break;
+            unexpected = 0;
+            if(lang_info->expr_kind_parse_infos[idx].precedence <= max_precedence)
+            {
+              expr_kind = lang_info->expr_kind_parse_infos[idx].expr_kind;
+              closer = lang_info->expr_kind_parse_infos[idx].post;
+              precedence = lang_info->expr_kind_parse_infos[idx].precedence;
+              break;
+            }
           }
         }
       }
@@ -1657,9 +1663,8 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
       }
       
       // rjf: report unexpected symbols
-      if(expr_kind == E2_ExprKind_Null)
+      if(expr_kind == E2_ExprKind_Null && unexpected)
       {
-        String8 token_string = str8_substr(string, token.range);
         e2_msgf(arena, &parse.msgs, token.range, "Unexpected `%S`.", token_string);
       }
     }
@@ -1935,7 +1940,7 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
     //- rjf: if we're parsing a type, and we see a C-style type info recursion (to
     // express ancestors of the current type), then we need to generate a task to
     // descend and parse the ancestor type
-    if(!state->caller_info_completes_task && expr != &e2_expr_nil)
+    if(!state->caller_info_completes_task && expr != &e2_expr_nil && (state->top_task->next_type_ancestor == 0 || state->top_task->next_type_ancestor == &e2_expr_nil))
     {
       B32 parent_looking_for_type = (state->top_task->expr_kind != E2_ExprKind_Null &&
                                      state->top_task->child_count == 0 &&
@@ -2031,218 +2036,201 @@ e2_parse_from_string(Arena *arena, E2_ParseState *state, B32 identifier_is_type,
       }
     }
     
-    //- rjf: attach formed expressions to parent task exprs; pop tasks when they're done.
-    // if we have no parent task, then we just fill the result, and we're done with the parse.
+    //- rjf: attach formed expressions to parent task; pop task if done.
     if(state->caller_info_completes_task || expr != &e2_expr_nil)
     {
-      //- rjf: pop finished expressions
-      for(B32 task_pushed = 0; state->top_task != 0 && !done && !task_pushed;)
+      //- rjf: if this task has a type ancestor: our finished expression is
+      // actually a descendant of that. we want to push our finished expression
+      // as a child, and then use the next type ancestor as the root expression
+      // which we push to our current task.
+      if(state->top_task->next_type_ancestor != 0 && state->top_task->next_type_ancestor != &e2_expr_nil)
       {
-        //- rjf: if this task has a type ancestor: our finished expression is
-        // actually a descendant of that. we want to push our finished expression
-        // as a child, and then use the next type ancestor as the root expression
-        // which we push to our current task.
-        if(state->top_task->next_type_ancestor != 0 && state->top_task->next_type_ancestor != &e2_expr_nil)
+        E2_Expr *type_descendant = expr;
+        expr = state->top_task->next_type_ancestor;
+        state->top_task->next_type_ancestor = &e2_expr_nil;
+        e2_expr_push_child_front(arena, expr, type_descendant);
+      }
+      
+      //- rjf: gather finished expression to current task; increase task child count
+      if(!state->caller_info_completes_task)
+      {
+        E2_ExprNode *n = push_array(arena, E2_ExprNode, 1);
+        if(state->top_task->reverse_children)
         {
-          E2_Expr *type_descendant = expr;
-          expr = state->top_task->next_type_ancestor;
-          state->top_task->next_type_ancestor = &e2_expr_nil;
-          e2_expr_push_child_front(arena, expr, type_descendant);
+          SLLQueuePushFront(state->top_task->first_child, state->top_task->last_child, n);
         }
-        
-        //- rjf: gather finished expression to current task; increase task child count
-        if(!state->caller_info_completes_task)
-        {
-          E2_ExprNode *n = push_array(arena, E2_ExprNode, 1);
-          if(state->top_task->reverse_children)
-          {
-            SLLQueuePushFront(state->top_task->first_child, state->top_task->last_child, n);
-          }
-          else
-          {
-            SLLQueuePush(state->top_task->first_child, state->top_task->last_child, n);
-          }
-          n->v = expr;
-          state->top_task->child_count += 1;
-        }
-        
-        //- rjf: consume expected splitters
-        if(!state->caller_info_completes_task &&
-           state->top_task->child_count >= state->top_task->splitter_min_child_count &&
-           state->top_task->expected_splitter.size != 0 &&
-           state->top_task->child_count < state->top_task->child_count_target)
-        {
-          if(!e2_try_token(lang, string, E2_TokenKind_Symbol, state->top_task->expected_splitter, &off, 0) && state->top_task->splitter_is_required)
-          {
-            e2_msgf(arena, &parse.msgs, r1u64(off, off), "Expected `%S`.", state->top_task->expected_splitter);
-          }
-        }
-        
-        //- rjf: consume expected closers - can terminate a child list early
-        B32 closer_found = 0;
-        if(!state->caller_info_completes_task && state->top_task->expected_closer.size != 0)
-        {
-          closer_found = e2_try_token(lang, string, E2_TokenKind_Symbol, state->top_task->expected_closer, &off, 0);
-        }
-        
-        //- rjf: determine if the task above a parenthesized sub-expression is expecting a type
-        B32 parent_looking_for_type = 0;
-        if(!state->top_task->do_type_ancestors &&
-           state->top_task->next != 0 &&
-           state->top_task->next->expr_kind != E2_ExprKind_Null &&
-           state->top_task->next->child_count == 0 &&
-           e2_expr_kind_is_first_operand_type_maybe_table[state->top_task->next->expr_kind])
-        {
-          parent_looking_for_type = 1;
-        }
-        
-        //- rjf: determine if first child of a parenthesized sub-expression is a type
-        B32 parenthesized_child_is_type = 0;
-        if(!state->top_task->do_type_ancestors && !parent_looking_for_type && closer_found && state->top_task->child_count == 1)
-        {
-          E2_Expr *expr = state->top_task->first_child->v;
-          parenthesized_child_is_type = 1;
-          for(E2_Expr *e = expr, *next_e; e != &e2_expr_nil && parenthesized_child_is_type; e = next_e)
-          {
-            next_e = &e2_expr_nil;
-            if(e->kind != E2_ExprKind_TypeIdentifier &&
-               e->kind != E2_ExprKind_Ptr)
-            {
-              parenthesized_child_is_type = 0;
-            }
-            if(parenthesized_child_is_type && e->child_count == 1)
-            {
-              next_e = e->first_child->v;
-            }
-            else if(e->child_count > 1)
-            {
-              parenthesized_child_is_type = 0;
-            }
-          }
-        }
-        
-        //- rjf: closer found, completed child count == 1 & completed child is a
-        // type evaluation - then this is cast. push a task to fill the operand
-        B32 is_cast = parenthesized_child_is_type;
-        if(!parent_looking_for_type && is_cast)
-        {
-          // rjf: pop the sub-task for the type expression
-          E2_Expr *type_expr = state->top_task->first_child->v;
-          {
-            E2_ParseTask *completed_task = state->top_task;
-            SLLStackPop(state->top_task);
-            SLLStackPush(state->free_task, completed_task);
-          }
-          
-          // rjf: push a new task for the castee operand
-          {
-            E2_ParseTask *task = state->free_task;
-            if(task != 0)
-            {
-              SLLStackPop(state->free_task);
-            }
-            else
-            {
-              task = push_array_no_zero(arena, E2_ParseTask, 1);
-            }
-            MemoryZeroStruct(task);
-            task->src_range = type_expr->src_range;
-            task->child_count = 1;
-            task->child_count_target = e2_expr_kind_target_operand_count_table[E2_ExprKind_Cast];
-            task->expr_kind = E2_ExprKind_Cast;
-            task->max_precedence = 1;
-            SLLStackPush(state->top_task, task);
-            expr = &e2_expr_nil;
-            E2_ExprNode *child_n = push_array(arena, E2_ExprNode, 1);
-            SLLQueuePush(task->first_child, task->last_child, child_n);
-            child_n->v = type_expr;
-            task_pushed = 1;
-          }
-        }
-        
-        //- rjf: caller-provided info completes a task, *or* closer found,
-        // *or* task child count hits limit -> complete this subtree
-        else if(state->caller_info_completes_task || closer_found || state->top_task->child_count >= state->top_task->child_count_target)
-        {
-          B32 completed_with_caller_info = state->caller_info_completes_task;
-          state->caller_info_completes_task = 0;
-          E2_ParseTask *completed_task = state->top_task;
-          
-          //- rjf: produced finished expression tree, given all children
-          E2_Expr *finished_root = &e2_expr_nil;
-          {
-            if(completed_task->expr_kind == E2_ExprKind_Null && completed_task->child_count == 1)
-            {
-              finished_root = completed_task->first_child->v;
-            }
-            else
-            {
-              finished_root = e2_expr(arena, completed_task->expr_kind);
-              finished_root->first_child = completed_task->first_child;
-              finished_root->last_child = completed_task->last_child;
-              finished_root->child_count = completed_task->child_count;
-              finished_root->src_range = completed_task->src_range;
-            }
-          }
-          
-          //- rjf: report missing closers
-          if(!completed_with_caller_info && completed_task->expected_closer.size != 0 && !closer_found)
-          {
-            e2_msgf(arena, &parse.msgs, r1u64(off, off), "Expected `%S`.", completed_task->expected_closer);
-          }
-          
-          //- rjf: if this task parsed type ancestors:
-          //
-          // we need to pop this task, and return to working on the original left-hand-side
-          // type descendant. but, we need to remember the parsed type ancestors, so that
-          // we can apply them to the type once the right-hand-side has been parsed.
-          //
-          // otherwise (normal case): work on the parent of the finished expression next,
-          // using the finished expression as the completed child.
-          //
-          if(completed_task->do_type_ancestors)
-          {
-            expr = completed_task->type_lhs;
-            completed_task->next->next_type_ancestor = finished_root;
-          }
-          else
-          {
-            expr = finished_root;
-          }
-          
-          //- rjf: release task
-          if(!done)
-          {
-            SLLStackPop(state->top_task);
-            SLLStackPush(state->free_task, completed_task);
-          }
-          
-          //- rjf: if this task still has potential right-hand-sides, then we need to
-          // break out of the pop-loop and keep parsing at this level.
-          if(state->top_task->expr_kind == E2_ExprKind_Null || completed_task->do_type_ancestors)
-          {
-            break;
-          }
-        }
-        
-        //- rjf: if the top task is not done -> break & continue.
-        //
-        // if we have an active op kind, reset expression, because we need to parse another.
-        // if we don't, we need to look for extensions of our current expression instead.
-        //
         else
         {
-          if(state->top_task->expr_kind != E2_ExprKind_Null)
-          {
-            expr = &e2_expr_nil;
-          }
-          break;
+          SLLQueuePush(state->top_task->first_child, state->top_task->last_child, n);
         }
+        n->v = expr;
+        state->top_task->child_count += 1;
+      }
+      
+      //- rjf: consume expected splitters
+      if(!state->caller_info_completes_task &&
+         state->top_task->child_count >= state->top_task->splitter_min_child_count &&
+         state->top_task->expected_splitter.size != 0 &&
+         state->top_task->child_count < state->top_task->child_count_target)
+      {
+        if(!e2_try_token(lang, string, E2_TokenKind_Symbol, state->top_task->expected_splitter, &off, 0) && state->top_task->splitter_is_required)
+        {
+          e2_msgf(arena, &parse.msgs, r1u64(off, off), "Expected `%S`.", state->top_task->expected_splitter);
+        }
+      }
+      
+      //- rjf: consume expected closers - can terminate a child list early
+      B32 closer_found = 0;
+      if(!state->caller_info_completes_task && state->top_task->expected_closer.size != 0)
+      {
+        closer_found = e2_try_token(lang, string, E2_TokenKind_Symbol, state->top_task->expected_closer, &off, 0);
+      }
+      
+      //- rjf: determine if the task above a parenthesized sub-expression is expecting a type
+      B32 parent_looking_for_type = 0;
+      if(!state->top_task->do_type_ancestors &&
+         state->top_task->next != 0 &&
+         state->top_task->next->expr_kind != E2_ExprKind_Null &&
+         state->top_task->next->child_count == 0 &&
+         e2_expr_kind_is_first_operand_type_maybe_table[state->top_task->next->expr_kind])
+      {
+        parent_looking_for_type = 1;
+      }
+      
+      //- rjf: determine if first child of a parenthesized sub-expression is a type
+      B32 parenthesized_child_is_type = 0;
+      if(!state->top_task->do_type_ancestors && !parent_looking_for_type && closer_found && state->top_task->child_count == 1)
+      {
+        E2_Expr *expr = state->top_task->first_child->v;
+        parenthesized_child_is_type = 1;
+        for(E2_Expr *e = expr, *next_e; e != &e2_expr_nil && parenthesized_child_is_type; e = next_e)
+        {
+          next_e = &e2_expr_nil;
+          if(e->kind != E2_ExprKind_TypeIdentifier &&
+             e->kind != E2_ExprKind_Ptr)
+          {
+            parenthesized_child_is_type = 0;
+          }
+          if(parenthesized_child_is_type && e->child_count == 1)
+          {
+            next_e = e->first_child->v;
+          }
+          else if(e->child_count > 1)
+          {
+            parenthesized_child_is_type = 0;
+          }
+        }
+      }
+      
+      //- rjf: closer found, completed child count == 1 & completed child is a
+      // type evaluation - then this is cast. push a task to fill the operand
+      B32 is_cast = parenthesized_child_is_type;
+      if(!parent_looking_for_type && is_cast)
+      {
+        // rjf: pop the sub-task for the type expression
+        E2_Expr *type_expr = state->top_task->first_child->v;
+        {
+          E2_ParseTask *completed_task = state->top_task;
+          SLLStackPop(state->top_task);
+          SLLStackPush(state->free_task, completed_task);
+        }
+        
+        // rjf: push a new task for the castee operand
+        {
+          E2_ParseTask *task = state->free_task;
+          if(task != 0)
+          {
+            SLLStackPop(state->free_task);
+          }
+          else
+          {
+            task = push_array_no_zero(arena, E2_ParseTask, 1);
+          }
+          MemoryZeroStruct(task);
+          task->src_range = type_expr->src_range;
+          task->child_count = 1;
+          task->child_count_target = e2_expr_kind_target_operand_count_table[E2_ExprKind_Cast];
+          task->expr_kind = E2_ExprKind_Cast;
+          task->max_precedence = 1;
+          SLLStackPush(state->top_task, task);
+          expr = &e2_expr_nil;
+          E2_ExprNode *child_n = push_array(arena, E2_ExprNode, 1);
+          SLLQueuePush(task->first_child, task->last_child, child_n);
+          child_n->v = type_expr;
+        }
+      }
+      
+      //- rjf: caller-provided info completes a task, *or* closer found,
+      // *or* task child count hits limit -> complete this subtree
+      else if(state->caller_info_completes_task || closer_found || state->top_task->child_count >= state->top_task->child_count_target)
+      {
+        B32 completed_with_caller_info = state->caller_info_completes_task;
+        state->caller_info_completes_task = 0;
+        E2_ParseTask *completed_task = state->top_task;
+        
+        //- rjf: produced finished expression tree, given all children
+        E2_Expr *finished_root = &e2_expr_nil;
+        {
+          if(completed_task->expr_kind == E2_ExprKind_Null && completed_task->child_count == 1)
+          {
+            finished_root = completed_task->first_child->v;
+          }
+          else
+          {
+            finished_root = e2_expr(arena, completed_task->expr_kind);
+            finished_root->first_child = completed_task->first_child;
+            finished_root->last_child = completed_task->last_child;
+            finished_root->child_count = completed_task->child_count;
+            finished_root->src_range = completed_task->src_range;
+          }
+        }
+        
+        //- rjf: report missing closers
+        if(!completed_with_caller_info && completed_task->expected_closer.size != 0 && !closer_found)
+        {
+          e2_msgf(arena, &parse.msgs, r1u64(off, off), "Expected `%S`.", completed_task->expected_closer);
+        }
+        
+        //- rjf: if this task parsed type ancestors:
+        //
+        // we need to pop this task, and return to working on the original left-hand-side
+        // type descendant. but, we need to remember the parsed type ancestors, so that
+        // we can apply them to the type once the right-hand-side has been parsed.
+        //
+        // otherwise (normal case): work on the parent of the finished expression next,
+        // using the finished expression as the completed child.
+        //
+        if(completed_task->do_type_ancestors)
+        {
+          expr = completed_task->type_lhs;
+          completed_task->next->next_type_ancestor = finished_root;
+        }
+        else
+        {
+          expr = finished_root;
+        }
+        
+        //- rjf: release task
+        if(!done)
+        {
+          SLLStackPop(state->top_task);
+          SLLStackPush(state->free_task, completed_task);
+        }
+      }
+      
+      //- rjf: if the top task is not done -> continue parsing.
+      //
+      // if we have an active op kind, reset expression, because we need to parse another.
+      // if we don't, we need to look for extensions of our current expression instead.
+      //
+      else if(state->top_task->expr_kind != E2_ExprKind_Null)
+      {
+        expr = &e2_expr_nil;
       }
     }
     
-    //- rjf: we're always done if there's nothing left to parse, *or* if we made no progress.
-    if(off >= string.size || (off == start_off && !e2_parse_status_is_caller_request(parse.status)))
+    //- rjf: we're done if we couldn't make any more progress.
+    if(start_task == state->top_task && (off >= string.size || (off == start_off && !e2_parse_status_is_caller_request(parse.status))))
     {
       done = 1;
       if(expr != &e2_expr_nil)

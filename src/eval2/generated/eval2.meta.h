@@ -14,6 +14,7 @@ E2_ExprKind_MacroArg,
 E2_ExprKind_TypeIdentifier,
 E2_ExprKind_Ptr,
 E2_ExprKind_Array,
+E2_ExprKind_Function,
 E2_ExprKind_Numeric,
 E2_ExprKind_StringLiteral,
 E2_ExprKind_CharLiteral,
@@ -158,10 +159,10 @@ E2_ExprKindParseInfo *expr_kind_parse_infos;
 };
 
 C_LINKAGE_BEGIN
-extern B8 e2_expr_kind_allow_type_operands_table[43];
-extern B8 e2_expr_kind_is_type_expr_table[43];
-extern B8 e2_expr_kind_is_first_operand_type_maybe_table[43];
-extern U64 e2_expr_kind_target_operand_count_table[43];
+extern B8 e2_expr_kind_allow_type_operands_table[44];
+extern B8 e2_expr_kind_is_type_expr_table[44];
+extern B8 e2_expr_kind_is_first_operand_type_maybe_table[44];
+extern U64 e2_expr_kind_target_operand_count_table[44];
 extern E2_LangInfo e2_lang_kind_info_table[1];
 extern E2_ExprKindParseInfo e2_expr_kind_parse_info_table__clike[38];
 extern U8 e2_type_kind_basic_byte_size_table[61];

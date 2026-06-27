@@ -9,12 +9,13 @@ E2_ExprKindTable:
   {TypeIdentifier            0   1   0   0                    }
   {Ptr                       1   1   1   1                    }
   {Array                     1   1   1   2                    }
+  {Function                  1   1   1   0xffffffffffffffffull}
   {Numeric                   0   0   0   0                    }
   {StringLiteral             0   0   0   0                    }
   {CharLiteral               0   0   0   0                    }
   {Dot                       1   0   0   1                    }
   {Index                     0   0   0   2                    }
-  {Call                      1   0   0   0xffffffffffffffffull}
+  {Call                      0   0   0   0xffffffffffffffffull}
   {DerefAsm                  1   0   0   1                    }
   {SizeOf                    1   0   1   1                    }
   {TypeOf                    1   1   1   1                    }

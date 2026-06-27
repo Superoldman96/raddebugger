@@ -4,7 +4,7 @@
 //- GENERATED CODE
 
 C_LINKAGE_BEGIN
-B8 e2_expr_kind_allow_type_operands_table[43] =
+B8 e2_expr_kind_allow_type_operands_table[44] =
 {
 0,
 0,
@@ -12,12 +12,13 @@ B8 e2_expr_kind_allow_type_operands_table[43] =
 0,
 1,
 1,
+1,
 0,
 0,
 0,
 1,
 0,
-1,
+0,
 1,
 1,
 1,
@@ -51,11 +52,12 @@ B8 e2_expr_kind_allow_type_operands_table[43] =
 1,
 };
 
-B8 e2_expr_kind_is_type_expr_table[43] =
+B8 e2_expr_kind_is_type_expr_table[44] =
 {
 0,
 0,
 0,
+1,
 1,
 1,
 1,
@@ -98,12 +100,13 @@ B8 e2_expr_kind_is_type_expr_table[43] =
 0,
 };
 
-B8 e2_expr_kind_is_first_operand_type_maybe_table[43] =
+B8 e2_expr_kind_is_first_operand_type_maybe_table[44] =
 {
 0,
 0,
 0,
 0,
+1,
 1,
 1,
 0,
@@ -145,7 +148,7 @@ B8 e2_expr_kind_is_first_operand_type_maybe_table[43] =
 0,
 };
 
-U64 e2_expr_kind_target_operand_count_table[43] =
+U64 e2_expr_kind_target_operand_count_table[44] =
 {
 0,
 0,
@@ -153,6 +156,7 @@ U64 e2_expr_kind_target_operand_count_table[43] =
 0,
 1,
 2,
+0xffffffffffffffffull,
 0,
 0,
 0,

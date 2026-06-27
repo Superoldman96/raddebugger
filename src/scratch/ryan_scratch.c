@@ -43,8 +43,9 @@ entry_point(CmdLine *cmdline)
     // (A)
     // int & B
     // (1 + (int)&B)
-    
-    // TODO(rjf): this is now busted, `mul` root comes out - related to always having a top task maybe?
+    s("int32 *"),
+    s("int32[100]"),
+    s("int32 (*) [100]"),
     s("3 * 4 + 2"),
     s("(3 * 4) + 2"),
     s("3 * 4"),
@@ -57,8 +58,6 @@ entry_point(CmdLine *cmdline)
     s("123, 456"),
     s("222.f"),
     s("123 as float32"),
-    s("int32 (*) [100]"),
-    s("int32[100]"),
     s("cast float32 123"),
     s("cast (float32) 123"),
     s("(int32 *)123"),
