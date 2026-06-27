@@ -13106,7 +13106,12 @@ rd_frame(void)
               {
                 current_path_string = path_normalized_from_string(scratch.arena, get_current_path(scratch.arena));
               }
-              String8 file_path = wm_graphical_pick_file(scratch.arena, current_path_string);
+              String8 cmd_title = rd_display_from_code_name(info->string);
+              if(cmd_title.size == 0)
+              {
+                cmd_title = info->string;
+              }
+              String8 file_path = wm_graphical_pick_file(scratch.arena, cmd_title, current_path_string);
               file_path = path_normalized_from_string(scratch.arena, file_path);
               if(file_path.size != 0)
               {
