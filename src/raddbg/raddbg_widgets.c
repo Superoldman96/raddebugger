@@ -907,19 +907,27 @@ rd_cmd_binding_buttons(String8 name, String8 filter, U64 limit, RD_CmdBindingBut
                               str8_match(rd_state->bind_change_cmd_name, name, 0) &&
                               rd_state->bind_change_binding_id == 0);
     ui_spacer(ui_em(1.f, 1.f));
-    RD_Font(RD_FontSlot_Icons) UI_TagF(adding_new_binding ? "pop" : "") UI_CornerRadius(ui_top_font_size()*0.5f)
     {
-      ui_set_next_text_alignment(UI_TextAlign_Center);
-      ui_set_next_group_key(ui_key_zero());
-      ui_set_next_pref_width(ui_text_dim(ui_top_font_size()*1.5f, 1));
-      UI_Box *box = ui_build_box_from_stringf(UI_BoxFlag_DrawText|
-                                              UI_BoxFlag_Clickable|
-                                              UI_BoxFlag_DrawActiveEffects|
-                                              UI_BoxFlag_DrawHotEffects|
-                                              UI_BoxFlag_DrawBorder|
-                                              UI_BoxFlag_DrawBackground,
-                                              "%S###add_binding", rd_icon_kind_text_table[RD_IconKind_Add]);
+      UI_Box *box = &ui_nil_box;
+      RD_Font(RD_FontSlot_Icons) UI_TagF(adding_new_binding ? "pop" : "") UI_CornerRadius(ui_top_font_size()*0.5f)
+      {
+        ui_set_next_text_alignment(UI_TextAlign_Center);
+        ui_set_next_group_key(ui_key_zero());
+        ui_set_next_pref_width(ui_text_dim(ui_top_font_size()*1.5f, 1));
+        box = ui_build_box_from_stringf(UI_BoxFlag_DrawText|
+                                        UI_BoxFlag_Clickable|
+                                        UI_BoxFlag_DrawActiveEffects|
+                                        UI_BoxFlag_DrawHotEffects|
+                                        UI_BoxFlag_DrawBorder|
+                                        UI_BoxFlag_DrawBackground,
+                                        "%S###add_binding", rd_icon_kind_text_table[RD_IconKind_Add]);
+      }
       UI_Signal sig = ui_signal_from_box(box);
+      if(ui_hovering(sig)) UI_Tooltip
+      {
+        ui_state->tooltip_anchor_key = box->key;
+        ui_labelf("Add New Binding");
+      }
       if(ui_clicked(sig))
       {
         if(!adding_new_binding && ui_clicked(sig))

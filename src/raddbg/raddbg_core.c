@@ -4117,7 +4117,7 @@ rd_view_ui(Rng2F32 rect)
                                cells_are_editable &&
                                row->eval.expr == &e_expr_nil)
                             {
-                              ghost_text = str8_lit("Add a expression to watch...");
+                              ghost_text = s("Add an expression to watch...");
                               is_non_code = (!cell_selected || !ewv->text_editing);
                               cell_params.flags &= ~(RD_CellFlag_Expander|RD_CellFlag_ExpanderSpace|RD_CellFlag_ExpanderPlaceholder);
                             }
@@ -6579,7 +6579,7 @@ rd_window_frame(void)
           }
           if(!ui_key_match(ui_key_zero(), ws->query_regs->ui_key))
           {
-            query_width_px = is_small ? (ui_top_font_size()*30.f) : (ui_top_font_size()*60.f);
+            query_width_px = is_small ? (ui_top_font_size()*40.f) : (ui_top_font_size()*60.f);
             max_query_height_px = is_small ? (ui_top_font_size()*40.f) : (ui_top_font_size()*80.f);
           }
           F32 query_height_px = max_query_height_px;
