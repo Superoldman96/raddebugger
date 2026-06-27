@@ -16,7 +16,6 @@
 #define R_INIT_MANUAL 1
 #define FNT_INIT_MANUAL 1
 #define RD_INIT_MANUAL 1
-#define NO_ASYNC 1
 
 ////////////////////////////////
 

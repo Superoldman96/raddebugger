@@ -352,6 +352,9 @@ internal DI_EventList di_get_events(Arena *arena);
 ////////////////////////////////
 //~ rjf: Asynchronous Tick
 
+#if !defined(NEED_ASYNC)
+# define NEED_ASYNC 1
+#endif
 internal void di_async_tick(void);
 
 ////////////////////////////////

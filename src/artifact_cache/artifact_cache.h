@@ -179,6 +179,9 @@ internal AC_Artifact ac_artifact_from_key_(Access *access, String8 key, AC_Artif
 ////////////////////////////////
 //~ rjf: Asynchronous Tick
 
+#if !defined(NEED_ASYNC)
+# define NEED_ASYNC 1
+#endif
 internal void ac_async_tick(void);
 
 ////////////////////////////////

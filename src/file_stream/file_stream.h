@@ -66,6 +66,9 @@ internal U128 fs_hash_from_path_range(String8 path, Rng1U64 range, U64 endt_us);
 ////////////////////////////////
 //~ rjf: Asynchronous Tick
 
+#if !defined(NEED_ASYNC)
+# define NEED_ASYNC 1
+#endif
 internal void fs_async_tick(void);
 
 #endif // FILE_STREAM_H
