@@ -3196,9 +3196,14 @@ e2_bytecode_from_irnode(Arena *arena, E2_IRNode *irnode)
       E2_IRNode *ir = t->ir;
       
       //- rjf: unpack this op
-      U16 ctrlbits = rdi_eval_op_ctrlbits_table[ir->op];
-      U64 child_count = RDI_POPN_FROM_CTRLBITS(ctrlbits);
-      if(ir->op == 0)
+      U16 ctrlbits = 0;
+      U64 child_count = 0;
+      if(0 < ir->op && ir->op < RDI_EvalOp_COUNT)
+      {
+        ctrlbits = rdi_eval_op_ctrlbits_table[ir->op];
+        child_count = RDI_POPN_FROM_CTRLBITS(ctrlbits);
+      }
+      else
       {
         child_count = ir->child_count;
       }
@@ -3234,6 +3239,15 @@ e2_bytecode_from_irnode(Arena *arena, E2_IRNode *irnode)
           if(ir->op < RDI_EvalOp_COUNT)
           {
             ctrlbits = rdi_eval_op_ctrlbits_table[ir->op];
+          }
+          else switch(ir->op)
+          {
+            default:{}break;
+            case E2_EvalOp_SetCtxID:
+            case E2_EvalOp_LeafBytecode:
+            {
+              ctrlbits = RDI_EVAL_CTRLBITS(8, 0, 0);
+            }break;
           }
           U64 decode_byte_count = RDI_DECODEN_FROM_CTRLBITS(ctrlbits);
           U64 op_size = 1 + decode_byte_count;

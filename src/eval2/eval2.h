@@ -26,7 +26,7 @@ E2_ExprParseKind;
 enum
 {
   E2_EvalOp_SetCtxID = RDI_EvalOp_COUNT,
-  E2_EvalOp_LeafMacroArgument,
+  E2_EvalOp_LeafBytecode,
 };
 
 ////////////////////////////////

@@ -44,7 +44,6 @@ entry_point(CmdLine *cmdline)
     // int & B
     // (1 + (int)&B)
     s("int32(*)(int32, int32)"),
-#if 0
     s("123(1, 2, 3)"),
     s("int32 (*) [100]"),
     s("(3 * 4) + 2"),
@@ -85,6 +84,7 @@ entry_point(CmdLine *cmdline)
     s("123 + "),
     s("-123"),
     s("sizeof 123"),
+#if 0
     // TODO(rjf): these are ambiguous with regular C type expressions with a naive parse:
     // s("float32(111)"),
     // s("float64(111)"),
