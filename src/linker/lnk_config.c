@@ -1,7 +1,7 @@
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
-global read_only LNK_CmdSwitch g_cmd_switch_map[] =
+global LNK_CmdSwitch g_cmd_switch_map[] =
 {
   { LNK_CmdSwitch_Null,               0, LNK_CmdValueKind_Null,   "",                     "", ""                                                                                           },
   { LNK_CmdSwitch_NotImplemented,     0, LNK_CmdValueKind_Null,   "NOT_IMPLEMENTED",      "", ""                                                                                           },
@@ -34,8 +34,8 @@ global read_only LNK_CmdSwitch g_cmd_switch_map[] =
   { LNK_CmdSwitch_Ignore,             0, LNK_CmdValueKind_Scalar, "IGNORE",               ":#",                             "Ignore a warning."                                            },
   { LNK_CmdSwitch_ImpLib,             0, LNK_CmdValueKind_Scalar, "IMPLIB",               ":FILENAME",                      "Set file name for the import library."                        },
   { LNK_CmdSwitch_Include,            1, LNK_CmdValueKind_Scalar, "INCLUDE",              ":SYMBOL",                        "Force a link against SYMBOL."                                 },
-  { LNK_CmdSwitch_InferAsanLibs,      1, LNK_CmdValueKind_Scalar, "INFERASANLIBS",        "[:NO]",                          "No support."                                                  },
-  { LNK_CmdSwitch_InferAsanLibsNo,    1, LNK_CmdValueKind_Null,   "INFERASANLIBSNO",      "",                               "No support.",                                                 },
+  { LNK_CmdSwitch_InferAsanLibs,      1, LNK_CmdValueKind_Scalar, "INFERASANLIBS",        "[:NO]",                          "Infer Asan libraries from the link."                          },
+  { LNK_CmdSwitch_InferAsanLibsNo,    1, LNK_CmdValueKind_Null,   "INFERASANLIBSNO",      "",                               "Disable Asan lib inference.",                                 },
   { LNK_CmdSwitch_LargeAddressAware,  0, LNK_CmdValueKind_Scalar, "LARGEADDRESSAWARE",    "[:NO]",                          "For images that can handle addresses > 2GiB."                 },
   { LNK_CmdSwitch_Lib,                0, LNK_CmdValueKind_Null,   "LIB",                  "",                               "Turn linker into lib.exe."                                    },
   { LNK_CmdSwitch_LibPath,            0, LNK_CmdValueKind_Scalar, "LIBPATH",              ":DIR",                           "Add DIR for the linker to search for libraries."              },
@@ -60,7 +60,7 @@ global read_only LNK_CmdSwitch g_cmd_switch_map[] =
   { LNK_CmdSwitch_PdbPageSize,        0, LNK_CmdValueKind_Scalar, "PDBPAGESIZE",          ":#",                             "Page size must be power of two."                              },
   { LNK_CmdSwitch_PdbStripped,        0, LNK_CmdValueKind_Scalar, "PDBSTRIPPED",          ":FILENAME",                      "Create a stripped PDB containing public symbols, a section map, and a list of object files." },
   { LNK_CmdSwitch_Release,            1, LNK_CmdValueKind_Null,   "RELEASE",              "",                               "Write image checksum."                                        },
-  { LNK_CmdSwitch_Section,            1, LNK_CmdValueKind_List,   "SECTION",              ":NAME,ATTRS",                    "Set output section attributes."                              },
+  { LNK_CmdSwitch_Section,            1, LNK_CmdValueKind_List,   "SECTION",              ":NAME,ATTRS",                    "Set output section attributes."                               },
   { LNK_CmdSwitch_Stack,              1, LNK_CmdValueKind_List,   "STACK",                ":RESERVE[,COMMIT]",              "Set reserve and commit size for the stack."                   },
   { LNK_CmdSwitch_SubSystem,          1, LNK_CmdValueKind_List,   "SUBSYSTEM",            ":{CONSOLE|NATIVE|WINDOWS}[,#[.##]]", "Set subsystem for the image."                             },
   { LNK_CmdSwitch_TsAware,            0, LNK_CmdValueKind_Scalar, "TSAWARE",              "[:NO]",                          "Image is terminal server aware."                              },
@@ -1500,6 +1500,20 @@ lnk_apply_cmd_option_to_config(LNK_Config *config, String8 cmd_name, String8 val
 
   case LNK_CmdSwitch_InferAsanLibs: {
     lnk_cmd_switch_parse_flag(obj, cmd_switch, value, &config->infer_asan_libs);
+
+    // Make the command-line option /INFERASANLIBS:NO authorative for ASAN library resolution.
+    // The LLVM toolchain passes ASAN libraries explicitly to lld-link, so we need to disable
+    // library inference and reject directives that re-enable it. Otherwise, a stray MSVC
+    // object file could force radlink to pull in duplicate ASAN libraries.
+    if (obj == 0) {
+      LNK_CmdSwitch *cmd = lnk_cmd_switch_from_type(LNK_CmdSwitch_InferAsanLibs);
+      cmd->is_legal_directive = (config->infer_asan_libs == LNK_SwitchState_Yes);
+    }
+  } break;
+
+  case LNK_CmdSwitch_InferAsanLibsNo: {
+    String8 infer_asan_libs_name = lnk_string_from_cmd_switch_type(LNK_CmdSwitch_InferAsanLibsNo);
+    lnk_apply_cmd_option_to_config(config, infer_asan_libs_name, str8_lit("NO"), obj);
   } break;
 
   case LNK_CmdSwitch_LargeAddressAware: {

@@ -8127,6 +8127,60 @@ TEST(whole_archive)
     T_Ok(b_sect != 0);
   }
 }
+
+#if 0
+TEST(infer_asan_command_line_no)
+{
+  Linker linker = t_id_linker();
+  if (linker != Linker_Null && linker != Linker_radlink) { return; }
+
+  T_Ok(t_write_entry_obj());
+
+  // Model LLVM's explicitly supplied runtime and an inferred MSVC runtime thunk
+  // defining the same symbol. Use local stub libraries so no ASAN installation is needed.
+  T_COFF_DefLib runtime = {
+    .emit_second_member = 1,
+    .members = (T_COFF_DefLibMember[]){
+      {
+        .type = T_COFF_DefLibMember_Obj,
+        .obj = {
+          .sections = (T_COFF_DefSection[]){
+            { "text", ".text", str8_lit_comp("\xC3"), .flags = "rx:code" },
+            {0}
+          },
+          .symbols = (T_COFF_DefSymbol[]){
+            T_COFF_DefSymbol_Extern("asan_runtime", "text", 0),
+            {0}
+          }
+        }
+      },
+      {0}
+    }
+  };
+  T_Ok(t_write_def_lib("explicit_asan.lib", runtime));
+  T_Ok(t_write_def_lib("clang_rt.asan_dynamic_runtime_thunk-x86_64.lib", runtime));
+  T_Ok(t_write_def_lib("clang_rt.asan_dynamic-x86_64.lib", (T_COFF_DefLib){ .emit_second_member = 1 }));
+  T_Ok(t_write_def_lib("msvcrt.lib", (T_COFF_DefLib){ .emit_second_member = 1 }));
+
+  char *args = "/entry:entry /subsystem:console /out:asan.exe /include:asan_runtime entry.obj explicit_asan.lib msvcrt.lib";
+  String8 illegal_directive = str8_lit("illegal directive \"INFERASANLIBS\"");
+  String8 directives[] = { str8_lit("/INFERASANLIBS"), str8_lit("/INFERASANLIBS:YES") };
+  for EachElement(i, directives) {
+    T_Ok(t_write_file(str8_lit("msvc.obj"), t_make_obj_with_directive(arena, directives[i])));
+
+    // Without a command-line override, the directive pulls in the duplicate thunk.
+    t_invoke_linkerf("%s msvc.obj", args);
+    T_Ok(g_last_exit_code == LNK_Error_MultiplyDefinedSymbol);
+    T_Ok(str8_find_needle(g_errors, 0, illegal_directive, 0) == g_errors.size);
+
+    // /NO must reject the directive and leave the explicit runtime as the sole provider.
+    t_invoke_linkerf("%s /INFERASANLIBS:NO msvc.obj", args);
+    T_Ok(g_last_exit_code == 0);
+    T_Ok(str8_find_needle(g_errors, 0, illegal_directive, 0) < g_errors.size);
+  }
+}
+#endif
+
 #if OS_WINDOWS
 
 internal B32
