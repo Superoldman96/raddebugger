@@ -1154,14 +1154,14 @@ internal LNK_Link *
 lnk_link_init(TP_Arena *arena, LNK_Config *config)
 {
   LNK_Link *link = push_array(arena->v[0], LNK_Link, 1);
-  link->arena                      = arena_alloc(.name = "LINK");
-  link->last_symbol_input          = &link->objs.first;
-  link->last_include               = &config->include_symbol_list.first;
+  link->arena                       = arena_alloc(.name = "LINK");
+  link->last_symbol_input           = &link->objs.first;
+  link->last_include                = &config->include_symbol_list.first;
   link->last_func_override_alt_name = &config->alt_name_list.first;
-  link->last_default_lib           = &config->input_default_lib_list.first;
-  link->last_obj_lib               = &config->input_obj_lib_list.first;
-  link->last_cmd_lib               = &config->input_list[LNK_Input_Lib].first;
-  link->try_to_resolve_entry_point = 1;
+  link->last_default_lib            = &config->input_default_lib_list.first;
+  link->last_obj_lib                = &config->input_obj_lib_list.first;
+  link->last_cmd_lib                = &config->input_list[LNK_Input_Lib].first;
+  link->try_to_resolve_entry_point  = 1;
   return link;
 }
 
@@ -1924,14 +1924,13 @@ lnk_link_inputs(TP_Context      *tp,
       search_anti_deps = 0;
 
       // replace undefined symbols that have an alternate name with a weak symbol
-      for (LNK_AltNameNode *alt_name_n = config->alt_name_list.first; alt_name_n != 0; alt_name_n = alt_name_n->next) {
+      for EachNode(alt_name_n, LNK_AltNameNode, config->alt_name_list.first) {
         LNK_SymbolHashTrie *symbol_ht = lnk_symbol_table_search_(symtab, alt_name_n->v.from);
         if (symbol_ht) {
           COFF_SymbolValueInterpType interp = lnk_interp_from_symbol(symbol_ht->symbol);
           if (interp == COFF_SymbolValueInterp_Undefined) {
-            // clear out slot so weak symbol can replace undefined symbol (general rule is
-            // weak symbol is not allowed to replace undefined)
-            LNK_Symbol *undef_symbol = symbol_ht->symbol;
+            // /ALTERNATENAME explicitly installs a fallback for an unresolved name.
+            // Normally, an undefined external prevails over a SERACH_LIBRARY weak symbol.
             symbol_ht->symbol = 0;
 
             // make obj with alternamte name symbol
@@ -1945,10 +1944,12 @@ lnk_link_inputs(TP_Context      *tp,
               coff_obj_writer_release(&obj_writer);
             }
 
+            // input synthetic object
             LNK_Obj *obj_with_alt_name      = alt_name_n->v.obj;
             String8  obj_with_alt_name_path = obj_with_alt_name ? obj_with_alt_name->path : str8_lit("RADLINK");
             lnk_inputer_push_obj_linkgen(inputer, obj_with_alt_name ? obj_with_alt_name->link_member : 0, obj_with_alt_name_path, alt_name_obj_data);
 
+            // request another round of anti-dependency symbols search
             search_anti_deps = 1;
           }
         }

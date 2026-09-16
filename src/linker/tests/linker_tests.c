@@ -4786,99 +4786,308 @@ TEST(sect_align)
 
 TEST(alt_name)
 {
-  T_Ok(t_write_def_obj("test.obj", (T_COFF_DefObj){
-    .machine = T_COFF_DefSetMachine(X64),
+  // Inspect an RVA relocation instead of merely accepting a successful link.
+  // Separate sections and nonzero symbol offsets distinguish the selected target
+  // without depending on a particular linker's section ordering or image layout.
+  T_COFF_DefObj target = {
+    .machine  = T_COFF_DefSetMachine(X64),
+    .path     = str8_lit("target.obj"),
     .sections = (T_COFF_DefSection[]){
-      { "data", ".data", str8_lit("test"), .flags = "rw:data" },
+      { "data", ".target", str8_lit("pad!TEST"), .flags = "rw:data@4" },
       {0}
     },
     .symbols = (T_COFF_DefSymbol[]){
-      T_COFF_DefSymbol_Extern("test", "data", 0),
+      T_COFF_DefSymbol_Extern("test", "data", 4),
       {0}
     }
-  }));
+  };
 
-  T_Ok(t_write_def_obj("foo.obj", (T_COFF_DefObj){
-    .machine = T_COFF_DefSetMachine(X64),
+  T_COFF_DefObj primary = {
+    .machine  = T_COFF_DefSetMachine(X64),
+    .path     = str8_lit("foo.obj"),
     .sections = (T_COFF_DefSection[]){
-      { "data", ".data", str8_lit("foo"), .flags = "rw:data" },
+      { "data", ".primary", str8_lit("pad!REAL"), .flags = "rw:data@4" },
       {0}
     },
     .symbols = (T_COFF_DefSymbol[]){
-      T_COFF_DefSymbol_Extern("foo", "data", 0),
+      T_COFF_DefSymbol_Extern("foo", "data", 4),
+      {0}
+    }
+  };
+
+  T_COFF_DefObj weak = {
+    .machine = T_COFF_DefSetMachine(X64),
+    .path    = str8_lit("weak.obj"),
+    .symbols = (T_COFF_DefSymbol[]){
+      T_COFF_DefSymbol_Undef("test"),
+      T_COFF_DefSymbol_Weak("altsym", COFF_WeakExt_SearchAlias, "test"),
+      T_COFF_DefSymbol_AbsExtern("alias_anchor", 1),
+      {0}
+    }
+  };
+
+  T_Ok(t_write_def_obj("target.obj", target));
+  T_Ok(t_write_def_obj("foo.obj", primary));
+  T_Ok(t_write_def_obj("weak.obj", weak));
+  T_Ok(t_write_entry_obj());
+  T_Ok(t_write_def_obj("ref.obj", (T_COFF_DefObj){
+    .machine  = T_COFF_DefSetMachine(X64),
+    .sections = (T_COFF_DefSection[]){
+      { "probe", ".probe", str8_lit_comp("\0\0\0\0"), .flags = "rw:data@4",
+        .relocs = (T_COFF_DefReloc[]){ T_COFF_DefReloc(X64_Addr32Nb, 0, "foo"), {0} } },
+      {0}
+    },
+    .symbols = (T_COFF_DefSymbol[]){ T_COFF_DefSymbol_Undef("foo"), {0} }
+  }));
+
+  // Use ADDR32 for the absolute target: LINK rejects absolute ADDR32NB fixups.
+  T_Ok(t_write_def_obj("ref_absolute.obj", (T_COFF_DefObj){
+    .machine  = T_COFF_DefSetMachine(X64),
+    .sections = (T_COFF_DefSection[]){
+      { "probe", ".probe", str8_lit_comp("\0\0\0\0"), .flags = "rw:data@4",
+        .relocs = (T_COFF_DefReloc[]){ T_COFF_DefReloc(X64_Addr32, 0, "foo"), {0} } },
+      {0}
+    },
+    .symbols = (T_COFF_DefSymbol[]){ T_COFF_DefSymbol_Undef("foo"), {0} }
+  }));
+
+  // Same-object weak target, as in LLVM's alternatename-alias.s.
+  T_Ok(t_write_def_obj("weak_local.obj", (T_COFF_DefObj){
+    .machine  = T_COFF_DefSetMachine(X64),
+    .sections = target.sections,
+    .symbols  = (T_COFF_DefSymbol[]){
+      T_COFF_DefSymbol_Extern("test", "data", 4),
+      T_COFF_DefSymbol_Weak("altsym", COFF_WeakExt_SearchAlias, "test"),
       {0}
     }
   }));
-
-  T_Ok(t_write_def_obj("entry.obj", (T_COFF_DefObj){
-    .machine = T_COFF_DefSetMachine(X64),
+  // A local default is identified by its object-local tag, not its spelling.
+  T_Ok(t_write_def_obj("weak_static.obj", (T_COFF_DefObj){
+    .machine  = T_COFF_DefSetMachine(X64),
+    .sections = target.sections,
+    .symbols  = (T_COFF_DefSymbol[]){
+      T_COFF_DefSymbol_Static("local_target", "data", 4),
+      T_COFF_DefSymbol_Weak("altsym", COFF_WeakExt_SearchAlias, "local_target"),
+      {0}
+    }
+  }));
+  T_Ok(t_write_def_obj("global_target.obj", (T_COFF_DefObj){
+    .machine  = T_COFF_DefSetMachine(X64),
+    .sections = primary.sections,
+    .symbols  = (T_COFF_DefSymbol[]){ T_COFF_DefSymbol_Extern("local_target", "data", 4), {0} }
+  }));
+  T_Ok(t_write_def_obj("override.obj", (T_COFF_DefObj){
+    .machine  = T_COFF_DefSetMachine(X64),
     .sections = (T_COFF_DefSection[]){
-      {
-        "text", ".text",
-        str8_lit_comp(
-          "\x48\xC7\xC0\x00\x00\x00\x00" // mov rax, $imm
-          "\xC3"
-        ), // ret
-        .flags = "rx:code",
-        .relocs = (T_COFF_DefReloc[]){
-          T_COFF_DefReloc(X64_Addr32Nb, 0, "foo"),
-          {0}
-        }
+      { "data", ".chosen", str8_lit("pad!OVER"), .flags = "rw:data@4" }, {0}
+    },
+    .symbols = (T_COFF_DefSymbol[]){ T_COFF_DefSymbol_Extern("altsym", "data", 4), {0} }
+  }));
+  T_Ok(t_write_def_obj("absolute.obj", (T_COFF_DefObj){
+    .machine = T_COFF_DefSetMachine(X64),
+    .symbols = (T_COFF_DefSymbol[]){ T_COFF_DefSymbol_AbsExtern("absolute", 0x1234), {0} }
+  }));
+
+  struct {
+    char             *path;
+    char             *name;
+    char             *tag;
+    COFF_WeakExtType  type;
+  } aliases[] = {
+    { "weak_chain.obj",  "altsym", "middle",  COFF_WeakExt_SearchAlias    },
+    { "weak_middle.obj", "middle", "test",    COFF_WeakExt_SearchAlias    },
+    { "anti.obj",        "altsym", "test",    COFF_WeakExt_AntiDependency },
+    { "anti_middle.obj", "middle", "test",    COFF_WeakExt_AntiDependency },
+    { "missing.obj",     "altsym", "missing", COFF_WeakExt_SearchAlias    },
+    { "cycle_tail.obj",  "middle", "altsym",  COFF_WeakExt_SearchAlias    },
+    { "source_weak.obj", "foo",    "test",    COFF_WeakExt_SearchAlias    },
+    { "weak_nolib.obj",  "altsym", "test",    COFF_WeakExt_NoLibrary      },
+    { "weak_lib.obj",    "altsym", "test",    COFF_WeakExt_SearchLibrary  },
+  };
+  for EachElement(i, aliases) {
+    T_Ok(t_write_def_obj(aliases[i].path, (T_COFF_DefObj){
+      .machine = T_COFF_DefSetMachine(X64),
+      .symbols = (T_COFF_DefSymbol[]){
+        T_COFF_DefSymbol_Undef(aliases[i].tag),
+        T_COFF_DefSymbol_Weak(aliases[i].name, aliases[i].type, aliases[i].tag),
+        {0}
+      }
+    }));
+  }
+
+  T_Ok(t_write_def_obj("directive.obj",      (T_COFF_DefObj){ .directives = (char *[]){ "/alternatename:foo=test",   0 } }));
+  T_Ok(t_write_def_obj("weak_directive.obj", (T_COFF_DefObj){ .directives = (char *[]){ "/alternatename:foo=altsym", 0 } }));
+  T_Ok(t_write_def_obj("conflict.obj",       (T_COFF_DefObj){ .directives = (char *[]){ "/alternatename:foo=other",  0 } }));
+  T_Ok(t_write_file(str8_lit("alternate.rsp"), str8_lit("/alternatename:foo=test")));
+
+  T_COFF_DefObj  lib_objs[]  = { target, primary, weak };
+  char          *lib_paths[] = { "target.lib", "foo.lib", "weak.lib" };
+  for EachElement(i, lib_objs) {
+    T_Ok(t_write_def_lib(lib_paths[i], (T_COFF_DefLib){
+      .emit_second_member = 1,
+      .members            = (T_COFF_DefLibMember[]){ { .type = T_COFF_DefLibMember_Obj, .obj = lib_objs[i] }, {0} }
+    }));
+  }
+
+  // Extracting the fallback unnecessarily must fail, even if its data is unused.
+  T_Ok(t_write_def_lib("poison.lib", (T_COFF_DefLib){
+    .emit_second_member = 1,
+    .members = (T_COFF_DefLibMember[]){ { .type = T_COFF_DefLibMember_Obj, .obj = {
+      .path     = str8_lit("poison.obj"),
+      .machine  = T_COFF_DefSetMachine(X64),
+      .sections = (T_COFF_DefSection[]){
+        { "data", ".poison", str8_lit_comp("\0\0\0\0"), .flags = "rw:data@4",
+          .relocs = (T_COFF_DefReloc[]){ T_COFF_DefReloc(X64_Addr32Nb, 0, "poison_missing"), {0} } },
+        {0}
       },
-      {0}
-    },
-    .symbols = (T_COFF_DefSymbol[]){
-      T_COFF_DefSymbol_Extern("entry", "text", 0),
-      T_COFF_DefSymbol_Undef("foo"),
-      {0}
-    }
+      .symbols = (T_COFF_DefSymbol[]){
+        T_COFF_DefSymbol_Extern("test", "data", 0),
+        T_COFF_DefSymbol_Undef("poison_missing"),
+        {0}
+      }
+    } }, {0} }
   }));
 
-  // basic alternate name test
-  t_invoke_linkerf("/subsystem:console /entry:entry /out:a.exe /alternatename:foo=test test.obj entry.obj");
-  T_Ok(g_last_exit_code == 0);
+  struct {
+    char *name;
+    char *options;
+    char *inputs;
+    B32   success;
+    char *section; // NULL on success means an absolute symbol value.
+    U32   offset;
+    LNK_ErrorCode error; // Defaults to UnresolvedSymbol for negative cases.
+  } cases[] = {
+    { "direct",              "/alternatename:foo=test",                          "target.obj",         1, ".target",   4 },
+    { "identical_duplicate", "/alternatename:foo=test /alternatename:foo=test", "target.obj",          1, ".target",   4 },
+    { "absolute",            "/alternatename:foo=absolute",                      "absolute.obj",       1, 0,           0x1234 },
+    { "primary_before",      "/alternatename:foo=test",                          "foo.obj target.obj", 1, ".primary",  4 },
+    { "primary_after",       "/alternatename:foo=test",                          "target.obj foo.obj", 1, ".primary",  4 },
+    { "primary_missing_alt", "/alternatename:foo=missing",                       "foo.obj",            1, ".primary",  4 },
+    { "primary_self",        "/alternatename:foo=foo",                           "foo.obj",            1, ".primary",  4 },
+    { "unused_mapping",      "/alternatename:unused=missing",                    "foo.obj",            1, ".primary",  4 },
+    { "unused_cycle",        "/alternatename:unused=other /alternatename:other=unused", "foo.obj",     1, ".primary",  4 },
 
-  // linker should not chase alt name links
-  t_invoke_linkerf("/subsystem:console /entry:entry /out:b.exe /alternatename:foo=bar /alternatename:bar=test test.obj entry.obj");
-  T_Ok(g_last_exit_code != 0);
+    // Object-file and response-file directives have the same fallback semantics.
+    { "directive_before",    "",                                                 "directive.obj target.obj",       1, ".target",   4 },
+    { "directive_after",     "",                                                 "target.obj directive.obj",       1, ".target",   4 },
+    { "directive_duplicate", "/alternatename:foo=test",                          "directive.obj target.obj",       1, ".target",   4 },
+    { "response_file",       "@alternate.rsp",                                   "target.obj",                     1, ".target",   4 },
 
-  // alt name conflict
-  t_invoke_linkerf("/subsystem:console /entry:entry /out:c.exe /alternatename:foo=test /alternatename:foo=qwe test.obj entry.obj");
-  T_Ok(g_last_exit_code != 0);
+    // Archive search must prefer the primary name and avoid unused fallbacks.
+    { "archive_target",      "/alternatename:foo=test",                          "target.lib",                     1, ".target",   4 },
+    { "archive_primary",     "/alternatename:foo=test",                          "target.obj foo.lib",             1, ".primary",  4 },
+    { "archives_before",     "/alternatename:foo=test",                          "foo.lib target.lib",             1, ".primary",  4 },
+    { "archives_after",      "/alternatename:foo=test",                          "target.lib foo.lib",             1, ".primary",  4 },
+    { "unused_fallback_lib", "/alternatename:foo=test",                          "foo.obj poison.lib",             1, ".primary",  4 },
+    { "unused_mapping_lib",  "/alternatename:unused=test",                       "foo.obj poison.lib",             1, ".primary",  4 },
+    { "required_poison_lib", "/alternatename:foo=test",                          "poison.lib",                     0 },
 
-  // syntax error
-  t_invoke_linkerf("/subsystem:console /entry:entry /out:d.exe /alternatename:foo foo.obj entry.obj");
-  T_Ok(g_last_exit_code != 0);
-  
-  // syntax error
-  t_invoke_linkerf("/subsystem:console /entry:entry /out:e.exe /alternatename:foo-oof foo.obj entry.obj");
-  T_Ok(g_last_exit_code != 0);
+    // An ordinary weak alias is a valid target; its prevailing definition wins.
+    { "weak_local",          "/alternatename:foo=altsym",                        "weak_local.obj",                            1, ".target", 4 },
+    { "weak_before",         "/alternatename:foo=altsym",                        "weak.obj target.obj",                       1, ".target", 4 },
+    { "weak_after",          "/alternatename:foo=altsym",                        "target.obj weak.obj",                       1, ".target", 4 },
+    { "weak_chain_before",   "/alternatename:foo=altsym",                        "weak_chain.obj weak_middle.obj target.obj", 1, ".target", 4 },
+    { "weak_chain_after",    "/alternatename:foo=altsym",                        "target.obj weak_middle.obj weak_chain.obj", 1, ".target", 4 },
+    { "weak_override_first", "/alternatename:foo=altsym",                        "override.obj weak.obj target.obj",          1, ".chosen", 4 },
+    { "weak_override_last",  "/alternatename:foo=altsym",                        "weak.obj target.obj override.obj",          1, ".chosen", 4 },
+    { "weak_source",         "/alternatename:foo=missing",                       "source_weak.obj target.obj",                1, ".target", 4 },
+    { "weak_directive",      "",                                                 "weak_directive.obj weak.obj target.obj",    1, ".target", 4 },
+    { "weak_archive",        "/alternatename:foo=altsym /include:alias_anchor",  "weak.lib target.obj",                       1, ".target", 4 },
+    { "weak_target_archive", "/alternatename:foo=altsym",                        "weak.obj target.lib",                       1, ".target", 4 },
+    { "weak_nolib_target",   "/alternatename:foo=altsym",                        "weak_nolib.obj target.obj",                 1, ".target", 4 },
+    { "weak_lib_target",     "/alternatename:foo=altsym",                        "weak_lib.obj target.obj",                   1, ".target", 4 },
+    // LINK rejects a section-defined static weak default; RAD and LLD support it.
+    { "weak_static_target",  "/alternatename:foo=altsym",                        "weak_static.obj global_target.obj", t_id_linker() != Linker_msvc, ".target", 4 },
 
-  // syntax error
-  t_invoke_linkerf("/subsystem:console /entry:entry /out:a.exe /alternatename:foo=test=bar foo.obj entry.obj");
-  T_Ok(g_last_exit_code != 0);
+    // altsym is discovered only after both synthetic fallback pairs exist.
+    { "late_weak_archive",   "/alternatename:foo=altsym /alternatename:trigger=alias_anchor /include:trigger", "weak.lib target.obj", 1, ".target", 4 },
 
-  // syntax error
-  t_invoke_linkerf("/subsystem:console /entry:entry /out:a.exe /alternatename:foo= foo.obj entry.obj");
-  T_Ok(g_last_exit_code != 0);
+    // Unlike an ordinary alias, an anti-dependency cannot be chained through.
+    { "anti_before",         "/alternatename:foo=altsym",                        "anti.obj target.obj",                       0 },
+    { "anti_after",          "/alternatename:foo=altsym",                        "target.obj anti.obj",                       0 },
+    { "nested_anti",         "/alternatename:foo=altsym",                        "weak_chain.obj anti_middle.obj target.obj", 0 },
+    { "anti_override_first", "/alternatename:foo=altsym",                        "override.obj anti.obj target.obj",          1, ".chosen", 4 },
+    { "anti_override_last",  "/alternatename:foo=altsym",                        "anti.obj target.obj override.obj",          1, ".chosen", 4 },
 
-  // syntax error
-  t_invoke_linkerf("/subsystem:console /entry:entry /out:a.exe /alternatename:= foo.obj entry.obj");
-  T_Ok(g_last_exit_code != 0);
+    // Unreferenced intermediate command-line alternate names are not alias chains.
+    { "command_chain",       "/alternatename:foo=bar /alternatename:bar=test",   "target.obj",                    0 },
+    { "command_chain_order", "/alternatename:bar=test /alternatename:foo=bar",   "target.obj",                    0 },
+    { "missing_target",      "/alternatename:foo=missing",                       "target.obj",                    0 },
+    { "case_sensitive_from", "/alternatename:Foo=test",                          "target.obj",                    0 },
+    { "case_sensitive_to",   "/alternatename:foo=TEST",                          "target.obj",                    0 },
+    { "missing_weak_target", "/alternatename:foo=altsym",                        "missing.obj",                   0 },
+    { "undefined_self",      "/alternatename:foo=foo",                           "target.obj",                    0 },
+    { "command_cycle",       "/alternatename:foo=bar /alternatename:bar=foo",    "target.obj",                    0 },
+    { "weak_cycle",          "/alternatename:foo=altsym",                        "weak_chain.obj cycle_tail.obj", 0 },
 
-  // syntax error
-  t_invoke_linkerf("/subsystem:console /entry:entry /out:a.exe /alternatename: foo.obj entry.obj");
-  T_Ok(g_last_exit_code != 0);
+    // RAD and LLD reject conflicts even for defined sources; LINK keeps the first mapping.
+    { "conflict",            "/alternatename:foo=test /alternatename:foo=other", "target.obj",                            t_id_linker() == Linker_msvc, ".target",  4, LNK_Error_AlternateNameConflict },
+    { "defined_conflict",    "/alternatename:foo=test /alternatename:foo=other", "foo.obj",                               t_id_linker() == Linker_msvc, ".primary", 4, LNK_Error_AlternateNameConflict },
+    { "directive_conflict",  "/alternatename:foo=test",                          "conflict.obj target.obj",               t_id_linker() == Linker_msvc, ".target",  4, LNK_Error_AlternateNameConflict },
+    { "two_directives",      "",                                                 "directive.obj conflict.obj target.obj", t_id_linker() == Linker_msvc, ".target",  4, LNK_Error_AlternateNameConflict },
+    { "missing_equals",      "/alternatename:foo",                               "foo.obj",                        0, 0, 0, LNK_Error_Cmdl },
+    { "wrong_separator",     "/alternatename:foo-oof",                           "foo.obj",                        0, 0, 0, LNK_Error_Cmdl },
+    { "empty_target",        "/alternatename:foo=",                              "foo.obj",                        0, 0, 0, LNK_Error_Cmdl },
 
-  // TODO: check that RAD Linker prints these warnings
+    // LINK accepts an empty (unused) source; RAD and LLD diagnose it.
+    { "empty_source",        "/alternatename:=test",                             "foo.obj", t_id_linker() == Linker_msvc, ".primary", 4, LNK_Error_Cmdl },
+    { "empty_both",          "/alternatename:=",                                 "foo.obj",                        0, 0, 0, LNK_Error_Cmdl },
+    { "empty_option",        "/alternatename:",                                  "foo.obj",                        0, 0, 0, LNK_Error_Cmdl },
+    
+    // LLD and LINK accept the extra '=' with a defined source; RAD rejects it.
+    { "extra_equals",        "/alternatename:foo=test=bar",                       "foo.obj", t_id_linker() != Linker_radlink, ".primary", 4, LNK_Error_Cmdl },
+  };
 
-  // warn about alt name to self alt name?
-  t_invoke_linkerf("/subsystem:console /entry:entry /out:f.exe /alternatename:foo=foo foo.obj entry.obj");
-  T_Ok(g_last_exit_code == 0);
+  B32 all_ok          = 1;
+  U32 worker_counts[] = { 1, 4 };
+  U64 pass_count      = t_id_linker() == Linker_radlink ? ArrayCount(worker_counts) : 1;
+  for EachIndex(pass_idx, pass_count) {
+    for EachElement(case_idx, cases) {
+      String8  out_name = str8f(arena, "alt_%s_%u.exe", cases[case_idx].name, worker_counts[pass_idx]);
+      String8  workers  = t_id_linker() == Linker_radlink ? str8f(arena, "/rad_workers:%u", worker_counts[pass_idx]) : str8_zero();
+      char    *ref_obj  = cases[case_idx].success && !cases[case_idx].section ? "ref_absolute.obj" : "ref.obj";
+      String8  cmdline  = str8f(arena, "/subsystem:console /entry:entry /nodefaultlib /opt:noref,noicf /out:%S %S %s entry.obj %s %s",
+                             out_name, workers, cases[case_idx].options, ref_obj, cases[case_idx].inputs);
+      test_outf("alt_name %s (workers %u): %S\n", cases[case_idx].name, worker_counts[pass_idx], cmdline);
 
-  // warn about alt name to unknown symbol?
-  t_invoke_linkerf("/subsystem:console /entry:entry /out:g.exe /alternatename:qwe=ewq foo.obj entry.obj");
-  T_Ok(g_last_exit_code == 0);
+      // Bound cycles require a normal exit: a crash/timeout is not an expected failure.
+      B32 invoked     = t_invoke(t_linker_path(), cmdline, 10 * 1000 * 1000);
+      B32 normal_exit = invoked && g_last_exit_code < 0x80000000 && g_last_exit_code != 999;
+      B32 case_ok     = normal_exit && ((g_last_exit_code == 0) == cases[case_idx].success);
+      if (case_ok && !cases[case_idx].success && t_id_linker() == Linker_radlink) {
+        LNK_ErrorCode expected_error = cases[case_idx].error ? cases[case_idx].error : LNK_Error_UnresolvedSymbol;
+        case_ok = g_last_exit_code == expected_error;
+        if (!case_ok) { test_outf("  expected error code %u\n", expected_error); }
+      }
+
+      if (normal_exit && g_last_exit_code == 0 && cases[case_idx].success) {
+        String8             image        = t_read_file(arena, out_name);
+        PE_BinInfo          pe           = pe_bin_info_from_data(arena, image);
+        COFF_SectionHeader *sections     = (COFF_SectionHeader *)str8_substr(image, pe.section_table_range).str;
+        String8             strings      = str8_substr(image, pe.string_table_range);
+        COFF_SectionHeader *probe        = coff_section_header_from_name(strings, sections, pe.section_count, str8_lit(".probe"));
+        U64                 expected_rva = cases[case_idx].offset;
+
+        case_ok = pe.arch == Arch_x64 && probe && probe->vsize == sizeof(U32);
+        if (cases[case_idx].section) {
+          COFF_SectionHeader *dest = coff_section_header_from_name(strings, sections, pe.section_count, str8_cstring(cases[case_idx].section));
+          case_ok &= dest != 0 && dest->vsize >= cases[case_idx].offset + sizeof(U32);
+          if (dest) { expected_rva += dest->voff; }
+        }
+
+        if (case_ok) {
+          String8 data = str8_substr(image, rng_1u64(probe->foff, (U64)probe->foff + sizeof(U32)));
+          case_ok = data.size == sizeof(U32) && memory_read32(data.str) == expected_rva;
+          if (!case_ok) { test_outf("  incorrect relocated RVA; expected %#llx\n", expected_rva); }
+        }
+      }
+
+      test_outf("  %s: normal exit %u, exit code %llu, expected %s\n", case_ok ? "PASS" : "FAIL", normal_exit, g_last_exit_code, cases[case_idx].success ? "success with correct RVA" : "failure");
+      T_Ok(case_ok);
+    }
+  }
+
+  T_Ok(all_ok);
 }
 
 TEST(include)
