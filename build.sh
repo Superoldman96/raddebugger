@@ -49,8 +49,9 @@ if   [[ "${release:-0}" == "1" ]]; then echo "[release mode]"; compile="$compile
 elif [[ "${debug:-1}"   == "1" ]]; then echo "[debug mode]";   compile="$compiler $cc_debug";
 fi
 
+oodle_flags=()
 compile() {
-  $compile -Wl,--start-group "$@" blake3.a -latomic -Wl,--end-group
+  $compile "${oodle_flags[@]}" -Wl,--start-group "$@" blake3.a -latomic -Wl,--end-group
 }
 
 # --- Prep Directories --------------------------------------------------------
@@ -75,6 +76,43 @@ then
   $compiler -c -g -o build/blake3_avx2_x86-64_unix.o   src/third_party/blake3/blake3_avx2_x86-64_unix.S
   $compiler -c -g -o build/blake3_avx512_x86-64_unix.o src/third_party/blake3/blake3_avx512_x86-64_unix.S
   $ar rs build/blake3.a build/blake3_*_unix.o
+fi
+
+# --- Set up Oodle SDK -------------------------------------------------------
+if [[ "${oodle:-0}" == "1" ]]; then
+  oodle_sdk_path="${OODLE_SDK_DIR:-}"
+  if [[ -z "$oodle_sdk_path" ]]; then
+    for sdk in "$PWD"/local/oodle2*; do
+      if [[ -f "$sdk/linux/include/oodle2.h" ]]; then
+        if [[ -n "$oodle_sdk_path" ]]; then
+          echo "Multiple Oodle SDKs found: $oodle_sdk_path and $sdk/linux" >&2
+          echo "Set OODLE_SDK_DIR to select the SDK root." >&2
+          exit 1
+        fi
+        oodle_sdk_path="$sdk/linux"
+      fi
+    done
+  fi
+  if [[ -z "$oodle_sdk_path" ]]; then
+    echo "Oodle SDK not found. Put an oodle2* SDK with a linux subdirectory in $PWD/local or set OODLE_SDK_DIR." >&2
+    exit 1
+  fi
+  if [[ -f "$oodle_sdk_path/linux/include/oodle2.h" ]]; then
+    oodle_sdk_path="$oodle_sdk_path/linux"
+  fi
+  if [[ ! -f "$oodle_sdk_path/include/oodle2.h" ]]; then
+    echo "Oodle SDK directory '$oodle_sdk_path' must contain include/oodle2.h" >&2
+    exit 1
+  fi
+  oodle_sdk_path="$(cd "$oodle_sdk_path" && pwd)"
+  echo "[Oodle SDK: $oodle_sdk_path]"
+  # Keep the include path as one argument, including when it contains spaces.
+  oodle_flags=(-DOODLE_SDK=1 "-I$oodle_sdk_path/include")
+  for library in "$oodle_sdk_path"/lib/liboo2corelinux64.so "$oodle_sdk_path"/lib/liboo2corelinux64.so.*; do
+    if [[ -f "$library" ]]; then
+      cp -- "$library" "$PWD/build/"
+    fi
+  done
 fi
 
 # --- Build Everything (@build_targets) ---------------------------------------
