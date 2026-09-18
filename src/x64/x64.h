@@ -210,6 +210,52 @@ typedef enum X64_DebugControlFlags
 X64_DebugControlFlags;
 
 ////////////////////////////////
+//~ Exception Codes
+
+typedef enum
+{
+  X64_Exception_DE     = 0,  // Divide error: division by zero or quotient overflow
+  X64_Exception_DB     = 1,  // Debug exception (single stepping, hardware breakpoint)
+  X64_Exception_NMI    = 2,  // Non-maskable interrupt
+  X64_Exception_BP     = 3,  // Breakpoint (int3)
+  X64_Exception_OF     = 4,  // Overflow
+  X64_Exception_BR     = 5,  // Bound range exceeded
+  X64_Exception_UD     = 6,  // Invalid opcode
+  X64_Exception_NM     = 7,  // Device not available
+  X64_Exception_DF     = 8,  // Double fault
+  X64_Exception_9      = 9,  // Coprocessor segment overrun (obsolete)
+  X64_Exception_TS     = 10, // Invalid task-state segment
+  X64_Exception_NP     = 11, // Segment not present
+  X64_Exception_SS     = 12, // Stack-segment fault
+  X64_Exception_GP     = 13, // General-protection fault
+  X64_Exception_PF     = 14, // Page fault
+  X64_Exception_15     = 15, // Reserved; Linux names it X86_TRAP_SPURIOUS
+  X64_Exception_MF     = 16, // x87 floating-point exception
+  X64_Exception_AC     = 17, // Alignment check
+  X64_Exception_MC     = 18, // Machine check
+  X64_Exception_XF     = 19, // SIMD floating-point exception
+  X64_Exception_VE     = 20, // Virtualization exception
+  X64_Exception_CP     = 21, // Control-protection exception
+  X64_Exception_Amd_HV = 28, // Hypervisor injection exception
+  X64_Exception_Amd_VC = 29, // VMM communication exception
+  X64_Exception_Amd_SX = 30, // Security exception
+} X64_ExceptionCode;
+
+////////////////////////////////
+//~ Page Fault Flags
+
+typedef enum
+{
+  X64_PageFaultError_Protection       = (1u << 0),
+  X64_PageFaultError_Write            = (1u << 1),
+  X64_PageFaultError_User             = (1u << 2),
+  X64_PageFaultError_ReservedBit      = (1u << 3),
+  X64_PageFaultError_InstructionFetch = (1u << 4),
+  X64_PageFaultError_ProtectionKey    = (1u << 5),
+  X64_PageFaultError_ShadowStack      = (1u << 6),
+} X64_PageFaultError;
+
+////////////////////////////////
 //~ rjf: Generated
 
 #include "x64/generated/x64.meta.h"

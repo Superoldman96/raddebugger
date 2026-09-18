@@ -89,9 +89,12 @@ internal B32            file_set_times(File file, DateTime time);
 internal FileProperties properties_from_file(File file);
 internal FileID         id_from_file(File file);
 internal B32            file_reserve_size(File file, U64 size);
+internal B32            file_set_size(File file, U64 size);
+internal B32            file_flush(File file);
 internal B32            delete_file_at_path(String8 path);
 internal B32            copy_file_path(String8 dst, String8 src);
 internal B32            move_file_path(String8 dst, String8 src);
+internal B32            replace_file_path(String8 dst, String8 src);
 internal String8        full_path_from_path(Arena *arena, String8 path);
 internal B32            file_path_exists(String8 path);
 internal B32            folder_path_exists(String8 path);
@@ -101,6 +104,7 @@ internal FileProperties properties_from_file_path(String8 path);
 internal FileMap file_map_open(AccessFlags flags, File file);
 internal void    file_map_close(FileMap map);
 internal void *  file_map_view_open(FileMap map, AccessFlags flags, Rng1U64 range);
+internal void *  file_map_view_replace_placeholder(FileMap map, void *ptr, Rng1U64 range);
 internal void    file_map_view_close(FileMap map, void *ptr, Rng1U64 range);
 
 //- rjf: directory iteration

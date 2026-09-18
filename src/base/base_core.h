@@ -695,6 +695,7 @@ enum
   AccessFlag_ShareRead   = (1<<4),
   AccessFlag_ShareWrite  = (1<<5),
   AccessFlag_Inherited   = (1<<6),
+  AccessFlag_CreateNew   = (1<<7), // fail if file already exists; never truncates
 };
 
 ////////////////////////////////

@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <features.h>
 #include <linux/limits.h>
+#include <linux/futex.h>
 #include <poll.h>
 #include <pthread.h>
 #include <semaphore.h>
@@ -32,6 +33,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include <ucontext.h>
 
 pid_t gettid(void);
 int pthread_setname_np(pthread_t thread, const char *name);
@@ -43,14 +45,14 @@ typedef struct timespec timespec;
 ////////////////////////////////
 //~ rjf: Linux Call Interruption Retry Helper
 
-#define LNX_RETRY_ON_EINTR(expr)          \
-(__extension__({                           \
-__typeof__(expr) __ret;                    \
-do {                                       \
-__ret = (expr);                            \
-} while ((__ret == -1) && errno == EINTR); \
-__ret;                                     \
-}))
+#define LNX_RETRY_ON_EINTR(expr)             \
+  (__extension__({                           \
+  __typeof__(expr) __ret;                    \
+  do {                                       \
+    __ret = (expr);                          \
+  } while ((__ret == -1) && errno == EINTR); \
+  __ret;                                     \
+  }))
 
 
 ////////////////////////////////
@@ -114,6 +116,30 @@ struct LNX_Entity
 };
 
 ////////////////////////////////
+//~ On Demand Memory
+
+#define LNX_MEMORY_FAULT_WORKER_LIMIT 32
+
+typedef struct
+{
+  void *address;
+  U32 result;
+} LNX_MemoryFaultRequest;
+
+typedef struct
+{
+  MemoryReadFaultFunction *fault;
+  void *user_data;
+  Thread workers[LNX_MEMORY_FAULT_WORKER_LIMIT];
+  U32 worker_count;
+  U32 stops_sent;
+  U32 workers_joined;
+  int requests[2];
+  U32 active;
+  pid_t owner_pid;
+} LNX_DemandMemory;
+
+////////////////////////////////
 //~ rjf: State
 
 typedef struct LNX_State LNX_State;
@@ -127,6 +153,7 @@ struct LNX_State
   LNX_Entity *entity_free;
   U64 default_env_count;
   char **default_env;
+  LNX_DemandMemory demand_memory;
 };
 
 ////////////////////////////////
@@ -134,6 +161,7 @@ struct LNX_State
 
 global LNX_State lnx_state = {0};
 thread_static LNX_SafeCallChain *lnx_safe_call_chain = 0;
+thread_static B32 lnx_in_memory_fault_callback;
 
 ////////////////////////////////
 //~ rjf: Helpers
@@ -143,7 +171,8 @@ internal tm lnx_tm_from_date_time(DateTime dt);
 internal timespec lnx_timespec_from_date_time(DateTime dt);
 internal DenseTime lnx_dense_time_from_timespec(timespec in);
 internal FileProperties lnx_file_properties_from_stat(struct stat *s);
-internal void lnx_safe_call_sig_handler(int x);
+internal B32 lnx_dispatch_memory_read_fault(int sig, siginfo_t *info, void *context);
+internal void lnx_safe_call_sig_handler(int sig, siginfo_t *info, void *context);
 
 ////////////////////////////////
 //~ rjf: Entities

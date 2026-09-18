@@ -13,7 +13,6 @@
 // --- Code Base ---------------------------------------------------------------
 
 #include "base/base_inc.h"
-#include "x64/x64.h"
 #include "hash_table.h"
 #include "coff/coff.h"
 #include "coff/coff_parse.h"
@@ -35,7 +34,6 @@
 #include "dwarf/x64/dwarf_x64.h"
 
 #include "base/base_inc.c"
-#include "x64/x64.c"
 #include "hash_table.c"
 #include "coff/coff.c"
 #include "coff/coff_parse.c"
