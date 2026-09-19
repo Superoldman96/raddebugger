@@ -46,7 +46,7 @@ bit_array_get_bit32(U32Array bit_array, U64 idx)
 }
 
 internal B32
-bit_array_is_bit_set(U32Array bit_arr, U64 bit_pos)
+bit_array_is_set32(U32Array bit_arr, U64 bit_pos)
 {
   U64 word_idx = bit_pos / 32;
   Assert(word_idx < bit_arr.count);

@@ -98,8 +98,8 @@ pdb_hash_table_from_data(PDB_HashTable *ht,
       // unpack buckets
       U64 read_count = 0;
       for (U64 bucket_idx = 0; bucket_idx < max; bucket_idx += 1) {
-        if (bit_array_is_bit_set(present_bits_new, bucket_idx)) {
-          if (bit_array_is_bit_set(deleted_bits_new, bucket_idx)) {
+        if (bit_array_is_set32(present_bits_new, bucket_idx)) {
+          if (bit_array_is_set32(deleted_bits_new, bucket_idx)) {
             error = PDB_HashTableParseError_CORRUPTED;
             break;
           }
@@ -198,7 +198,7 @@ pdb_hash_table_grow(PDB_HashTable *ht, U64 new_capacity)
   PDB_HashTable new_ht;
   pdb_hash_table_alloc(&new_ht, new_capacity);
   for (U32 i = 0; i < ht->max; ++i) {
-    if (bit_array_is_bit_set(ht->present_bits, i)) {
+    if (bit_array_is_set32(ht->present_bits, i)) {
       PDB_HashTableBucket *bucket = &ht->bucket_arr[i];
       PDB_HashTableBucket *is_set = pdb_hash_table_try_set(&new_ht, bucket->key, bucket->value);
       is_set->insert_idx = bucket->insert_idx;
@@ -316,14 +316,14 @@ internal B32
 pdb_hash_table_is_present(PDB_HashTable *ht, U32 k)
 {
   Assert(k < ht->max);
-  return bit_array_is_bit_set(ht->present_bits, k);
+  return bit_array_is_set32(ht->present_bits, k);
 }
 
 internal B32
 pdb_hash_table_is_deleted(PDB_HashTable *ht, U32 k)
 {
   Assert(k < ht->max);
-  return bit_array_is_bit_set(ht->deleted_bits, k);
+  return bit_array_is_set32(ht->deleted_bits, k);
 }
 
 internal PDB_HashTableBucket **
@@ -332,7 +332,7 @@ pdb_hash_table_get_present_buckets(Arena *arena, PDB_HashTable *ht)
   U64 result_count = 0;
   PDB_HashTableBucket **result = push_array(arena, PDB_HashTableBucket *, ht->count);
   for EachIndex(bucket_idx, ht->max) {
-    if (bit_array_is_bit_set(ht->present_bits, bucket_idx)) {
+    if (bit_array_is_set32(ht->present_bits, bucket_idx)) {
       PDB_HashTableBucket *bucket = &ht->bucket_arr[bucket_idx];
       Assert(result_count < ht->count);
       result[result_count++] = bucket;
@@ -347,7 +347,7 @@ pdb_hash_table_get_present_keys_and_values(Arena *arena, PDB_HashTable *ht, Stri
   *keys_out   = str8_array_reserve(arena, ht->count);
   *values_out = str8_array_reserve(arena, ht->count);
   for (U64 bucket_idx = 0; bucket_idx < ht->max; bucket_idx += 1) {
-    if (bit_array_is_bit_set(ht->present_bits, bucket_idx)) {
+    if (bit_array_is_set32(ht->present_bits, bucket_idx)) {
       PDB_HashTableBucket *bucket = &ht->bucket_arr[bucket_idx];
       Assert(keys_out->count < ht->count);
       keys_out->v[keys_out->count++] = bucket->key;
