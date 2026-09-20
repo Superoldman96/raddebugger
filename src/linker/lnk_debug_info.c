@@ -2697,17 +2697,18 @@ THREAD_POOL_TASK_FUNC(lnk_write_pdb_modules)
     if (mod->sn == MSF_INVALID_STREAM_NUMBER) { continue; }
 
     CV_DebugS      debug_s  = task->cv->debug_s_arr[obj_idx];
-    String8List    mod_data = msf_data_from_sn(temp.arena, task->pdb->msf, mod->sn);
+    String8        mod_data = msf_stream_data(task->pdb->msf, mod->sn);
 
-    if (mod_data.node_count) {
-      String8Node buf = *mod_data.first;
+    if (mod_data.size) {
+      String8Node buf = { .string = mod_data };
       U64         pos = 0;
       lnk_write_debug_s_to_pdb_module(mod, debug_s, &buf, &pos);
 
-      // sub range symbol data pages and patch symbol tree offsets
+      // Patch the contiguous symbol buffer before handing it to output.
       if (mod->sym_data_size) {
         Rng1U64     sym_data_range = r1u64(sizeof(CV_Signature), mod->sym_data_size);
-        String8List mod_symbols    = str8_list_substr(temp.arena, mod_data, sym_data_range);
+        String8List mod_symbols    = {0};
+        str8_list_push(temp.arena, &mod_symbols, str8_substr(mod_data, sym_data_range));
         Assert(mod_symbols.total_size == dim_1u64(sym_data_range));
         cv_patch_symbol_tree_offsets(mod_symbols, sizeof(CV_Signature), PDB_SYMBOL_ALIGN);
       }
@@ -2754,50 +2755,38 @@ THREAD_POOL_TASK_FUNC(lnk_write_pdb_modules)
 
       if (mod->sn == MSF_INVALID_STREAM_NUMBER) { continue; }
 
-      String8List mod_data       = msf_data_from_sn(temp.arena, task->pdb->msf, mod->sn);
+      String8     mod_data       = msf_stream_data(task->pdb->msf, mod->sn);
       Rng1U64     c13_data_range = r1u64(mod->sym_data_size + mod->c11_data_size, mod->sym_data_size + mod->c11_data_size + mod->c13_data_size);
-      String8List c13_data       = str8_list_substr(temp.arena, mod_data, c13_data_range);
+      String8     c13_data       = str8_substr(mod_data, c13_data_range);
 
       CV_DebugS debug_s      = task->cv->debug_s_arr[obj_idx];
       String8   string_table = cv_string_table_from_debug_s(debug_s);
 
       // checksum is always at the head of C13 data
-      String8List file_chksms_raw = {0};
+      String8 file_chksms_raw = {0};
       {
-        String8Node buf     = *c13_data.first;
-        U64         buf_pos = 0;
-
         CV_C13SubSectionHeader header = {0};
-        str8_buffer_read(&buf, &buf_pos, sizeof(header), &header);
+        str8_deserial_read_struct(c13_data, 0, &header);
 
         if (header.kind == CV_C13SubSectionKind_FileChksms) {
           Rng1U64 file_chksms_range = r1u64(sizeof(CV_C13SubSectionHeader), sizeof(CV_C13SubSectionHeader) + header.size);
-          file_chksms_raw = str8_list_substr(temp.arena, c13_data, file_chksms_range);
+          file_chksms_raw = str8_substr(c13_data, file_chksms_range);
         }
       }
 
       // fixup file name offsets in checksum headers
-      if (file_chksms_raw.total_size) {
-        String8Node buf     = *file_chksms_raw.first;
-        U64         buf_pos = 0;
+      if (file_chksms_raw.size) {
         U64         cursor  = 0;
         for (;;) {
           CV_C13Checksum header = {0};
-          if (str8_buffer_peek(&buf, &buf_pos, sizeof(header), &header) != sizeof(header)) { break; }
+          if (str8_deserial_read_struct(file_chksms_raw, cursor, &header) != sizeof(header)) { break; }
 
           String8          name     = str8_cstring_capped(string_table.str + header.name_off, string_table.str + string_table.size);
           CV_StringBucket *bucket   = cv_string_hash_table_lookup(task->string_ht, name);
           U64              name_off = task->string_table_base_offset + bucket->u.offset;
 
-          // update name offset
-          {
-            String8Node buf_copy     = buf;
-            U64         buf_pos_copy = buf_pos;
-            str8_buffer_skip(&buf_copy, &buf_pos_copy, OffsetOf(CV_C13Checksum, name_off));
-            str8_buffer_write_u32(&buf_copy, &buf_pos_copy, safe_cast_u32(name_off));
-          }
-
-          str8_buffer_skip(&buf, &buf_pos, AlignPow2(sizeof(header) + header.len, CV_FileCheckSumsAlign));
+          memory_write32(file_chksms_raw.str + cursor + OffsetOf(CV_C13Checksum, name_off), safe_cast_u32(name_off));
+          cursor += AlignPow2(sizeof(header) + header.len, CV_FileCheckSumsAlign);
         }
       }
 
@@ -2889,29 +2878,6 @@ typedef struct
   U64                       sealed_stream_cap;
 } LNK_PdbOutput;
 
-typedef struct LNK_MsfPageCursor
-{
-  MSF_PageDataNode *node;
-  U64               node_idx;
-  U64               pages_per_node;
-} LNK_MsfPageCursor;
-
-internal U8 *
-lnk_msf_data_from_pn(LNK_MsfPageCursor *cursor, MSF_Context *msf, MSF_PageNumber pn)
-{
-  U64 node_idx = pn / cursor->pages_per_node;
-  if (node_idx < cursor->node_idx) {
-    cursor->node     = msf->page_data_list.first;
-    cursor->node_idx = 0;
-  }
-  while (cursor->node_idx < node_idx) {
-    cursor->node = cursor->node->next;
-    cursor->node_idx += 1;
-  }
-  Assert(cursor->node != 0);
-  return cursor->node->data + (pn % cursor->pages_per_node) * msf->page_size;
-}
-
 internal void
 lnk_pdb_output_enqueue_stream(LNK_PdbOutput *output, MSF_Context *msf, MSF_StreamNumber sn)
 {
@@ -2923,16 +2889,14 @@ lnk_pdb_output_enqueue_stream(LNK_PdbOutput *output, MSF_Context *msf, MSF_Strea
   Assert(stream != 0);
   if (stream->page_list.count == 0) { return; }
 
-  LNK_MsfPageCursor cursor = {
-    .node           = msf->page_data_list.first,
-    .pages_per_node = msf_get_data_node_size(msf->page_size) / msf->page_size,
-  };
+  U64 stream_offset = 0;
   MSF_PageNumber run_first_pn = 0;
   MSF_PageNumber run_last_pn  = 0;
   U8            *run_data     = 0;
   U64            run_size     = 0;
   for EachNode(page, MSF_PageNode, stream->page_list.first) {
-    U8 *page_data = lnk_msf_data_from_pn(&cursor, msf, page->pn);
+    U8 *page_data = stream->data + stream_offset;
+    stream_offset += msf->page_size;
     if (run_data != 0 && page->pn == run_last_pn + 1 && page_data == run_data + run_size) {
       run_last_pn = page->pn;
       run_size += msf->page_size;
@@ -2973,15 +2937,11 @@ lnk_pdb_output_enqueue_remaining(LNK_PdbOutput *output, MSF_Context *msf)
     }
   }
 
-  LNK_MsfPageCursor cursor = {
-    .node           = msf->page_data_list.first,
-    .pages_per_node = msf_get_data_node_size(msf->page_size) / msf->page_size,
-  };
   U64 run_first_pn = 0;
   U8 *run_data = 0;
   U64 run_size = 0;
   for EachIndex(pn, page_count) {
-    U8 *page_data = lnk_msf_data_from_pn(&cursor, msf, pn);
+    U8 *page_data = msf_data_from_pn(msf, pn).str;
     U64 page_size = Min(msf->page_size, save_size - pn * msf->page_size);
     if (!is_written[pn]) {
       if (run_data != 0 && page_data == run_data + run_size) {
@@ -3183,7 +3143,7 @@ lnk_build_pdb(TP_Context *tp, TP_Arena *tp_arena, String8 image_data, LNK_Config
   pdb_build_dbi_info(tp, task.pdb, task.string_ht, 0, cv->is_stripped, &build_hooks);
 
   MSF_Error msf_err = msf_build(task.pdb->msf);
-  if (msf_err != MSF_Error_OK) {
+  if (msf_err != MSF_Error_Ok) {
     lnk_error(LNK_Error_UnableToSerializeMsf, "unable to serialize MSF: %s", msf_error_to_string(msf_err));
   }
 
