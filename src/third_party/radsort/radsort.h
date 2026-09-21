@@ -137,7 +137,7 @@ radsortmovesize( sizeof( (start)[0] ) ), \
 //===================================================================================================
 // small heap sort - this sort is around 200 bytes compiled - can use directly when size is important
 
-static RSFORCEINLINE void radheapsortinteral( void * start, size_t len, size_t element_size, is_before_func * is_before, swap_func * swapper )
+internal RSFORCEINLINE void radheapsortinteral( void * start, size_t len, size_t element_size, is_before_func * is_before, swap_func * swapper )
 {
   void * left;
   void * right;

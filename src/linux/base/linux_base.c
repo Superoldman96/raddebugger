@@ -285,7 +285,7 @@ shared_memory_alloc(U64 size, String8 name)
   SharedMemory result = { max_U64 };
   
   if(size == 0 || size > max_S64) { return result; }
-  
+
   int id;
   if(name.size == 0)
   {
@@ -304,7 +304,7 @@ shared_memory_alloc(U64 size, String8 name)
     if(ftruncate(id, size) == 0) { result.u64[0] = (U64)id; }
     else                         { close(id); }
   }
-  
+
   return result;
 }
 
@@ -1107,15 +1107,15 @@ lnx_memory_fault_thread(void *unused)
   {
     LNX_MemoryFaultRequest *request = 0;
     ssize_t count = LNX_RETRY_ON_EINTR(read(lnx_state.demand_memory.requests[0], &request, sizeof(request)));
-    
+
     if(count == 0)               { break;    }
     if(count != sizeof(request)) { _exit(1); }
     if(request == 0)             { break;    }
-    
+
     lnx_in_memory_fault_callback = 1;
     B32 handled = lnx_state.demand_memory.fault(request->address, lnx_state.demand_memory.user_data);
     lnx_in_memory_fault_callback = 0;
-    
+
     U32 *completion = &request->result;
     ins_atomic_u32_eval_assign(completion, handled ? 2 : 1);
     syscall(SYS_futex, completion, FUTEX_WAKE_PRIVATE, 1, 0, 0, 0);
@@ -1148,25 +1148,25 @@ internal B32
 lnx_dispatch_memory_read_fault(int sig, siginfo_t *info, void *context)
 {
   LNX_DemandMemory *memory = &lnx_state.demand_memory;
-  
+
 #if ARCH_X64 || ARCH_X86
   if(sig != SIGSEGV || info == 0 || context == 0                   ||
-     (info->si_code != SEGV_ACCERR && info->si_code != SEGV_MAPERR) ||
-     lnx_in_memory_fault_callback                                   ||
-     ins_atomic_u32_eval(&memory->active) == 0)
+    (info->si_code != SEGV_ACCERR && info->si_code != SEGV_MAPERR) ||
+    lnx_in_memory_fault_callback                                   ||
+    ins_atomic_u32_eval(&memory->active) == 0)
   {
     return 0;
   }
-  
+
   ucontext_t *state = context;
-  if((state->uc_mcontext.gregs[REG_TRAPNO] != X64_ExceptionCode_PF) ||
+  if((state->uc_mcontext.gregs[REG_TRAPNO] != X64_Exception_PF) ||
      (state->uc_mcontext.gregs[REG_ERR] & X64_PageFaultError_Write) ||
      (state->uc_mcontext.gregs[REG_ERR] & X64_PageFaultError_InstructionFetch) ||
      memory->owner_pid != getpid())
   {
     return 0;
   }
-  
+
   int                     saved_errno = errno;
   LNX_MemoryFaultRequest  request     = { .address = info->si_addr };
   LNX_MemoryFaultRequest *ptr         = &request;
@@ -1176,7 +1176,7 @@ lnx_dispatch_memory_read_fault(int sig, siginfo_t *info, void *context)
     errno = saved_errno;
     return 0;
   }
-  
+
   // wait for the page fault handler to complete
   while(!ins_atomic_u32_eval(&request.result))
   {
@@ -1185,10 +1185,10 @@ lnx_dispatch_memory_read_fault(int sig, siginfo_t *info, void *context)
       _exit(1);
     }
   }
-  
+
   B32 handled = request.result == 2;
   errno = saved_errno;
-  
+
   return handled;
 #else
   NotImplemented;
@@ -1210,7 +1210,7 @@ memory_read_fault_handler_set(MemoryReadFaultFunction *func, void *user_data)
     {
       return 0;
     }
-    
+
     memory->fault     = func;
     memory->user_data = user_data;
     memory->owner_pid = getpid();
@@ -1229,7 +1229,7 @@ memory_read_fault_handler_set(MemoryReadFaultFunction *func, void *user_data)
       }
       memory->workers[memory->worker_count++] = worker;
     }
-    
+
     ins_atomic_u32_eval_assign(&memory->active, 1);
   }
   else if(memory->worker_count)
@@ -1238,7 +1238,7 @@ memory_read_fault_handler_set(MemoryReadFaultFunction *func, void *user_data)
     {
       return 0;
     }
-    
+
     ins_atomic_u32_eval_assign(&memory->active, 0);
     return lnx_memory_fault_workers_stop(memory);
   }
@@ -1605,7 +1605,7 @@ process_launch(ProcessLaunchParams *params)
         posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
         posix_spawnattr_setpgroup(&attr, 0);
       }
-      
+
       // package argv
       char **argv = push_array(scratch.arena, char *, params->cmd_line.node_count + 1);
       {
@@ -1822,7 +1822,7 @@ lnx_signal_handler(int sig, siginfo_t *info, void *arg)
 {
   // page fault handler
   if(lnx_dispatch_memory_read_fault(sig, info, arg)) { return; }
-  
+
   // crash handler
   {
     local_persist volatile U32 first = 0;
@@ -1833,10 +1833,10 @@ lnx_signal_handler(int sig, siginfo_t *info, void *arg)
         sleep(UINT32_MAX);
       }
     }
-    
+
     local_persist void *ips[4096];
     int ips_count = backtrace(ips, ArrayCount(ips));
-    
+
     fprintf(stderr, "A fatal signal was received: %s (%d). The process is terminating.\n", strsignal(sig), sig);
     fprintf(stderr, "Create a new issue with this report at %s.\n\n", BUILD_ISSUES_LINK_STRING_LITERAL);
     fprintf(stderr, "Callstack:\n");
@@ -1844,7 +1844,7 @@ lnx_signal_handler(int sig, siginfo_t *info, void *arg)
     {
       Dl_info info = {0};
       dladdr(ips[i], &info);
-      
+
       char cmd[2048];
       snprintf(cmd, sizeof(cmd), "llvm-symbolizer --relative-address -f -e %s %lu", info.dli_fname, (unsigned long)ips[i] - (unsigned long)info.dli_fbase);
       FILE *f = popen(cmd, "r");
@@ -1858,12 +1858,12 @@ lnx_signal_handler(int sig, siginfo_t *info, void *arg)
           String8 module = str8_skip_last_slash(str8_cstring(info.dli_fname));
           String8 file   = str8_skip_last_slash(str8_cstring_capped(file_name, file_name + sizeof(file_name)));
           if(file.size > 0) file.size -= 1;
-          
+
           B32 no_func = str8_match(func, str8_lit("??"), StringMatchFlag_RightSideSloppy);
           B32 no_file = str8_match(file, str8_lit("??"), StringMatchFlag_RightSideSloppy);
           if(no_func) { func = str8_zero(); }
           if(no_file) { file = str8_zero(); }
-          
+
           fprintf(stderr, "%ld. [0x%016lx] %.*s%s%.*s %.*s\n", i+1, (unsigned long)ips[i], (int)module.size, module.str, (!no_func || !no_file) ? ", " : "", (int)func.size, func.str, (int)file.size, file.str);
         }
         pclose(f);
@@ -1874,7 +1874,7 @@ lnx_signal_handler(int sig, siginfo_t *info, void *arg)
       }
     }
     fprintf(stderr, "\nVersion: %s%s\n\n", BUILD_VERSION_STRING_LITERAL, BUILD_GIT_HASH_STRING_LITERAL_APPEND);
-    
+
     _exit(1);
   }
 }
@@ -1902,7 +1902,7 @@ main(int argc, char **argv)
       U64 pages       = (U64)sysconf(_SC_PHYS_PAGES);
       U64 page_size   = (U64)sysconf(_SC_PAGESIZE);
       U64 commit_size = (U64)sysconf(_SC_AVPHYS_PAGES);
-      
+
       SystemInfo *info = &lnx_state.system_info;
       info->logical_processor_count = (U32)get_nprocs();
       info->page_size               = (U64)getpagesize();
