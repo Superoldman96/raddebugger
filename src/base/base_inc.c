@@ -30,9 +30,6 @@
 #include "base_test.c"
 #include "base_entry_point.c"
 
-// TODO: move x64 to base layer
-#include "x64/x64.c"
-
 #if OS_WINDOWS
 # include "win32/base/win32_base.c"
 #elif OS_LINUX

@@ -32,7 +32,6 @@
 #include "base_test.h"
 #include "base_entry_point.h"
 
-#include "x64/x64.h"
 #if OS_WINDOWS
 # include "win32/base/win32_base.h"
 #elif OS_LINUX

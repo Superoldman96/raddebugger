@@ -20,6 +20,7 @@
 ////////////////////////////////
 
 #include "base/base_inc.h"
+#include "x64/x64.h"
 #include "linker/hash_table.h"
 #include "linker/lf_hash_table.h"
 #include "linker/base_ext/base_bit_array.h"
@@ -103,6 +104,7 @@
 #include "torture.h"
 
 #include "base/base_inc.c"
+#include "x64/x64.c"
 #include "linker/hash_table.c"
 #include "linker/lf_hash_table.c"
 #include "linker/base_ext/base_bit_array.c"

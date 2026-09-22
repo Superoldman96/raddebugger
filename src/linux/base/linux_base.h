@@ -35,6 +35,13 @@
 #include <unistd.h>
 #include <ucontext.h>
 
+// NOTE(rjf): this is required because we need to use architecture-specific code for "base"
+// OS functionality - we may want to reevaluate if such things should be in base - but for
+// now just pulling in the whole x64 layer, just for linux.
+#if ARCH_X64 || ARCH_X86
+# include "x64/x64.h"
+#endif
+
 pid_t gettid(void);
 int pthread_setname_np(pthread_t thread, const char *name);
 int pthread_getname_np(pthread_t thread, char *name, size_t size);
@@ -46,13 +53,13 @@ typedef struct timespec timespec;
 //~ rjf: Linux Call Interruption Retry Helper
 
 #define LNX_RETRY_ON_EINTR(expr)             \
-  (__extension__({                           \
-  __typeof__(expr) __ret;                    \
-  do {                                       \
-    __ret = (expr);                          \
-  } while ((__ret == -1) && errno == EINTR); \
-  __ret;                                     \
-  }))
+(__extension__({                           \
+__typeof__(expr) __ret;                    \
+do {                                       \
+__ret = (expr);                          \
+} while ((__ret == -1) && errno == EINTR); \
+__ret;                                     \
+}))
 
 
 ////////////////////////////////
