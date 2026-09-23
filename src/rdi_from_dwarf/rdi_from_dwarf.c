@@ -3703,6 +3703,12 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
                         push_vals[0].is_addr = 1;
                       }break;
                       
+                      //- rjf: call frame CFA
+                      case DW_ExprOp_CallFrameCfa:
+                      {
+                        rdim_bytecode_push_op(arena, &dst_bytecode, RDI_EvalOp_PushCfa, 0);
+                      }break;
+                      
                       //- rjf: memory reads
                       case DW_ExprOp_Deref: memread_size = unit_parse_ctx->addr_size; goto deref;
                       case DW_ExprOp_DerefSize: memread_size = operand_u64s[0]; goto deref;
