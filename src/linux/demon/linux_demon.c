@@ -2103,9 +2103,17 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
             //
             case PTRACE_EVENT_CLONE:
             {
-              // NOTE: kernel stopped the parent just before scheduling the child to
-              // give us a chance to prepare to trace it; next event for the child
-              // will be a PTRACE_EVENT_STOP
+              // NOTE(rjf): we get this event from the creator thread when it has
+              // cloned itself to create a child. immediately after creation, the
+              // child will raise a stop event. but importantly, the Linux kernel
+              // offers *NO GUARANTEES* about whether we receive the *clone* or
+              // the *stop* first.
+              //
+              // TODO(rjf): to account for this, upon STOP events of unrecognized
+              // threads, we need to accumulate a pending ID map, and then if a
+              // cloned thread's ID is in that map, we just immediately move it
+              // to a stopped state.
+              //
               pid_t new_tid = 0;
               if(LNX_RETRY_ON_EINTR(ptrace(PTRACE_GETEVENTMSG, wait_id, 0, &new_tid)) >= 0)
               {
