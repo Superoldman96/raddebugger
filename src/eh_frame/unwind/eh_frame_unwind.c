@@ -687,6 +687,10 @@ eh_uwnd_step(Arch arch, MemoryMap *memory_map, UWND_ModuleInfo *module_info, U64
     //- rjf: commit new register values, if we succeeded
     if(!done)
     {
+      if(cfa_out)
+      {
+        cfa_out[0] = cfa;
+      }
       result.status = UWND_StepStatus_Good;
     }
   }
