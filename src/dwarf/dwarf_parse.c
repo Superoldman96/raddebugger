@@ -676,6 +676,7 @@ internal void
 dw2_parse_ctx_equip_unit_root_tag(DW2_ParseCtx *ctx_out, DW2_Tag *tag, DW2_OffsetTableSet *offset_tables)
 {
   // rjf: unpack attributes
+  DW2_Attrib *name_attrib = &dw2_attrib_nil;
   DW2_Attrib *low_pc_attrib = &dw2_attrib_nil;
   DW2_Attrib *lang_attrib = &dw2_attrib_nil;
   DW2_Attrib *rnglists_base_off_attrib = &dw2_attrib_nil;
@@ -689,6 +690,7 @@ dw2_parse_ctx_equip_unit_root_tag(DW2_ParseCtx *ctx_out, DW2_Tag *tag, DW2_Offse
     {
       default:{}break;
 #define Case(name, name_upper) case DW_AttribKind_##name_upper:{name##_attrib = &n->v;}break
+      Case(name,                 Name);
       Case(low_pc,               LowPc);
       Case(lang,                 Language);
       Case(rnglists_base_off,    RngListsBase);
@@ -704,6 +706,7 @@ dw2_parse_ctx_equip_unit_root_tag(DW2_ParseCtx *ctx_out, DW2_Tag *tag, DW2_Offse
   ctx_out->unit_base_addr = low_pc_attrib->val.addr;
   ctx_out->language = lang_attrib->val.u128.u64[0];
   ctx_out->unit_dir = comp_dir_attrib->val.string;
+  ctx_out->unit_file = comp_dir_attrib->val.string;
   
   // rjf: find offset tables
   Rng1U64Array rnglists_tables_ranges_array = {offset_tables->rnglists_tables_ranges, offset_tables->rnglists_tables_count};
@@ -1115,7 +1118,7 @@ dw2_read_line_table_header(Arena *arena, DW_Raw *raw, DW2_ParseCtx *ctx, String8
             DW2_LineTableFile *entry_out = &table.v[idx];
             for(U64 entry_format_idx = 0; entry_format_idx < entry_formats_count; entry_format_idx += 1)
             {
-              DW_LNCT lnct          =     (DW_LNCT)entry_formats[entry_format_idx*2 + 0];
+              DW_LNCT lnct = (DW_LNCT)entry_formats[entry_format_idx*2 + 0];
               DW_FormKind form_kind = (DW_FormKind)entry_formats[entry_format_idx*2 + 1];
               DW2_FormVal form_val = {0};
               off += dw2_read_form_val(raw, ctx, data, off, form_kind, 0, &form_val);
