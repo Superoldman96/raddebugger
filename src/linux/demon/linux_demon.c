@@ -1596,6 +1596,15 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
     ////////////////////////////
     //- rjf: wait the next signal & generate events
     //
+    typedef struct StoppedPreCloneThreadID StoppedPreCloneThreadID;
+    struct StoppedPreCloneThreadID
+    {
+      StoppedPreCloneThreadID *next;
+      StoppedPreCloneThreadID *prev;
+      pid_t tid;
+    };
+    StoppedPreCloneThreadID *first_stopped_pre_clone_thread_id = 0;
+    StoppedPreCloneThreadID *last_stopped_pre_clone_thread_id = 0;
     B32 is_halt_done = 0;
     for(;;)
     {
@@ -2101,28 +2110,44 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
             ////////////////////
             //- rjf: clone
             //
+            // NOTE(rjf): we get this event from the creator thread when it has
+            // cloned itself to create a child. immediately after creation, the
+            // child will raise a stop event. but importantly, the Linux kernel
+            // offers *NO GUARANTEES* about whether we receive the *clone* or
+            // the *stop* first.
+            //
             case PTRACE_EVENT_CLONE:
             {
-              // NOTE(rjf): we get this event from the creator thread when it has
-              // cloned itself to create a child. immediately after creation, the
-              // child will raise a stop event. but importantly, the Linux kernel
-              // offers *NO GUARANTEES* about whether we receive the *clone* or
-              // the *stop* first.
-              //
-              // TODO(rjf): to account for this, upon STOP events of unrecognized
-              // threads, we need to accumulate a pending ID map, and then if a
-              // cloned thread's ID is in that map, we just immediately move it
-              // to a stopped state.
-              //
               pid_t new_tid = 0;
               if(LNX_RETRY_ON_EINTR(ptrace(PTRACE_GETEVENTMSG, wait_id, 0, &new_tid)) >= 0)
               {
+                // rjf: first, check if we have already seen a stop event for this TID. if so,
+                // remove from pre-clone stop thread ID List.
+                B32 already_stopped = 0;
+                for(StoppedPreCloneThreadID *n = first_stopped_pre_clone_thread_id; n != 0; n = n->next)
+                {
+                  if(n->tid == new_tid)
+                  {
+                    already_stopped = 1;
+                    DLLRemove(first_stopped_pre_clone_thread_id, last_stopped_pre_clone_thread_id, n);
+                    break;
+                  }
+                }
+                
+                // rjf: set up thread creation
                 thread_new = 1;
                 thread_new_pid = new_tid;
-                thread_new_report_events = 0;
-                thread_new_state = LNX_DMN_ThreadState_PendingCreation;
+                thread_new_report_events = already_stopped;
+                thread_new_state = already_stopped ? LNX_DMN_ThreadState_Stopped : LNX_DMN_ThreadState_PendingCreation;
                 thread_new_parent = thread->process;
-                lnx_dmn_state->threads_pending_creation += 1;
+                if(already_stopped)
+                {
+                  lnx_dmn_state->threads_pending_creation -= 1;
+                }
+                else
+                {
+                  lnx_dmn_state->threads_pending_creation += 1;
+                }
               }
               else
               {
@@ -2178,6 +2203,18 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
                 e->code    = thread->tid;
                 // TODO(rjf): e->stack_pointer = ???;
                 e->tls_root_vaddr = thread->dtv_base_vaddr;
+              }
+              
+              // rjf: stop event for unrecognized thread -> this references a thread we
+              // haven't seen cloned yet (we cannot rely on the order of clone/stop). so,
+              // we will gather the ID, and increase the pending threads count, and stop
+              // the pending state when we see the CLONE instead.
+              else if(thread == 0)
+              {
+                lnx_dmn_state->threads_pending_creation += 1;
+                StoppedPreCloneThreadID *n = push_array(scratch.arena, StoppedPreCloneThreadID, 1);
+                DLLPushBack(first_stopped_pre_clone_thread_id, last_stopped_pre_clone_thread_id, n);
+                n->tid = wait_id;
               }
             }break;
           }
