@@ -432,6 +432,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
     //- rjf: build path -> src file map
     for EachIndex(unit_idx, unit_count)
     {
+      DW2_ParseCtx *ctx = &unit_parse_ctxs[unit_idx];
       DW2_LineTableHeader *hdr = &unit_line_table_headers[unit_idx];
       for EachIndex(file_idx, hdr->files.count)
       {
@@ -439,7 +440,10 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
         if(f->file_name.size != 0)
         {
           DW2_LineTableFile *dir = &hdr->dirs.v[f->dir_idx];
-          String8 full_file_path = str8f(scratch2.arena, "%S%s%S", dir->file_name, dir->file_name.size != 0 ? "/" : "", f->file_name);
+          String8 full_file_path = str8f(scratch2.arena, "%S%s%S%s%S",
+                                         ctx->unit_dir, ctx->unit_dir.size != 0 ? "/" : "",
+                                         dir->file_name, dir->file_name.size != 0 ? "/" : "",
+                                         f->file_name);
           U64 hash = u64_hash_from_str8(full_file_path);
           U64 slot_idx = hash%slots_count;
           SrcFileNode *node = 0;
