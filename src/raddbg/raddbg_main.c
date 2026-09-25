@@ -2,6 +2,15 @@
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
 ////////////////////////////////
+//~ rjf: linux TODO notes
+//
+// [ ] multithreaded stepping - trap hits reported on other threads.
+// [ ] statically linked EXEs - busted unwinding
+// [ ] jai exes - busted call stacks / unwind info / paths?
+// [ ] stale memory - things evaluating to stale values that are definitely not zero
+// [x] statically linked EXEs, not parsing maps file correctly
+
+////////////////////////////////
 //~ rjf: evaluation system pass TODO notes
 //
 // The first pass of the debugger's evaluation engine has some significant

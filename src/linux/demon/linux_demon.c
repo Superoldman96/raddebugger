@@ -367,7 +367,7 @@ lnx_dmn_elf_hdr64_from_vaddr(int memory_fd, U64 vaddr)
 }
 
 internal Rng1U64
-lnx_dmn_vaddr_range_from_phdrs(int memory_fd, ELF_Class elf_class, U64 rebase, U64 e_phaddr, U64 e_phentsize, U64 e_phnum)
+lnx_dmn_vaddr_range_from_phdrs(int memory_fd, ELF_Class elf_class, U64 e_phaddr, U64 e_phentsize, U64 e_phnum)
 { 
   Rng1U64 result = {.min = max_U64};
   for(U64 ph_cursor = e_phaddr, ph_opl = (e_phaddr + e_phentsize * e_phnum);
@@ -382,10 +382,10 @@ lnx_dmn_vaddr_range_from_phdrs(int memory_fd, ELF_Class elf_class, U64 rebase, U
       phdr = elf_phdr64_from_class_data(elf_class, phdr_data);
       scratch_end(scratch);
     }
-    if(phdr.p_type  == ELF_PType_Load)
+    if(phdr.p_type == ELF_PType_Load)
     {
-      U64 min = rebase + phdr.p_vaddr;
-      U64 max = rebase + phdr.p_vaddr + phdr.p_memsz;
+      U64 min = phdr.p_vaddr;
+      U64 max = phdr.p_vaddr + phdr.p_memsz;
       result.min = Min(result.min, min);
       result.max = Max(result.max, max);
     }
@@ -491,9 +491,8 @@ lnx_dmn_module_alloc(LNX_DMN_ProcessCtx *ctx, int memory_fd, U64 base_vaddr, U64
     ELF_Class module_eclass = module_ehdr.e_ident[ELF_Identifier_Class];
     
     // rjf: unpack module's vaddr range
-    U64 module_rebase = module_ehdr.e_type == ELF_Type_Dyn ? base_vaddr : 0;
-    U64 module_phdr_vaddr = module_rebase + module_ehdr.e_phoff;
-    Rng1U64 module_vrange = lnx_dmn_vaddr_range_from_phdrs(memory_fd, module_ehdr.e_ident[ELF_Identifier_Class], module_rebase, module_phdr_vaddr, module_ehdr.e_phentsize, module_ehdr.e_phnum);
+    U64 module_phdr_vaddr = base_vaddr + module_ehdr.e_phoff;
+    Rng1U64 module_vrange = lnx_dmn_vaddr_range_from_phdrs(memory_fd, module_ehdr.e_ident[ELF_Identifier_Class], module_phdr_vaddr, module_ehdr.e_phentsize, module_ehdr.e_phnum);
     
     // rjf: read TLS index and TLS offset
     U64 tls_index = max_U64;
@@ -2519,21 +2518,20 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
           
           //- rjf: unpack context
           Arch arch = arch_from_elf_machine(exe_ehdr.e_machine);
-          U64 base_vaddr = (auxv.phdr & ~(auxv.pagesz-1));
-          U64 rebase = (exe_ehdr.e_type == ELF_Type_Dyn ? base_vaddr : 0);
-          Rng1U64 image_vrange = lnx_dmn_vaddr_range_from_phdrs(new_process->fd, exe_ehdr.e_ident[ELF_Identifier_Class], rebase, auxv.phdr, auxv.phent, auxv.phnum);
+          Rng1U64 image_vrange = lnx_dmn_vaddr_range_from_phdrs(new_process->fd, exe_ehdr.e_ident[ELF_Identifier_Class], auxv.phdr, auxv.phent, auxv.phnum);
           
-          //- rjf: read dynamically loaded ELF header
+          //- rjf: read ELF header for dynamic loader
           ELF_Hdr64 dl_ehdr = lnx_dmn_elf_hdr64_from_vaddr(new_process->fd, auxv.base);
           ELF_Class dl_class = dl_ehdr.e_ident[ELF_Identifier_Class];
           
           //- rjf: compute rdebug vaddr
           U64 rdebug_vaddr = 0;
+          if(dl_class != ELF_Class_None)
           {
             Temp scratch = scratch_begin(&arena, 1);
             
             // rjf: unpack header
-            U64 rebase = dl_ehdr.e_type == ELF_Type_Dyn ? auxv.base : 0;
+            U64 dl_rebase = (dl_ehdr.e_type == ELF_Type_Dyn ? auxv.base : 0);
             
             // rjf: find dynamic program header
             U64 dynamic_vaddr = 0;
@@ -2553,7 +2551,7 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
                 }
                 if(phdr.p_type == ELF_PType_Dynamic)
                 {
-                  dynamic_vaddr = rebase + phdr.p_vaddr;
+                  dynamic_vaddr = dl_rebase + phdr.p_vaddr;
                   break;
                 }
               }
@@ -2562,8 +2560,8 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
             // rjf: parse dynamic info for this module
             LNX_DMN_DynamicInfo dynamic_info = {0};
             {
-              B32 is_rebased = !!(process_new_flags & LNX_DMN_CreateProcessFlag_Rebased);
-              U64 dynamic_info_rebase = is_rebased ? 0 : rebase;
+              B32 is_dl_rebased = !!(process_new_flags & LNX_DMN_CreateProcessFlag_Rebased);
+              U64 dynamic_info_dl_rebase = is_dl_rebased ? 0 : dl_rebase;
               for(U64 dynamic_cursor = dynamic_vaddr;; dynamic_cursor += elf_dyn_size_from_class(dl_class))
               {
                 // rjf: read next dyn entry
@@ -2583,12 +2581,12 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
                 switch(dyn.tag)
                 {
                   default:{}break;
-                  case ELF_DynTag_Strtab:   {dynamic_info.strtab_vaddr = dynamic_info_rebase + dyn.val;}break;
+                  case ELF_DynTag_Strtab:   {dynamic_info.strtab_vaddr = dynamic_info_dl_rebase + dyn.val;}break;
                   case ELF_DynTag_Strsz:    {dynamic_info.strtab_size = dyn.val;}break;
-                  case ELF_DynTag_Symtab:   {dynamic_info.symtab_vaddr = dynamic_info_rebase + dyn.val;}break;
+                  case ELF_DynTag_Symtab:   {dynamic_info.symtab_vaddr = dynamic_info_dl_rebase + dyn.val;}break;
                   case ELF_DynTag_Syment:   {dynamic_info.symtab_entry_size = dyn.val;}break;
-                  case ELF_DynTag_Hash:     {dynamic_info.hash_vaddr = dynamic_info_rebase + dyn.val;}break;
-                  case ELF_DynTag_GNU_Hash: {dynamic_info.gnu_hash_vaddr = dynamic_info_rebase + dyn.val;}break;
+                  case ELF_DynTag_Hash:     {dynamic_info.hash_vaddr = dynamic_info_dl_rebase + dyn.val;}break;
+                  case ELF_DynTag_GNU_Hash: {dynamic_info.gnu_hash_vaddr = dynamic_info_dl_rebase + dyn.val;}break;
                 }
               }
             }
@@ -2708,7 +2706,7 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
                   if(symbol_type == ELF_SymType_Object && symbol.st_size > 0)
                   {
                     got_rdebug = 1;
-                    rdebug_vaddr = rebase + symbol.st_value;
+                    rdebug_vaddr = dl_rebase + symbol.st_value;
                   }
                 }
                 
@@ -2750,7 +2748,7 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
           {
             Temp scratch = scratch_begin(&arena, 1);
             
-            // rjf: get dl path for this pid
+            // rjf: get dynamic loader path for this pid
             String8 dl_path = {0};
             {
               int maps_fd = LNX_RETRY_ON_EINTR(open((char *)str8f(scratch.arena, "/proc/%d/maps", wait_id).str, O_RDONLY));
@@ -2811,29 +2809,41 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
                   }
                   
                   // was line parsed correctly?
-                  if(parts.node_count < 5) { Assert(0 && "failed to parse map line"); continue; }
+                  B32 good_parse = 1;
+                  if(parts.node_count < 5)
+                  {
+                    good_parse = 0;
+                    // TODO(rjf): log
+                  }
                   
                   // parse map virtual range
-                  String8List vaddr_list = str8_split_by_string_chars(scratch.arena, parts.first->string, str8_lit("-"), 0);
-                  if(vaddr_list.node_count != 2) { Assert(0 && "failed to parse virtual range portion of map line"); continue; }
+                  String8List vaddr_list = {0};
+                  if(good_parse)
+                  {
+                    vaddr_list = str8_split_by_string_chars(scratch.arena, parts.first->string, str8_lit("-"), 0);
+                    if(vaddr_list.node_count != 2)
+                    {
+                      good_parse = 0;
+                      // TODO(rjf): log - failed to parse virtual range portion of map line
+                    }
+                  }
                   
                   // does the low part match DL base address?
-                  U64 lo_vaddr = u64_from_str8(vaddr_list.first->string, 16);
-                  if(lo_vaddr == auxv.base)
+                  U64 lo_vaddr = 0;
+                  if(vaddr_list.first != 0)
                   {
-                    dl_path = parts.node_count == 5 ? str8_zero() : parts.last->string;
-                    dl_path = push_str8_copy(scratch.arena, dl_path);
-                    break;
+                    lo_vaddr = u64_from_str8(vaddr_list.first->string, 16);
+                    if(lo_vaddr == auxv.base)
+                    {
+                      dl_path = parts.node_count == 5 ? str8_zero() : parts.last->string;
+                      dl_path = push_str8_copy(scratch.arena, dl_path);
+                      break;
+                    }
                   }
                 }
                 
                 LNX_RETRY_ON_EINTR(close(maps_fd));
               }
-              else
-              {
-                Assert(0 && "failed to open DL fd");
-              }
-              Assert(dl_path.size);
             }
             
             // rjf: read probes for this dl
@@ -3008,7 +3018,7 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
           ctx->xsave_layout      = xsave_layout;
           
           //- rjf: create main module
-          LNX_DMN_Module *main_module = lnx_dmn_module_alloc(ctx, new_process->fd, base_vaddr, auxv.execfn, 1, 1);
+          LNX_DMN_Module *main_module = lnx_dmn_module_alloc(ctx, new_process->fd, image_vrange.min, auxv.execfn, 1, 1);
           
           //- rjf: glibc has a shortcut mapping for the main module; ensure 0 base address goes to it
           {
