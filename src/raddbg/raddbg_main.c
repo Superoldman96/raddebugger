@@ -5,9 +5,14 @@
 //~ rjf: linux TODO notes
 //
 // [ ] multithreaded stepping - trap hits reported on other threads.
-// [ ] statically linked EXEs - busted unwinding
-// [ ] jai exes - busted call stacks / unwind info / paths?
+// [ ] .eh_frame unwinding without .eh_frame_hdr
 // [ ] stale memory - things evaluating to stale values that are definitely not zero
+// [ ] clipboard
+// [ ] bitmaps / geometry
+// [ ] wayland
+// [ ] asan
+// [x] jai exes - busted call stacks / unwind info / paths?
+// [x] statically linked EXEs - busted unwinding
 // [x] statically linked EXEs, not parsing maps file correctly
 
 ////////////////////////////////
