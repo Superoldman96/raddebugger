@@ -16864,6 +16864,11 @@ rd_frame(void)
                   rd_cmd(RD_CmdKind_PushQuery, .expr = push_str8f(scratch.arena, "query:config.$%I64x", bp->id), .do_lister = 0);
                 }
                 str8_list_pushf(rd_state->cmd_output_arena, &rd_state->cmd_outputs, "$%I64x", bp->id);
+                if(rd_setting_b32_from_name(s("lock_new_breakpoints_to_selected_thread")))
+                {
+                  CFG_Node *filter = cfg_node_new(rd_state->cfg, bp, s("break_selected_thread_only"));
+                  cfg_node_new(rd_state->cfg, filter, s("1"));
+                }
               }
             }
           }break;
@@ -17997,17 +18002,21 @@ rd_frame(void)
         
         //- rjf: compute breakpoint flags
         D_BreakpointFlags flags = 0;
-        if(str8_match(cfg_node_child_from_string(src_bp, str8_lit("break_on_write"))->first->string, str8_lit("1"), 0))
+        if(str8_match(cfg_node_child_from_string(src_bp, s("break_on_write"))->first->string, s("1"), 0))
         {
           flags |= D_BreakpointFlag_BreakOnWrite;
         }
-        if(str8_match(cfg_node_child_from_string(src_bp, str8_lit("break_on_read"))->first->string, str8_lit("1"), 0))
+        if(str8_match(cfg_node_child_from_string(src_bp, s("break_on_read"))->first->string, s("1"), 0))
         {
           flags |= D_BreakpointFlag_BreakOnRead;
         }
-        if(str8_match(cfg_node_child_from_string(src_bp, str8_lit("break_on_execute"))->first->string, str8_lit("1"), 0))
+        if(str8_match(cfg_node_child_from_string(src_bp, s("break_on_execute"))->first->string, s("1"), 0))
         {
           flags |= D_BreakpointFlag_BreakOnExecute;
+        }
+        if(str8_match(cfg_node_child_from_string(src_bp, s("break_selected_thread_only"))->first->string, s("1"), 0))
+        {
+          flags |= D_BreakpointFlag_BreakSelectedThreadOnly;
         }
         
         //- rjf: compute address range size
@@ -18073,7 +18082,7 @@ rd_frame(void)
     }
     U64 cmd_count_pre_tick = rd_state->cmds[0].count;
     B32 soft_halt_issued = d_user_state->ctrl_soft_halt_issued;
-    D_EventList engine_events = d_tick(scratch.arena, &targets, &breakpoints, &path_maps, exception_code_filters, rd_state->auto_download_debug_info);
+    D_EventList engine_events = d_tick(scratch.arena, &targets, &breakpoints, &path_maps, rd_base_regs()->thread, exception_code_filters, rd_state->auto_download_debug_info);
     
     ////////////////////////////
     //- rjf: process debug engine events

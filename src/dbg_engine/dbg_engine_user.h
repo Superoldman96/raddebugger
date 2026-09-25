@@ -366,7 +366,6 @@ struct D_UserState
   Arena *ctrl_last_run_arena;
   D_RunKind ctrl_last_run_kind;
   U64 ctrl_last_run_frame_idx;
-  D_Handle ctrl_last_run_thread_handle;
   D_RunFlags ctrl_last_run_flags;
   D_TrapList ctrl_last_run_traps;
   D_BreakpointArray ctrl_last_run_extra_bps;
@@ -481,6 +480,6 @@ internal B32 d_next_cmd(D_Cmd **cmd);
 ////////////////////////////////
 //~ rjf: Main Layer Top-Level Calls
 
-internal D_EventList d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_PathMapArray *path_maps, U64 exception_code_filters[(D_ExceptionCodeKind_COUNT+63)/64], B32 auto_download_debug_info);
+internal D_EventList d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_PathMapArray *path_maps, D_Handle selected_thread, U64 exception_code_filters[(D_ExceptionCodeKind_COUNT+63)/64], B32 auto_download_debug_info);
 
 #endif // DBG_ENGINE_USER_H

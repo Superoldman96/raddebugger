@@ -77,9 +77,10 @@ struct D_HandleArray
 typedef U32 D_BreakpointFlags;
 enum
 {
-  D_BreakpointFlag_BreakOnWrite   = (1<<0),
-  D_BreakpointFlag_BreakOnRead    = (1<<1),
-  D_BreakpointFlag_BreakOnExecute = (1<<2),
+  D_BreakpointFlag_BreakOnWrite            = (1<<0),
+  D_BreakpointFlag_BreakOnRead             = (1<<1),
+  D_BreakpointFlag_BreakOnExecute          = (1<<2),
+  D_BreakpointFlag_BreakSelectedThreadOnly = (1<<3),
 };
 
 typedef struct D_Breakpoint D_Breakpoint;

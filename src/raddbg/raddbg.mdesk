@@ -326,6 +326,10 @@ RD_VocabTable:
       @default(0) @display_name('Auto Download Debug Info') @description("Automatically tries to download missing debug info from symbol server(s).")
         'auto_download_debug_info': bool,
       
+      //- rjf: breakpoint behavior
+      @default(0) @display_name('Lock New Breakpoints To Selected Thread') @description("When placing breakpoints, locks them to the selected thread by default.")
+        'lock_new_breakpoints_to_selected_thread': bool,
+
       //- rjf: update check
       @default(1) @display_name('Check For Updates') @description("Enables a small network request to check if there is a newer release version available.")
         'check_for_updates': bool,
@@ -756,6 +760,7 @@ RD_VocabTable:
       'break_on_write':   bool,
       'break_on_read':    bool,
       'break_on_execute': bool,
+      @display_name("Break Selected Thread Only") 'break_selected_thread_only': bool,
       @no_revert @no_expand @default(1) 'enabled': bool,
     }
     ```,

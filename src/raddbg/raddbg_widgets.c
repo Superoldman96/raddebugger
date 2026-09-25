@@ -1225,6 +1225,7 @@ struct RD_BreakpointBoxDrawExtData
   B32 do_glow;
   B32 is_disabled;
   B32 is_conditioned;
+  B32 is_global;
 };
 
 internal UI_BOX_CUSTOM_DRAW(rd_bp_box_draw_extensions)
@@ -1304,6 +1305,20 @@ internal UI_BOX_CUSTOM_DRAW(rd_bp_box_draw_extensions)
     Vec2F32 p = center_2f32(box->rect);
     p.x -= run.dim.x*0.5f;
     p.y += run.descent;
+    dr_text_run(p, color, run);
+    scratch_end(scratch);
+  }
+  
+  // rjf: draw non-global marker
+  if(!u->is_global) UI_TagF(u->is_disabled ? "weak" : "")
+  {
+    Temp scratch = scratch_begin(0, 0);
+    Vec4F32 color = ui_color_from_name(s("text"));
+    FNT_Run run = fnt_run_from_string(rd_font_from_slot(RD_FontSlot_Icons), box->font_size*0.85f, 0, 0, FNT_RasterFlag_Smooth, rd_icon_kind_text_table[RD_IconKind_Thread]);
+    Vec2F32 box_dim = dim_2f32(box->rect);
+    Vec2F32 p = center_2f32(box->rect);
+    p.x += box_dim.x*0.1f;
+    p.y += box_dim.y*0.4f;
     dr_text_run(p, color, run);
     scratch_end(scratch);
   }
@@ -1801,6 +1816,7 @@ rd_code_slice(RD_CodeSliceParams *params, U64 *cursor, U64 *mark, S64 *preferred
             {
               bp_rgba = v4f32(bp_rgba.x*0.45f, bp_rgba.y*0.45f, bp_rgba.z*0.45f, bp_rgba.w*0.45f);
             }
+            B32 bp_is_global = !str8_match(cfg_node_child_from_string(bp, s("break_selected_thread_only"))->first->string, s("1"), 0);
             
             // rjf: prep custom rendering data
             RD_BreakpointBoxDrawExtData *bp_draw = push_array(ui_build_arena(), RD_BreakpointBoxDrawExtData, 1);
@@ -1814,6 +1830,7 @@ rd_code_slice(RD_CodeSliceParams *params, U64 *cursor, U64 *mark, S64 *preferred
               bp_draw->do_glow  = do_bp_glow;
               bp_draw->is_disabled = bp_is_disabled;
               bp_draw->is_conditioned = (cfg_node_child_from_string(bp, s("condition"))->first->string.size != 0);
+              bp_draw->is_global = bp_is_global;
               if(params->line_vaddrs[line_idx] == 0)
               {
                 D_LineList *lines = &params->line_infos[line_idx];

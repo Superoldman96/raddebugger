@@ -5346,6 +5346,7 @@ d_ctrl_thread__run(DMN_CtrlCtx *ctrl_ctx, D_Msg *msg)
       {
         Temp temp = temp_begin(scratch.arena);
         String8List conditions = {0};
+        B32 filter_unselected_threads = 0;
         
         // rjf: entry breakpoints
         for(DMN_TrapChunkNode *n = entry_traps.first; n != 0; n = n->next)
@@ -5383,6 +5384,10 @@ d_ctrl_thread__run(DMN_CtrlCtx *ctrl_ctx, D_Msg *msg)
                 {
                   str8_list_push(temp.arena, &conditions, user_bp->condition);
                 }
+                if(user_bp != 0 && !(trap->id & bit64) && user_bp->flags & D_BreakpointFlag_BreakSelectedThreadOnly)
+                {
+                  filter_unselected_threads = 1;
+                }
               }
             }
           }
@@ -5394,6 +5399,19 @@ d_ctrl_thread__run(DMN_CtrlCtx *ctrl_ctx, D_Msg *msg)
         if(event->address != 0)
         {
           hit_user_bp = 1;
+        }
+        
+        // rjf: if this breakpoint filters unselected threads, check that the current thread matches
+        // the selected, *or* that we have no selected thread at all.
+        if(!hit_conditional_bp_but_filtered && filter_unselected_threads)
+        {
+          B32 thread_is_selected = (d_handle_match(thread->handle, msg->entity) || d_handle_match(msg->entity, d_handle_zero()));
+          if(!thread_is_selected)
+          {
+            hit_user_bp = 0;
+            hit_conditional_bp_but_filtered = 1;
+            log_infof("thread_filtered_breakpoint_hit: 'not selected thread, and so filtered'\n");
+          }
         }
         
         // rjf: evaluate hit stop conditions

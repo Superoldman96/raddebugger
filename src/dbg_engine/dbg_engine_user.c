@@ -1569,7 +1569,7 @@ d_next_cmd(D_Cmd **cmd)
 //~ rjf: Main Layer Top-Level Calls
 
 internal D_EventList
-d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_PathMapArray *path_maps, U64 exception_code_filters[(D_ExceptionCodeKind_COUNT+63)/64], B32 auto_download_debug_info)
+d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_PathMapArray *path_maps, D_Handle selected_thread, U64 exception_code_filters[(D_ExceptionCodeKind_COUNT+63)/64], B32 auto_download_debug_info)
 {
   ProfBeginFunction();
   Temp scratch = scratch_begin(&arena, 1);
@@ -1683,6 +1683,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
     // rjf: build data strings of all param data
     String8List strings = {0};
     {
+      str8_list_push(scratch.arena, &strings, str8_struct(&selected_thread));
       D_EntityArray threads = d_entity_array_from_kind(D_EntityKind_Thread);
       for EachIndex(idx, threads.count)
       {
@@ -1696,6 +1697,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
       for(U64 idx = 0; idx < breakpoints->count; idx += 1)
       {
         D_Breakpoint *bp = &breakpoints->v[idx];
+        str8_list_push(scratch.arena, &strings, str8_struct(&bp->flags));
         str8_list_push(scratch.arena, &strings, bp->file_path);
         str8_list_push(scratch.arena, &strings, str8_struct(&bp->pt));
         str8_list_push(scratch.arena, &strings, bp->vaddr_expr);
@@ -1994,7 +1996,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
         {
           need_run   = 1;
           run_kind   = d_user_state->ctrl_last_run_kind;
-          run_thread = d_entity_from_handle(d_user_state->ctrl_last_run_thread_handle);
+          run_thread = d_entity_from_handle(selected_thread);
           run_flags  = d_user_state->ctrl_last_run_flags;
           run_traps  = d_user_state->ctrl_last_run_traps;
         }break;
@@ -2030,6 +2032,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
           {
             run_extra_bps.v[0].vaddr_expr = push_str8f(scratch.arena, "0x%I64x", params->vaddr);
           }
+          run_extra_bps.v[0].flags |= D_BreakpointFlag_BreakSelectedThreadOnly;
           d_cmd(D_CmdKind_Run);
         }break;
         case D_CmdKind_RunToName:
@@ -2130,7 +2133,7 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
           {
             need_run   = 1;
             run_kind   = d_user_state->ctrl_last_run_kind;
-            run_thread = d_entity_from_handle(d_user_state->ctrl_last_run_thread_handle);
+            run_thread = d_entity_from_handle(selected_thread);
             run_flags  = d_user_state->ctrl_last_run_flags;
             run_traps  = d_user_state->ctrl_last_run_traps;
           }
@@ -2252,7 +2255,6 @@ d_tick(Arena *arena, D_TargetArray *targets, D_BreakpointArray *breakpoints, D_P
         arena_clear(d_user_state->ctrl_last_run_arena);
         d_user_state->ctrl_last_run_kind              = run_kind;
         d_user_state->ctrl_last_run_frame_idx         = d_frame_index();
-        d_user_state->ctrl_last_run_thread_handle     = run_thread->handle;
         d_user_state->ctrl_last_run_flags             = run_flags;
         d_user_state->ctrl_last_run_traps             = d_trap_list_copy(d_user_state->ctrl_last_run_arena, &run_traps_copy);
         d_user_state->ctrl_last_run_extra_bps         = d_breakpoint_array_copy(d_user_state->ctrl_last_run_arena, &run_extra_bps_copy);
