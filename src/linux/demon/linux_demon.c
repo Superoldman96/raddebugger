@@ -175,9 +175,9 @@ lnx_dmn_module_info_from_process_module(Arena *arena, pid_t pid, int memory_fd, 
     }
     
     //- rjf: determine shdrs/phdrs addresses
-    U64 phdrs_vaddr = module_rebase + phdrs_off;
+    U64 phdrs_vaddr = base_vaddr + phdrs_off;
     U64 phdrs_vaddr_opl = phdrs_vaddr + phdrs_count*phdrs_entry_size;
-    U64 shdrs_vaddr = module_rebase + shdrs_off;
+    U64 shdrs_vaddr = base_vaddr + shdrs_off;
     
     //- rjf: scan phdrs, unpack info
     U64 image_vsize = 0;
@@ -367,7 +367,7 @@ lnx_dmn_elf_hdr64_from_vaddr(int memory_fd, U64 vaddr)
 }
 
 internal Rng1U64
-lnx_dmn_vaddr_range_from_phdrs(int memory_fd, ELF_Class elf_class, U64 e_phaddr, U64 e_phentsize, U64 e_phnum)
+lnx_dmn_vaddr_range_from_phdrs(int memory_fd, ELF_Class elf_class, U64 rebase, U64 e_phaddr, U64 e_phentsize, U64 e_phnum)
 { 
   Rng1U64 result = {.min = max_U64};
   for(U64 ph_cursor = e_phaddr, ph_opl = (e_phaddr + e_phentsize * e_phnum);
@@ -384,8 +384,8 @@ lnx_dmn_vaddr_range_from_phdrs(int memory_fd, ELF_Class elf_class, U64 e_phaddr,
     }
     if(phdr.p_type == ELF_PType_Load)
     {
-      U64 min = phdr.p_vaddr;
-      U64 max = phdr.p_vaddr + phdr.p_memsz;
+      U64 min = rebase + phdr.p_vaddr;
+      U64 max = rebase + phdr.p_vaddr + phdr.p_memsz;
       result.min = Min(result.min, min);
       result.max = Max(result.max, max);
     }
@@ -492,7 +492,8 @@ lnx_dmn_module_alloc(LNX_DMN_ProcessCtx *ctx, int memory_fd, U64 base_vaddr, U64
     
     // rjf: unpack module's vaddr range
     U64 module_phdr_vaddr = base_vaddr + module_ehdr.e_phoff;
-    Rng1U64 module_vrange = lnx_dmn_vaddr_range_from_phdrs(memory_fd, module_ehdr.e_ident[ELF_Identifier_Class], module_phdr_vaddr, module_ehdr.e_phentsize, module_ehdr.e_phnum);
+    U64 module_phdr_rebase = (module_ehdr.e_type == ELF_Type_Dyn ? base_vaddr : 0);
+    Rng1U64 module_vrange = lnx_dmn_vaddr_range_from_phdrs(memory_fd, module_ehdr.e_ident[ELF_Identifier_Class], module_phdr_rebase, module_phdr_vaddr, module_ehdr.e_phentsize, module_ehdr.e_phnum);
     
     // rjf: read TLS index and TLS offset
     U64 tls_index = max_U64;
@@ -2518,7 +2519,8 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
           
           //- rjf: unpack context
           Arch arch = arch_from_elf_machine(exe_ehdr.e_machine);
-          Rng1U64 image_vrange = lnx_dmn_vaddr_range_from_phdrs(new_process->fd, exe_ehdr.e_ident[ELF_Identifier_Class], auxv.phdr, auxv.phent, auxv.phnum);
+          U64 rebase = (exe_ehdr.e_type == ELF_Type_Dyn ? (auxv.phdr - exe_ehdr.e_phoff) : 0);
+          Rng1U64 image_vrange = lnx_dmn_vaddr_range_from_phdrs(new_process->fd, exe_ehdr.e_ident[ELF_Identifier_Class], rebase, auxv.phdr, auxv.phent, auxv.phnum);
           
           //- rjf: read ELF header for dynamic loader
           ELF_Hdr64 dl_ehdr = lnx_dmn_elf_hdr64_from_vaddr(new_process->fd, auxv.base);
