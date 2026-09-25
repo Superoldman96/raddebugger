@@ -4,13 +4,18 @@
 ////////////////////////////////
 //~ rjf: linux TODO notes
 //
-// [ ] multithreaded stepping - trap hits reported on other threads.
-// [ ] .eh_frame unwinding without .eh_frame_hdr
-// [ ] stale memory - things evaluating to stale values that are definitely not zero
-// [ ] clipboard
-// [ ] bitmaps / geometry
-// [ ] wayland
-// [ ] asan
+// [ ] control
+//   [ ] multithreaded stepping - trap hits reported on other threads.
+//   [ ] stale memory - things evaluating to stale values that are definitely not zero
+// [ ] support
+//   [ ] .eh_frame unwinding without .eh_frame_hdr
+//   [ ] asan
+// [ ] windowing
+//   [ ] wayland
+// [ ] rendering
+//   [ ] bitmaps / geometry
+//
+// [x] clipboard
 // [x] jai exes - busted call stacks / unwind info / paths?
 // [x] statically linked EXEs - busted unwinding
 // [x] statically linked EXEs, not parsing maps file correctly
@@ -105,8 +110,8 @@
 //     recent files, watches?, etc.
 //
 // [ ] linux/dwarf fixes
-//  [ ] excessive CPU usage on async threads - barrier impl?
 //  [ ] type views for `MyByte *` example do not match correctly
+//  [x] excessive CPU usage on async threads - barrier impl?
 //
 // [ ] many threads hitting conditional breakpoints -> causes 0x8000003 exception!
 // [ ] string conditional breakpoints -> size != 0 check seems to fail, can test w/ "rd_init" subprogram type gen in d2r2

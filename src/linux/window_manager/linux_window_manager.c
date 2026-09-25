@@ -342,10 +342,34 @@ wm_init(void)
   lnx_wm_state->arena = arena;
   lnx_wm_state->display = XOpenDisplay(0);
   
+  //- rjf: create invisible global window for stuff like clipboard
+  {
+    lnx_wm_state->global_invisible_window = XCreateWindow(lnx_wm_state->display, XDefaultRootWindow(lnx_wm_state->display), -1, -1, 1, 1, 0, 0, 0, 0, 0, 0);
+  }
+  
+  //- rjf: allocate clipboard arena
+  lnx_wm_state->clipboard_arena = arena_alloc();
+  
   //- rjf: calculate atoms
+  lnx_wm_state->clipboard                    = XInternAtom(lnx_wm_state->display, "CLIPBOARD", 0);
+  lnx_wm_state->targets                      = XInternAtom(lnx_wm_state->display, "TARGETS", 0);
+  lnx_wm_state->utf8_string                  = XInternAtom(lnx_wm_state->display, "UTF8_STRING", 0);
   lnx_wm_state->wm_delete_window_atom        = XInternAtom(lnx_wm_state->display, "WM_DELETE_WINDOW", 0);
   lnx_wm_state->wm_sync_request_atom         = XInternAtom(lnx_wm_state->display, "_NET_WM_SYNC_REQUEST", 0);
   lnx_wm_state->wm_sync_request_counter_atom = XInternAtom(lnx_wm_state->display, "_NET_WM_SYNC_REQUEST_COUNTER", 0);
+  
+  //- rjf: determine if we have xfixes extension, for clipboard notification events
+  {
+    int xfixes_version = 0;
+    int xfixes_err = 0;
+    lnx_wm_state->xfixes_present = XQueryExtension(lnx_wm_state->display, "XFIXES", &xfixes_version, &lnx_wm_state->xfixes_selection_event_code, &xfixes_err);
+    
+    // rjf: if we have xfixes -> get CLIPBOARD updates
+    if(lnx_wm_state->xfixes_present)
+    {
+      XFixesSelectSelectionInput(lnx_wm_state->display, lnx_wm_state->global_invisible_window, lnx_wm_state->clipboard, XFixesSetSelectionOwnerNotifyMask);
+    }
+  }
   
   //- rjf: open im
   lnx_wm_state->xim = XOpenIM(lnx_wm_state->display, 0, 0, 0);
@@ -513,13 +537,15 @@ wm_get_system_info(void)
 internal void
 wm_set_clipboard_text(String8 string)
 {
-  
+  arena_clear(lnx_wm_state->clipboard_arena);
+  lnx_wm_state->clipboard_text = str8_copy(lnx_wm_state->clipboard_arena, string);
+  XSetSelectionOwner(lnx_wm_state->display, lnx_wm_state->clipboard, lnx_wm_state->global_invisible_window, CurrentTime);
 }
 
 internal String8
 wm_get_clipboard_text(Arena *arena)
 {
-  String8 result = {0};
+  String8 result = str8_copy(arena, lnx_wm_state->clipboard_text);
   return result;
 }
 
@@ -1065,7 +1091,6 @@ wm_send_wakeup_event(void)
 {
   U64 dummy = 1;
   ssize_t size = LNX_RETRY_ON_EINTR(write(lnx_wm_state->wakeup_fd, &dummy, sizeof(dummy)));
-  Assert(size == sizeof(dummy));
 }
 
 internal WM_EventList
@@ -1083,7 +1108,6 @@ wm_get_events(Arena *arena, B32 wait)
       };
       int timeout = wait && evts.count == 0 ? -1 : 0;
       int poll_status = poll(poll_fds, ArrayCount(poll_fds), timeout);
-      Assert(poll_status >= 0);
       if(poll_fds[1].revents & POLLIN)
       {
         U64 dummy = 0;
@@ -1091,8 +1115,15 @@ wm_get_events(Arena *arena, B32 wait)
         wait = 0;
       }
     }
+    B32 try_again = 0;
     while(XPending(lnx_wm_state->display))
     {
+      //- rjf: no xfixes? -> request new clipboard state
+      if(!lnx_wm_state->xfixes_present)
+      {
+        XConvertSelection(lnx_wm_state->display, lnx_wm_state->clipboard, lnx_wm_state->utf8_string, lnx_wm_state->clipboard, lnx_wm_state->global_invisible_window, CurrentTime);
+      }
+      
       //- rjf: get next event
       XEvent evt = {0};
       XNextEvent(lnx_wm_state->display, &evt);
@@ -1101,7 +1132,84 @@ wm_get_events(Arena *arena, B32 wait)
       B32 set_mouse_cursor = 0;
       switch(evt.type)
       {
-        default:{}break;
+        default:
+        {
+          //- rjf: xfixes clipboard update event
+          if(evt.type == lnx_wm_state->xfixes_selection_event_code && lnx_wm_state->xfixes_present)
+          {
+            XFixesSelectionNotifyEvent *notification = (XFixesSelectionNotifyEvent *)&evt;
+            if(notification->subtype == XFixesSelectionNotify && notification->owner != lnx_wm_state->global_invisible_window)
+            {
+              XConvertSelection(lnx_wm_state->display, lnx_wm_state->clipboard, lnx_wm_state->utf8_string, lnx_wm_state->clipboard, lnx_wm_state->global_invisible_window, CurrentTime);
+            }
+          }
+        }break;
+        
+        //- rjf: external application wants to paste from us
+        case SelectionRequest:
+        {
+          XSelectionRequestEvent *req = &evt.xselectionrequest;
+          Atom targets = lnx_wm_state->targets;
+          Atom utf8_string = lnx_wm_state->utf8_string;
+          Atom dst_property = req->property == None ? req->target : req->property;
+          
+          // rjf: requesting the set of targets we support
+          if(req->target == targets)
+          {
+            Atom formats[] =
+            {
+              lnx_wm_state->utf8_string,
+              XA_STRING,
+            };
+            XChangeProperty(req->display, req->requestor, req->property, XA_ATOM, 32, PropModeReplace, (U8 *)formats, ArrayCount(formats));
+          }
+          
+          // rjf: requesting a string paste
+          else if(req->target == utf8_string || req->target == XA_STRING)
+          {
+            XChangeProperty(req->display, req->requestor, req->property, req->target, 8, PropModeReplace, lnx_wm_state->clipboard_text.str, lnx_wm_state->clipboard_text.size);
+          }
+          
+          // rjf: notify receiver
+          XEvent response;
+          MemoryZeroStruct(&response);
+          response.type = SelectionNotify;
+          response.xselection.display   = req->display;
+          response.xselection.requestor = req->requestor;
+          response.xselection.selection = req->selection;
+          response.xselection.target    = req->target;
+          response.xselection.time      = req->time;
+          response.xselection.property  = dst_property;
+          XSendEvent(req->display, req->requestor, 1, 0, &response);
+          XFlush(req->display);
+          
+          // rjf: try the event loop again
+          try_again = 1;
+        }break;
+        
+        //- rjf: external application is pasting to us
+        case SelectionNotify:
+        {
+          // rjf: unpack property
+          Atom type = 0;
+          int fmt = 0;
+          U64 num_items = 0;
+          U64 bytes_left = 0;
+          U8 *data = 0;
+          int result = XGetWindowProperty(lnx_wm_state->display, lnx_wm_state->global_invisible_window, lnx_wm_state->clipboard, 0, MB(256), 0, lnx_wm_state->utf8_string, &type, &fmt, &num_items, &bytes_left, &data);
+          
+          // rjf: store
+          if(result == Success && fmt == 8)
+          {
+            arena_clear(lnx_wm_state->clipboard_arena);
+            lnx_wm_state->clipboard_text = str8_copy(lnx_wm_state->clipboard_arena, str8(data, num_items));
+            XFree(data);
+            XDeleteProperty(lnx_wm_state->display, lnx_wm_state->global_invisible_window, lnx_wm_state->clipboard);
+          }
+          
+          // rjf: try the event loop again
+          try_again = 1;
+        }break;
         
         //- rjf: key presses/releases
         case KeyPress:
@@ -1343,7 +1451,7 @@ wm_get_events(Arena *arena, B32 wait)
         }
       }
     }
-    if(evts.count > 0 || (wait == 0 && evts.count == 0))
+    if(!try_again && (evts.count > 0 || (wait == 0 && evts.count == 0)))
     {
       break;
     }
