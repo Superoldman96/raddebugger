@@ -5,6 +5,8 @@
 //~ rjf: linux TODO notes
 //
 // initial alpha:
+// [x] .so loading/debugging - missing debug info
+// [x] missing disasm
 // [ ] control
 //   [ ] multithreaded stepping - trap hits reported on other threads.
 //   [ ] stale memory - things evaluating to stale values that are definitely not zero

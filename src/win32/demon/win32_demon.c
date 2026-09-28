@@ -2228,7 +2228,6 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
                     e->kind = DMN_EventKind_UnloadModule;
                     e->process = w32_dmn_handle_from_entity(process);
                     e->module = w32_dmn_handle_from_entity(child);
-                    e->string = w32_dmn_full_path_from_module(arena, child);
                   }break;
                 }
               }
@@ -2393,7 +2392,6 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
                 e->kind = DMN_EventKind_UnloadModule;
                 e->process = w32_dmn_handle_from_entity(process);
                 e->module  = w32_dmn_handle_from_entity(module);
-                e->string  = w32_dmn_full_path_from_module(arena, module);
               }
               
               // rjf: release entity storage
@@ -3145,7 +3143,6 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
             e->kind    = DMN_EventKind_UnloadModule;
             e->process = w32_dmn_handle_from_entity(process);
             e->module  = w32_dmn_handle_from_entity(child);
-            e->string  = w32_dmn_full_path_from_module(arena, child);
           }
         }
         

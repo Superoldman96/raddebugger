@@ -302,6 +302,24 @@ lnx_dmn_module_info_from_process_module(Arena *arena, pid_t pid, int memory_fd, 
     //- rjf: read module path
     String8 module_path = lnx_dmn_read_string(arena, memory_fd, name_vaddr);
     
+    //- rjf: if the module path is relative, we need to convert to absolute using the
+    // process' current working directory. the process' working directory may, of course,
+    // change across time, and so we need to re-read it every time we encounter this
+    // scenario.
+    if(path_style_from_str8(module_path) == PathStyle_Relative)
+    {
+      char *process_cwd_path_name = (char *)str8f(scratch.arena, "/proc/%d/cwd", pid).str;
+      U64 read_cap = PATH_MAX;
+      U8 *read_buffer = push_array(scratch.arena, U8, read_cap);
+      ssize_t read_size = readlink(process_cwd_path_name, (char *)read_buffer, read_cap);
+      if(read_size != 0)
+      {
+        String8 process_cwd = str8(read_buffer, read_size);
+        String8 module_path_absolute = str8f(scratch.arena, "%S/%S", process_cwd, module_path);
+        module_path = path_normalized_from_string(arena, module_path_absolute);
+      }
+    }
+    
     //- rjf: decide on debug info key info
     String8 debug_info_path = module_path;
     Guid debug_info_guid = {0};

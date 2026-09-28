@@ -2720,13 +2720,13 @@ RD_VIEW_UI_FUNCTION_DEF(disasm)
     {
       auto_selected = 1;
       auto_space = rd_eval_space_from_ctrl_entity(d_entity_from_handle(dv->temp_look_process), D_EvalSpaceKind_Entity);
-      eval = e_eval_from_stringf("(0x%I64x & (~(0x4000 - 1)))", dv->temp_look_vaddr);
+      eval = e_eval_from_stringf("(0x%I64x & (~(0x1000 - 1)))", dv->temp_look_vaddr);
     }
     else
     {
       auto_selected = 1;
       auto_space = rd_eval_space_from_ctrl_entity(d_entity_from_handle(rd_regs()->process), D_EvalSpaceKind_Entity);
-      eval = e_eval_from_stringf("(reg:rip & (~(0x4000 - 1)))");
+      eval = e_eval_from_stringf("(reg:rip & (~(0x1000 - 1)))");
     }
   }
   

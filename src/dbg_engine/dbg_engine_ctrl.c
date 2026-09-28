@@ -2782,7 +2782,6 @@ d_ctrl_thread__close_dump_process(D_MsgID msg_id, D_Handle process)
     evt->kind   = D_EventKind_EndModule;
     evt->msg_id = msg_id;
     evt->entity = node->modules[idx].module_handle;
-    evt->string = node->modules[idx].path;
     d_c2u_push_events(&evts);
     scratch_end(scratch);
   }
@@ -3335,7 +3334,6 @@ d_ctrl_thread__next_dmn_event(Arena *arena, DMN_CtrlCtx *ctrl_ctx, D_Msg *msg, D
     
     //- rjf: unload module
     case DMN_EventKind_UnloadModule:
-    ProfScope("unload module %.*s", str8_varg(event->string))
     {
       //- rjf: unpack module
       D_Handle module_handle = d_handle_from_dmn(D_MachineID_Local, event->module);
@@ -3360,7 +3358,6 @@ d_ctrl_thread__next_dmn_event(Arena *arena, DMN_CtrlCtx *ctrl_ctx, D_Msg *msg, D
       out_evt->kind       = D_EventKind_EndModule;
       out_evt->msg_id     = msg->msg_id;
       out_evt->entity     = module_handle;
-      out_evt->string     = module_path;
       
       //- rjf: close debug info
       DI_Key dbgi_key = d_dbgi_key_from_module(module_ent);
@@ -6103,8 +6100,8 @@ d_memory_artifact_create(String8 key, B32 *cancel_signal, AC_Status *status_out,
       arena_release(range_arena);
     }
     
-    //- rjf: retry on mem gen "tearing", and if the range is non-empty
-    if(pre_read_mem_gen != post_read_mem_gen && range_size != 0)
+    //- rjf: retry on mem gen "tearing"
+    if(pre_read_mem_gen != post_read_mem_gen)
     {
       status_out[0] = AC_Status_NeedRetry;
     }
