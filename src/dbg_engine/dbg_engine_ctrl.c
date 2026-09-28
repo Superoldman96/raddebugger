@@ -4878,8 +4878,8 @@ d_ctrl_thread__run(DMN_CtrlCtx *ctrl_ctx, D_Msg *msg)
   //
   DMN_TrapChunkList joined_traps = {0};
   {
-    dmn_trap_chunk_list_concat_shallow_copy(scratch.arena, &joined_traps, &user_traps);
     dmn_trap_chunk_list_concat_shallow_copy(scratch.arena, &joined_traps, &trap_net_traps);
+    dmn_trap_chunk_list_concat_shallow_copy(scratch.arena, &joined_traps, &user_traps);
   }
   
   //////////////////////////////

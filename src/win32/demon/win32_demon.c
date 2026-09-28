@@ -2478,10 +2478,11 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
                     {
                       hit_user_trap = 1;
                       user_trap_id = n->v[idx].id;
-                      break;
+                      goto end_find_user_trap;
                     }
                   }
                 }
+                end_find_user_trap:;
               }
               
               //- rjf: check if trap is explicit in the actual code memory
