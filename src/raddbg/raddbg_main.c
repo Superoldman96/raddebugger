@@ -4,16 +4,19 @@
 ////////////////////////////////
 //~ rjf: linux TODO notes
 //
+// initial alpha:
 // [ ] control
 //   [ ] multithreaded stepping - trap hits reported on other threads.
 //   [ ] stale memory - things evaluating to stale values that are definitely not zero
 // [ ] support
 //   [ ] .eh_frame unwinding without .eh_frame_hdr
 //   [ ] asan
-// [ ] windowing
-//   [ ] wayland
 // [ ] rendering
 //   [ ] bitmaps / geometry
+//
+// post initial alpha:
+// [ ] windowing
+//   [ ] wayland
 //
 // [x] clipboard
 // [x] jai exes - busted call stacks / unwind info / paths?
