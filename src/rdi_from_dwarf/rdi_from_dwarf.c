@@ -1102,7 +1102,7 @@ d2r_convert(Arena *arena, D2R_ConvertParams *params)
       {
         U64 root_tags_in_this_unit = unit_info_root_tag_offs[unit_idx].count;
         U64 root_tags_per_work = (root_tags_in_this_unit + lane_count()-1) / lane_count();
-        U64 works_per_this_unit = (root_tags_in_this_unit+root_tags_per_work-1) / root_tags_per_work;
+        U64 works_per_this_unit = root_tags_per_work ? ((root_tags_in_this_unit+root_tags_per_work-1) / root_tags_per_work) : 0;
         if(build)
         {
           D2R_SubUnitWork *works = sub_unit_works + sub_unit_work_idx;
