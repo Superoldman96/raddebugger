@@ -178,6 +178,7 @@ struct LNX_DMN_Thread
   void *reg_block;
   B32 is_reg_block_dirty;
   B32 pass_through_signal;
+  B32 ghost_trap;
   U64 pass_through_signo;
   U64 orig_rax;
   U64 dtv_base_vaddr;

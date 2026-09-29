@@ -1770,6 +1770,7 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
           {
             if(n->v != thread && n->v->state == LNX_DMN_ThreadState_Running)
             {
+              n->v->ghost_trap = 1;
               if(LNX_RETRY_ON_EINTR(ptrace(PTRACE_INTERRUPT, n->v->tid, 0, 0)) < 0)
               {
                 log_infof("ptrace error: Couldn't send PTRACE_INTERRUPT to TID %I64u.", n->v->tid);
@@ -2029,16 +2030,23 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
                       if(hit_user_trap)
                       {
                         U64 ip = lnx_dmn_ip_from_thread(thread);
-                        lnx_dmn_thread_write_ip(thread, ip - 1);
+                        lnx_dmn_thread_write_ip(thread, ip - arch_info->trap_instruction.size);
                       }
                       
-                      // rjf: generate event
-                      DMN_Event *e = dmn_event_list_push(arena, &events);
-                      e->kind                = hit_user_trap ? DMN_EventKind_Breakpoint : DMN_EventKind_Trap;
-                      e->process             = lnx_dmn_handle_from_process(process);
-                      e->thread              = lnx_dmn_handle_from_thread(thread);
-                      e->instruction_pointer = lnx_dmn_ip_from_thread(thread);
-                      e->user_data           = hit_user_trap ? hit_user_trap->id : 0;
+                      // rjf: generate event, if this isn't a ghost trap
+                      if(thread->ghost_trap)
+                      {
+                        thread->ghost_trap = 0;
+                      }
+                      else
+                      {
+                        DMN_Event *e = dmn_event_list_push(arena, &events);
+                        e->kind                = hit_user_trap ? DMN_EventKind_Breakpoint : DMN_EventKind_Trap;
+                        e->process             = lnx_dmn_handle_from_process(process);
+                        e->thread              = lnx_dmn_handle_from_thread(thread);
+                        e->instruction_pointer = lnx_dmn_ip_from_thread(thread);
+                        e->user_data           = hit_user_trap ? hit_user_trap->id : 0;
+                      }
                     }
                   }break;
                   
@@ -2223,6 +2231,26 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
                 e->tls_root_vaddr = thread->dtv_base_vaddr;
               }
               
+              // rjf: stop event for other threads we're attached to, due to a stop in
+              // another thread - check if this hit a trap and roll back
+              else if(thread != 0 && thread->state == LNX_DMN_ThreadState_Stopped)
+              {
+                //- rjf: unpack thread IP / process
+                U64 ip = lnx_dmn_ip_from_thread(thread);
+                DMN_Handle process_handle = lnx_dmn_handle_from_process(process);
+                
+                //- rjf: check previous bytes against trap instruction. if this thread
+                // executed a trap, we need to roll back before continuing this thread.
+                // we CANNOT RELY on there being a subsequently-queued SIGTRAP.
+                U8 *hit_trap_bytes_maybe = push_array(scratch.arena, U8, arch_info->trap_instruction.size);
+                dmn_process_read(process_handle, r1u64(ip - arch_info->trap_instruction.size, ip), hit_trap_bytes_maybe);
+                String8 hit_trap_data_maybe = str8(hit_trap_bytes_maybe, arch_info->trap_instruction.size);
+                if(str8_match(hit_trap_data_maybe, arch_info->trap_instruction, 0))
+                {
+                  lnx_dmn_thread_write_ip(thread, ip - arch_info->trap_instruction.size);
+                }
+              }
+              
               // rjf: stop event for unrecognized thread -> this references a thread we
               // haven't seen cloned yet (we cannot rely on the order of clone/stop). so,
               // we will gather the ID, and increase the pending threads count, and stop
@@ -2263,44 +2291,42 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
         //
         else
         {
-          LNX_DMN_Thread *thread = lnx_dmn_thread_from_pid(wait_id);
           thread->pass_through_signal = 1;
           thread->pass_through_signo = wstopsig;
           local_persist B8 is_repeatable[] =
           {
             0, // null
-            1, // 1 SIGHUP
-            1, // 2 SIGINT
-            1, // 3 SIGQUIT
-            1, // 4 SIGTRAP
-            1, // 5 SIGABRT
-            1, // 6 SIGIOT
-            1, // 7 SIGBUS
-            1, // 8 SIGFPE
-            1, // 9 SIGKILL
-            1, // 10 SIGUSR1
-            1, // 11 SIGSEGV
-            1, // 12 SIGUSR2
-            1, // 13 SIGPIPE
-            1, // 14 SIGALRM
-            1, // 15 SIGTERM
-            1, // 16 SIGTKFLT
-            0, // 17 SIGCHLD
-            0, // 18 SIGCONT
-            1, // 19 SIGSTOP
-            1, // 20 SIGTSP
-            1, // 21 SIGTTIN
-            1, // 22 SIGTTOU
-            0, // 23 SIGURG
-            1, // 24 SIGXCPU
-            1, // 25 SIGXFSZ
-            1, // 26 SIGVTALRM
-            1, // 27 SIGPROF
-            0, // 28 SIGWINCH
-            1, // 29 SIGIO
-            1, // 30 SIGPWR
-            1, // 31 SIGSYS
-            1, // 32 SIGUNUSED
+            1, // SIGHUP           1
+            1, // SIGINT           2
+            1, // SIGQUIT          3
+            1, // SIGILL           4
+            1, // SIGTRAP          5
+            1, // SIGABRT/SIGIOT   6
+            1, // SIGBUS           7
+            1, // SIGFPE           8
+            1, // SIGKILL          9
+            1, // SIGUSR1         10
+            1, // SIGSEGV         11
+            1, // SIGUSR2         12
+            1, // SIGPIPE         13
+            1, // SIGALRM         14
+            1, // SIGTERM         15
+            1, // SIGSTKFLT       16
+            0, // SIGCHLD         17
+            0, // SIGCONT         18
+            1, // SIGSTOP         19
+            1, // SIGTSTP         20
+            1, // SIGTTIN         21
+            1, // SIGTTOU         22
+            0, // SIGURG          23
+            1, // SIGXCPU         24
+            1, // SIGXFSZ         25
+            1, // SIGVTALRM       26
+            1, // SIGPROF         27
+            0, // SIGWINCH        28
+            1, // SIGIO           29
+            1, // SIGPWR          30
+            1, // SIGSYS/SIGUNUSED31
           };
           DMN_Event *e = dmn_event_list_push(arena, &events);
           e->kind                = DMN_EventKind_Exception;
