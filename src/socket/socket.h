@@ -34,6 +34,9 @@ struct SOCK_Endpoint
   {
     U8 address_u8[16];
     U16 address_u16[8];
+    U32 address_u32[4];
+    U64 address_u64[2];
+    U128 address_u128[1];
   };
 };
 
@@ -55,13 +58,13 @@ internal void sock_async_tick(void);
 ////////////////////////////////
 //~ rjf: @per_os_impl Sends
 
-internal U64 sock_send(U8 *ptr, U64 size, SOCK_Protocol *protocol_in, SOCK_Endpoint *endpoint_in, U64 endt_us);
-#define sock_send_struct(ptr, protocol_in, endpoint_in, endt_us) sock_send((ptr), sizeof(*(ptr)), (endpoint_in), (endt_us))
+internal B32 sock_send(SOCK_Protocol protocol, SOCK_Endpoint endpoint, String8 data, U64 endt_us);
+#define sock_send_struct(protocol_in, endpoint_in, ptr, endt_us) sock_send((protocol_in), (endpoint_in), str8_struct(ptr), (endt_us))
 
 ////////////////////////////////
 //~ rjf: @per_os_impl Receives
 
-internal U64 sock_recv(U8 *ptr, U64 size, SOCK_Protocol *protocol_out, SOCK_Endpoint *endpoint_out, U64 endt_us);
-#define sock_recv_struct(ptr, protocol_out, endpoint_out, endt_us) sock_recv((ptr), sizeof(*(ptr)), (endpoint_out), (endt_us))
+internal B32 sock_recv(Arena *arena, SOCK_Protocol *protocol_out, SOCK_Endpoint *endpoint_out, String8 *data_out, U64 endt_us);
+#define sock_recv_struct(arena, protocol_out, endpoint_out, data_out, endt_us) sock_recv((arena), (protocol_out), (endpoint_out), (data_out), (endt_us))
 
 #endif // SOCKET_H

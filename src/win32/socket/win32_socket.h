@@ -11,9 +11,17 @@ typedef struct W32_SOCK_Connection W32_SOCK_Connection;
 struct W32_SOCK_Connection
 {
   W32_SOCK_Connection *next;
+  W32_SOCK_Connection *prev;
   SOCK_Endpoint endpoint;
   SOCK_Protocol protocol;
   SOCKET socket;
+};
+
+typedef struct W32_SOCK_ConnectionSlot W32_SOCK_ConnectionSlot;
+struct W32_SOCK_ConnectionSlot
+{
+  W32_SOCK_Connection *first;
+  W32_SOCK_Connection *last;
 };
 
 typedef struct W32_SOCK_State W32_SOCK_State;
@@ -25,7 +33,9 @@ struct W32_SOCK_State
   SOCKET tcp_listen_socket;
   SOCKET udp_listen_socket;
   Thread tcp_listener_thread;
-  Thread udp_listener_thread;
+  U64 connection_slots_count;
+  StripeArray connection_stripes;
+  W32_SOCK_ConnectionSlot *connection_slots;
 };
 
 global W32_SOCK_State *w32_sock_state = 0;
@@ -33,7 +43,6 @@ global W32_SOCK_State *w32_sock_state = 0;
 ////////////////////////////////
 //~ rjf: Listener Threads
 
-internal void w32_sock_tcp_listener_thread_entry_point(void *p);
-internal void w32_sock_udp_listener_thread_entry_point(void *p);
+internal void w32_sock_listener_thread_entry_point(void *p);
 
 #endif // WIN32_SOCKET_H

@@ -3,5 +3,5 @@
 
 internal void sock_init(void){}
 internal void sock_async_tick(void){}
-internal U64 sock_send(U8 *ptr, U64 size, SOCK_Protocol *protocol_in, SOCK_Endpoint *endpoint_in, U64 endt_us){return 0;}
-internal U64 sock_recv(U8 *ptr, U64 size, SOCK_Protocol *protocol_in, SOCK_Endpoint *endpoint_in, U64 endt_us){return 0;}
+internal B32 sock_send(SOCK_Protocol protocol, SOCK_Endpoint endpoint, String8 data, U64 endt_us){return 0;}
+internal B32 sock_recv(Arena *arena, SOCK_Protocol *protocol_out, SOCK_Endpoint *endpoint_out, String8 *data_out, U64 endt_us){return 0;}
