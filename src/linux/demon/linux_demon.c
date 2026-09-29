@@ -3273,6 +3273,48 @@ dmn_ctrl_run(Arena *arena, DMN_CtrlCtx *ctx, DMN_RunCtrls *ctrls)
   }
   
   //////////////////////////////
+  //- rjf: gather thread names
+  //
+  for(LNX_DMN_Process *process = lnx_dmn_state->first_process; process != 0; process = process->next)
+  {
+    U64 main_thread_name_hash = 0;
+    for(LNX_DMN_Thread *thread = process->first_thread; thread != 0; thread = thread->next)
+    {
+      if(thread->tid == process->pid)
+      {
+        main_thread_name_hash = thread->last_name_hash;
+        break;
+      }
+    }
+    for(LNX_DMN_Thread *thread = process->first_thread; thread != 0; thread = thread->next)
+    {
+      if(thread->last_name_hash == 0 || thread->name_gather_time_us+1000000 <= now_time_us())
+      {
+        Temp temp = temp_begin(scratch.arena);
+        char *thread_name_path = (char *)str8f(temp.arena, "/proc/%d/task/%d/comm", process->pid, thread->tid).str;
+        int thread_name_file = LNX_RETRY_ON_EINTR(open(thread_name_path, O_RDONLY));
+        if(thread_name_file >= 0)
+        {
+          String8 thread_name = lnx_dmn_read_string_capped(temp.arena, thread_name_file, 0, 1024);
+          U64 hash = u64_hash_from_str8(thread_name);
+          if(thread_name.size != 0 && hash != thread->last_name_hash && (hash != main_thread_name_hash || thread->tid == process->pid))
+          {
+            DMN_Event *e = dmn_event_list_push(arena, &events);
+            e->kind    = DMN_EventKind_SetThreadName;
+            e->process = lnx_dmn_handle_from_process(process);
+            e->thread  = lnx_dmn_handle_from_thread(thread);
+            e->string  = str8_copy(arena, thread_name);
+          }
+          thread->last_name_hash = hash;
+        }
+        thread->name_gather_time_us = now_time_us();
+        LNX_RETRY_ON_EINTR(close(thread_name_file));
+        temp_end(temp);
+      }
+    }
+  }
+  
+  //////////////////////////////
   //- rjf: re-allow halts
   //
   mutex_drop(lnx_dmn_state->halter_mutex);
@@ -3297,7 +3339,7 @@ dmn_halt(U64 code, U64 user_data)
       for EachNode(process, LNX_DMN_Process, lnx_dmn_state->first_process)
       {
         int kill_result = LNX_RETRY_ON_EINTR(kill(process->pid, SIGSTOP));
-        int x = 0;
+        (void)kill_result;
       }
     }
   }

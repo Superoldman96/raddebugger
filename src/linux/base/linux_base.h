@@ -30,6 +30,7 @@
 #include <sys/sysinfo.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/prctl.h>
 #include <time.h>
 #include <unistd.h>
 #include <ucontext.h>

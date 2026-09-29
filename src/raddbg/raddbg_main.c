@@ -5,19 +5,15 @@
 //~ rjf: linux TODO notes
 //
 // initial alpha:
-// [x] .so loading/debugging - missing debug info
-// [x] missing disasm
 // [ ] recycling semaphore files - or alt strat?
-// [ ] control
-//  [ ] stale memory - things evaluating to stale values that are definitely not zero
 // [ ] rendering
 //  [ ] bitmaps / geometry
 //
 // post initial alpha:
 // [ ] windowing
-//   [ ] wayland
+//  [ ] wayland
 // [ ] support
-//   [ ] .eh_frame unwinding without .eh_frame_hdr
+//  [ ] .eh_frame unwinding without .eh_frame_hdr
 //
 // [x] clipboard
 // [x] jai exes - busted call stacks / unwind info / paths?
@@ -25,6 +21,11 @@
 // [x] statically linked EXEs, not parsing maps file correctly
 // [x] asan
 // [x] multithreaded stepping - trap hits reported on other threads.
+// [x] .so loading/debugging - missing debug info
+// [x] missing disasm
+// [x] control
+// [x] stale memory - things evaluating to stale values that are definitely not zero
+// [x] thread names
 
 ////////////////////////////////
 //~ rjf: evaluation system pass TODO notes

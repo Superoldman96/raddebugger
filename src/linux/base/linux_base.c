@@ -367,8 +367,7 @@ set_platform_thread_name(String8 name)
 {
   Temp scratch = scratch_begin(0, 0);
   String8 name_copy = str8_copy(scratch.arena, name);
-  pthread_t current_thread = pthread_self();
-  pthread_setname_np(current_thread, (char *)name_copy.str);
+  prctl(PR_SET_NAME, (char *)name_copy.str);
   scratch_end(scratch);
 }
 
