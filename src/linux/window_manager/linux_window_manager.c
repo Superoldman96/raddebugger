@@ -1328,12 +1328,15 @@ wm_get_events(Arena *arena, B32 wait)
               e->pos = v2f32((F32)evt.xbutton.x, (F32)evt.xbutton.y);
             }
             else if(evt.xbutton.button == Button4 ||
-                    evt.xbutton.button == Button5)
+                    evt.xbutton.button == Button5 ||
+                    evt.xbutton.button == 6 ||
+                    evt.xbutton.button == 7)
             {
               WM_Event *e = wm_event_list_push_new(arena, &evts, WM_EventKind_Scroll);
               e->window.u64[0] = (U64)window;
               e->modifiers = modifiers;
-              e->delta = v2f32(0, evt.xbutton.button == Button4 ? -1.f : +1.f);
+              e->delta = v2f32(evt.xbutton.button == 6 ? -120.f : evt.xbutton.button == 7 ? +120.f : 0.f,
+                               evt.xbutton.button == Button4 ? -120.f : evt.xbutton.button == Button5 ? +120.f : 0.f);
               e->pos = v2f32((F32)evt.xbutton.x, (F32)evt.xbutton.y);
             }
           }

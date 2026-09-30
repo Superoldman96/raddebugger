@@ -2957,7 +2957,7 @@ ui_signal_from_box(UI_Box *box)
       {
         Swap(F32, delta.x, delta.y);
       }
-      Vec2S16 delta16 = v2s16((S16)(delta.x/30.f), (S16)(delta.y/30.f));
+      Vec2S16 delta16 = v2s16((S16)(delta.x/40.f), (S16)(delta.y/40.f));
       if(delta.x > 0 && delta16.x == 0) { delta16.x = +1; }
       if(delta.x < 0 && delta16.x == 0) { delta16.x = -1; }
       if(delta.y > 0 && delta16.y == 0) { delta16.y = +1; }
