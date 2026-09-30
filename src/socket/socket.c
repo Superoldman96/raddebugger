@@ -70,6 +70,8 @@ sock_endpoint_from_string_port(String8 address, U16 port)
       }
     }break;
   }
+  
+  return ep;
 }
 
 internal SOCK_Endpoint

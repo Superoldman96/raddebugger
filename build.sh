@@ -34,7 +34,7 @@ if [[ -x "$(command -v pkg-config)" ]]; then
   cc_render="$(pkg-config --cflags --libs gl egl)"
 else
   cc_font_provider="-I/usr/include/freetype2 -lfreetype"
-  cc_os_gfx="-lX11 -lXext -lXFixes"
+  cc_os_gfx="-lX11 -lXext -lXfixes"
   cc_render="-lGL -lEGL"
 fi
 
