@@ -4,6 +4,9 @@
 #ifndef SOCKET_H
 #define SOCKET_H
 
+////////////////////////////////
+//~ rjf: Socket Types
+
 #if !defined(SOCKET_PORT)
 # define SOCKET_PORT 7423
 #endif
@@ -41,6 +44,12 @@ struct SOCK_Endpoint
 };
 
 ////////////////////////////////
+//~ rjf: Wakeup Hook Function Types
+
+#define SOCK_WAKEUP_FUNCTION_DEF(name) void name(void)
+typedef SOCK_WAKEUP_FUNCTION_DEF(SOCK_WakeupFunctionType);
+
+////////////////////////////////
 //~ rjf: Helpers
 
 internal SOCK_Endpoint sock_endpoint_from_string_port(String8 address, U16 port);
@@ -54,6 +63,7 @@ internal SOCK_Endpoint sock_endpoint_from_string(String8 address_and_port);
 #endif
 internal void sock_init(void);
 internal void sock_async_tick(void);
+internal void sock_set_wakeup_hook(SOCK_WakeupFunctionType *hook);
 
 ////////////////////////////////
 //~ rjf: @per_os_impl Sends

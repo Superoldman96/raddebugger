@@ -413,7 +413,7 @@
 #include "mdesk/mdesk.h"
 #include "window_manager/window_manager_inc.h"
 #include "shell/shell_inc.h"
-// #include "socket/socket_inc.h"
+#include "socket/socket_inc.h"
 #include "http/http_inc.h"
 #include "symbol_server/symbol_server_inc.h"
 #include "config/config_inc.h"
@@ -475,7 +475,7 @@
 #include "mdesk/mdesk.c"
 #include "window_manager/window_manager_inc.c"
 #include "shell/shell_inc.c"
-// #include "socket/socket_inc.c"
+#include "socket/socket_inc.c"
 #include "http/http_inc.c"
 #include "symbol_server/symbol_server_inc.c"
 #include "config/config_inc.c"
@@ -728,6 +728,7 @@ entry_point(CmdLine *cmd_line)
         fnt_init();
         rd_init(cmd_line);
         d_set_wakeup_hook(wakeup_hook_ctrl);
+        sock_set_wakeup_hook(wakeup_hook_ctrl);
       }
       
       //- rjf: set up shared resources for ipc to this instance; launch IPC signaler thread
@@ -826,6 +827,55 @@ entry_point(CmdLine *cmd_line)
                     rd_cmd(RD_CmdKind_RunExternalDriverTextCommand, .string = n->string);
                   }
                   rd_request_frame();
+                }
+              }
+            }
+            scratch_end(scratch);
+          }
+          
+          //- rjf: receive socket data, run as IPC messages
+          {
+            Temp scratch = scratch_begin(0, 0);
+            SOCK_Protocol protocol = SOCK_Protocol_TCP;
+            SOCK_Endpoint endpoint = {0};
+            String8 msg = {0};
+            if(sock_recv(scratch.arena, &protocol, &endpoint, &msg, 0))
+            {
+              String8List cmd_parts_of_msg = str8_split(scratch.arena, msg, (U8 *)";", 1, 0);
+              RD_WindowState *dst_ws = rd_state->first_window_state;
+              for(RD_WindowState *ws = dst_ws; ws != &rd_nil_window_state; ws = ws->order_next)
+              {
+                if(wm_window_is_focused(ws->os))
+                {
+                  dst_ws = ws;
+                  break;
+                }
+              }
+              if(dst_ws != &rd_nil_window_state)
+              {
+                dst_ws->window_temporarily_focused_ipc = 1;
+                RD_RegsScope()
+                {
+                  if(dst_ws->cfg_id != rd_regs()->window)
+                  {
+                    Temp scratch = scratch_begin(0, 0);
+                    CFG_PanelTree panel_tree = cfg_panel_tree_from_cfg(scratch.arena, cfg_node_from_id(dst_ws->cfg_id));
+                    rd_regs()->window = dst_ws->cfg_id;
+                    rd_regs()->panel  = panel_tree.focused->cfg->id;
+                    rd_regs()->tab    = panel_tree.focused->selected_tab->id;
+                    rd_regs()->view   = panel_tree.focused->selected_tab->id;
+                    scratch_end(scratch);
+                  }
+                  for EachNode(n, String8Node, cmd_parts_of_msg.first)
+                  {
+                    String8 cmd_string = str8_skip_chop_whitespace(n->string);
+                    if(cmd_string.size != 0)
+                    {
+                      rd_cmd(RD_CmdKind_RunExternalDriverTextCommand, .string = cmd_string);
+                    }
+                  }
+                  rd_request_frame();
+                  ipc_command_frame = 1;
                 }
               }
             }

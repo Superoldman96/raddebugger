@@ -15,6 +15,9 @@ struct W32_SOCK_Connection
   SOCK_Endpoint endpoint;
   SOCK_Protocol protocol;
   SOCKET socket;
+  U8 recv_buffer[4096];
+  DWORD recv_size;
+  OVERLAPPED recv_overlapped;
 };
 
 typedef struct W32_SOCK_ConnectionSlot W32_SOCK_ConnectionSlot;
@@ -30,12 +33,18 @@ struct W32_SOCK_State
   Arena *arena;
   GuardedRing *u2s_ring;
   GuardedRing *s2u_ring;
+  HANDLE iocp;
   SOCKET tcp_listen_socket;
-  SOCKET udp_listen_socket;
+  SOCKET tcp_accept_socket;
+  OVERLAPPED tcp_accept_overlapped;
+  U8 tcp_accept_buffer[4096];
+  DWORD tcp_accept_size_out;
   Thread tcp_listener_thread;
   U64 connection_slots_count;
   StripeArray connection_stripes;
   W32_SOCK_ConnectionSlot *connection_slots;
+  LPFN_ACCEPTEX lpfnAcceptEx;
+  SOCK_WakeupFunctionType *wakeup_hook;
 };
 
 global W32_SOCK_State *w32_sock_state = 0;
