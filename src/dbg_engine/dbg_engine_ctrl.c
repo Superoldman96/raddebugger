@@ -1905,24 +1905,9 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
   void *regs_block_restore = push_array(scratch.arena, U8, arch_reg_block_size);
   
   //////////////////////////////
-  //- rjf: grab initial memory
-  //
-  // NOTE(rjf): we can pre-fill memory that we can expect to load here -
-  // otherwise we will lazily evaluate it via the unwinding backends below
+  //- rjf: set up empty memory map (will be lazily filled out via unwinding)
   //
   MemoryMap memory_map = {0};
-  if(regs_block_good)
-  {
-    U64 sp = arch_sp_from_reg_block(arch_info, regs_block);
-    U64 sp_rounded_down = AlignDownPow2(sp, KB(4));
-    Rng1U64 top_of_stack_vaddr_range = r1u64(sp_rounded_down, sp_rounded_down+KB(4));
-    D_ProcessMemorySlice slice = d_process_memory_slice_from_vaddr_range(scratch.arena, process_entity->handle, top_of_stack_vaddr_range, 1, endt_us);
-    String8 data = slice.data;
-    if(!slice.stale)
-    {
-      memory_map_push(scratch.arena, &memory_map, top_of_stack_vaddr_range, data.str);
-    }
-  }
   
   //////////////////////////////
   //- rjf: push one frame for register block we already have
@@ -1969,6 +1954,33 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
       //- rjf: thread * module -> tls vaddr
       U64 tls_vaddr = 0;
       d_thread_get_module_tls_vaddr(thread_entity->handle, module_entity->handle, &tls_vaddr);
+      
+      //- rjf: clear memory map every so many frames, heuristically. preemptively pull in next 4k of stack.
+      if(frame_node_count%10 == 0)
+      {
+        // rjf: compute the next 4k of stack memory addresses
+        U64 sp_rounded_down = AlignDownPow2(start_sp, KB(4));
+        Rng1U64 top_of_stack_vaddr_range = r1u64(sp_rounded_down, sp_rounded_down+KB(4));
+        
+        // rjf: determine if we already have this stack
+        B32 already_have_this_portion_of_stack = 0;
+        for(MemoryMapRangeNode *n = memory_map.first_range; n != 0; n = n->next)
+        {
+          if(n->v.vaddr_range.min == top_of_stack_vaddr_range.min && n->v.vaddr_range.max == top_of_stack_vaddr_range.max)
+          {
+            already_have_this_portion_of_stack = 1;
+            break;
+          }
+        }
+        
+        // rjf: if we've moved to a new 4k region of stack, clear memory map, read the new portion of stack, & push
+        if(!already_have_this_portion_of_stack)
+        {
+          MemoryZeroStruct(&memory_map);
+          String8 data = d_data_from_process_vaddr_range(scratch.arena, process_entity->handle, top_of_stack_vaddr_range, 0);
+          memory_map_push(scratch.arena, &memory_map, top_of_stack_vaddr_range, data.str);
+        }
+      }
       
       //- rjf: do one unwind step
       B32 step_is_good = 0;
@@ -2026,9 +2038,9 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
       // (b) advance ip to 0
       // (c) do not modify either ip *or* sp (just one is fine)
       //
-      B32 step_made_process = (arch_ip_from_reg_block(arch_info, regs_block) != start_ip ||
-                               arch_sp_from_reg_block(arch_info, regs_block) != start_sp);
-      if(step_is_good && step_made_process && arch_ip_from_reg_block(arch_info, regs_block) != 0)
+      B32 step_made_progress = (arch_ip_from_reg_block(arch_info, regs_block) != start_ip ||
+                                arch_sp_from_reg_block(arch_info, regs_block) != start_sp);
+      if(step_is_good && step_made_progress && arch_ip_from_reg_block(arch_info, regs_block) != 0)
       {
         D_UnwindFrameNode *frame_node = push_array(scratch.arena, D_UnwindFrameNode, 1);
         D_UnwindFrame *f = &frame_node->v;
@@ -2042,7 +2054,7 @@ d_unwind_from_thread(Arena *arena, D_Handle thread, U64 endt_us)
       access_close(access);
       
       //- rjf: exit if we made no progress on the unwind
-      if(!step_made_process)
+      if(!step_made_progress)
       {
         break;
       }
