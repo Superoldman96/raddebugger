@@ -7,10 +7,6 @@
 ////////////////////////////////
 //~ rjf: Socket Types
 
-#if !defined(SOCKET_PORT)
-# define SOCKET_PORT 7423
-#endif
-
 typedef enum SOCK_Protocol
 {
   SOCK_Protocol_TCP,
@@ -44,6 +40,15 @@ struct SOCK_Endpoint
 };
 
 ////////////////////////////////
+//~ rjf: Session Handle
+
+typedef struct SOCK_Session SOCK_Session;
+struct SOCK_Session
+{
+  U64 u64[1];
+};
+
+////////////////////////////////
 //~ rjf: Wakeup Hook Function Types
 
 #define SOCK_WAKEUP_FUNCTION_DEF(name) void name(void)
@@ -63,18 +68,23 @@ internal SOCK_Endpoint sock_endpoint_from_string(String8 address_and_port);
 #endif
 internal void sock_init(void);
 internal void sock_async_tick(void);
-internal void sock_set_wakeup_hook(SOCK_WakeupFunctionType *hook);
+
+////////////////////////////////
+//~ rjf: @per_os_impl Session Creation/Closing
+
+internal SOCK_Session sock_session_open(U16 listener_port, SOCK_WakeupFunctionType *wakeup_hook);
+internal void sock_session_close(SOCK_Session session);
 
 ////////////////////////////////
 //~ rjf: @per_os_impl Sends
 
-internal B32 sock_send(SOCK_Protocol protocol, SOCK_Endpoint endpoint, String8 data, U64 endt_us);
-#define sock_send_struct(protocol_in, endpoint_in, ptr, endt_us) sock_send((protocol_in), (endpoint_in), str8_struct(ptr), (endt_us))
+internal B32 sock_send(SOCK_Session session, SOCK_Protocol protocol, SOCK_Endpoint endpoint, String8 data, U64 endt_us);
+#define sock_send_struct(session, protocol_in, endpoint_in, ptr, endt_us) sock_send((session), (protocol_in), (endpoint_in), str8_struct(ptr), (endt_us))
 
 ////////////////////////////////
 //~ rjf: @per_os_impl Receives
 
-internal B32 sock_recv(Arena *arena, SOCK_Protocol *protocol_out, SOCK_Endpoint *endpoint_out, String8 *data_out, U64 endt_us);
-#define sock_recv_struct(arena, protocol_out, endpoint_out, data_out, endt_us) sock_recv((arena), (protocol_out), (endpoint_out), (data_out), (endt_us))
+internal B32 sock_recv(Arena *arena, SOCK_Session session, SOCK_Protocol *protocol_out, SOCK_Endpoint *endpoint_out, String8 *data_out, U64 endt_us);
+#define sock_recv_struct(arena, session, protocol_out, endpoint_out, data_out, endt_us) sock_recv((arena), (session), (protocol_out), (endpoint_out), (data_out), (endt_us))
 
 #endif // SOCKET_H

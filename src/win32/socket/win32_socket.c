@@ -7,29 +7,29 @@
 internal void
 w32_sock_listener_thread_entry_point(void *p)
 {
-  ThreadNameF("w32_sock_listener_thread_%I64u", (U64)p);
-  SOCK_Protocol protocol = (SOCK_Protocol)p;
+  ThreadNameF("w32_sock_listener_thread_%I64x", (U64)p);
+  W32_SOCK_Session *session = (W32_SOCK_Session *)p;
   for(;;)
   {
     //- rjf: get next completion from IOCP
     DWORD byte_count = 0;
     U64 completion_key = 0;
     OVERLAPPED *overlapped_ptr = 0;
-    B32 success = GetQueuedCompletionStatus(w32_sock_state->iocp, &byte_count, &completion_key, &overlapped_ptr, INFINITE);
+    B32 success = GetQueuedCompletionStatus(session->iocp, &byte_count, &completion_key, &overlapped_ptr, INFINITE);
     
     //- rjf: call wakeup hook
-    if(w32_sock_state->wakeup_hook)
+    if(session->wakeup_hook)
     {
-      w32_sock_state->wakeup_hook();
+      session->wakeup_hook();
     }
     
     //- rjf: overlapped_ptr == accept overlapped? -> new connection
-    if(overlapped_ptr == &w32_sock_state->tcp_accept_overlapped)
+    if(overlapped_ptr == &session->tcp_accept_overlapped)
     {
       // rjf: unpack new socket
-      SOCKET new_socket = w32_sock_state->tcp_accept_socket;
+      SOCKET new_socket = session->tcp_accept_socket;
       struct sockaddr_storage addr = {0};
-      MemoryCopy(&addr, w32_sock_state->tcp_accept_buffer + sizeof(struct sockaddr_storage) + 16, sizeof(addr));
+      MemoryCopy(&addr, session->tcp_accept_buffer + sizeof(struct sockaddr_storage) + 16, sizeof(addr));
       
       // rjf: unpack socket's endpoint info
       SOCK_Endpoint endpoint = {0};
@@ -54,9 +54,9 @@ w32_sock_listener_thread_entry_point(void *p)
       
       // rjf: unpack endpoint
       U64 hash = u64_hash_from_str8(str8_struct(&endpoint));
-      U64 slot_idx = hash%w32_sock_state->connection_slots_count;
-      W32_SOCK_ConnectionSlot *slot = &w32_sock_state->connection_slots[slot_idx];
-      Stripe *stripe = stripe_from_slot_idx(&w32_sock_state->connection_stripes, slot_idx);
+      U64 slot_idx = hash%session->connection_slots_count;
+      W32_SOCK_ConnectionSlot *slot = &session->connection_slots[slot_idx];
+      Stripe *stripe = stripe_from_slot_idx(&session->connection_stripes, slot_idx);
       
       // rjf: store new connection
       WSABUF buf = {0};
@@ -88,10 +88,10 @@ w32_sock_listener_thread_entry_point(void *p)
       WSARecv(new_socket, &buf, 1, recv_size, &flags, recv_overlapped, 0);
       
       // rjf: create new accept socket, associate with iocp, zero overlapped, kick off next accept
-      w32_sock_state->tcp_accept_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-      CreateIoCompletionPort((HANDLE)w32_sock_state->tcp_accept_socket, w32_sock_state->iocp, 0, 0);
-      MemoryZeroStruct(&w32_sock_state->tcp_accept_overlapped);
-      w32_sock_state->lpfnAcceptEx(w32_sock_state->tcp_listen_socket, w32_sock_state->tcp_accept_socket, w32_sock_state->tcp_accept_buffer, 0, sizeof(struct sockaddr_storage) + 16, sizeof(struct sockaddr_storage) + 16, &w32_sock_state->tcp_accept_size_out, &w32_sock_state->tcp_accept_overlapped);
+      session->tcp_accept_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+      CreateIoCompletionPort((HANDLE)session->tcp_accept_socket, session->iocp, 0, 0);
+      MemoryZeroStruct(&session->tcp_accept_overlapped);
+      session->lpfnAcceptEx(session->tcp_listen_socket, session->tcp_accept_socket, session->tcp_accept_buffer, 0, sizeof(struct sockaddr_storage) + 16, sizeof(struct sockaddr_storage) + 16, &session->tcp_accept_size_out, &session->tcp_accept_overlapped);
     }
     
     //- rjf: overlapped ptr anywhere else -> completion of async recv
@@ -101,14 +101,14 @@ w32_sock_listener_thread_entry_point(void *p)
       W32_SOCK_Connection *con = CastFromMember(W32_SOCK_Connection, recv_overlapped, overlapped_ptr);
       SOCK_Endpoint endpoint = con->endpoint;
       U64 hash = u64_hash_from_str8(str8_struct(&endpoint));
-      U64 slot_idx = hash%w32_sock_state->connection_slots_count;
-      W32_SOCK_ConnectionSlot *slot = &w32_sock_state->connection_slots[slot_idx];
-      Stripe *stripe = stripe_from_slot_idx(&w32_sock_state->connection_stripes, slot_idx);
+      U64 slot_idx = hash%session->connection_slots_count;
+      W32_SOCK_ConnectionSlot *slot = &session->connection_slots[slot_idx];
+      Stripe *stripe = stripe_from_slot_idx(&session->connection_stripes, slot_idx);
       
       // rjf: success? -> push result to user. kick off next recv
       if(success)
       {
-        RingGuard g = guarded_ring_open(w32_sock_state->s2u_ring);
+        RingGuard g = guarded_ring_open(session->s2u_ring);
         U64 header[5] =
         {
           (U64)SOCK_Protocol_TCP,
@@ -146,69 +146,11 @@ sock_init(void)
 {
   // NOTE(rjf): winsock2 is already initialized by the base layer for RIO function grabbing.
   
-  //- rjf: set up state
+  //- rjf: set up top-level state
   Arena *arena = arena_alloc();
   w32_sock_state = push_array(arena, W32_SOCK_State, 1);
   w32_sock_state->arena = arena;
-  w32_sock_state->u2s_ring = guarded_ring_alloc(arena, KB(256));
-  w32_sock_state->s2u_ring = guarded_ring_alloc(arena, KB(256));
-  
-  //- rjf: set up IOCP
-  w32_sock_state->iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, 0);
-  
-  //- rjf: create listener(s)
-  w32_sock_state->tcp_listen_socket = WSASocketA(AF_INET, SOCK_STREAM, IPPROTO_TCP, 0, 0, WSA_FLAG_OVERLAPPED);
-  {
-    DWORD ipv6only = 0;
-    setsockopt(w32_sock_state->tcp_listen_socket, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&ipv6only, sizeof(ipv6only));
-  }
-  
-  //- rjf: bind listener sockets
-  {
-    struct sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(SOCKET_PORT);
-    bind(w32_sock_state->tcp_listen_socket, (SOCKADDR *)&server_addr, sizeof(server_addr));
-  }
-  
-  //- rjf: start listening for TCP connections
-  {
-    listen(w32_sock_state->tcp_listen_socket, SOMAXCONN);
-  }
-  
-  //- rjf: associate listener sockets with IOCP
-  {
-    CreateIoCompletionPort((HANDLE)w32_sock_state->tcp_listen_socket, w32_sock_state->iocp, 0, 0);
-  }
-  
-  //- rjf: load AcceptEx function
-  DWORD dwBytes = 0;
-  GUID AcceptEx_guid = WSAID_ACCEPTEX;
-  WSAIoctl(w32_sock_state->tcp_listen_socket, SIO_GET_EXTENSION_FUNCTION_POINTER, &AcceptEx_guid, sizeof(AcceptEx_guid), &w32_sock_state->lpfnAcceptEx, sizeof(w32_sock_state->lpfnAcceptEx), &dwBytes, 0, 0);
-  
-  //- rjf: create accepting socket
-  {
-    w32_sock_state->tcp_accept_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  }
-  
-  //- rjf: associate accepting socket with IOCP
-  {
-    CreateIoCompletionPort((HANDLE)w32_sock_state->tcp_accept_socket, w32_sock_state->iocp, 0, 0);
-  }
-  
-  //- rjf: kick off accept
-  {
-    w32_sock_state->lpfnAcceptEx(w32_sock_state->tcp_listen_socket, w32_sock_state->tcp_accept_socket, w32_sock_state->tcp_accept_buffer, 0, sizeof(struct sockaddr_storage) + 16, sizeof(struct sockaddr_storage) + 16, &w32_sock_state->tcp_accept_size_out, &w32_sock_state->tcp_accept_overlapped);
-  }
-  
-  //- rjf: set up connection cache
-  w32_sock_state->connection_slots_count = 8;
-  w32_sock_state->connection_slots = push_array(arena, W32_SOCK_ConnectionSlot, w32_sock_state->connection_slots_count);
-  w32_sock_state->connection_stripes = stripe_array_alloc(arena);
-  
-  //- rjf: launch one-off listener threads to block & accept connections
-  w32_sock_state->tcp_listener_thread = thread_launch(w32_sock_listener_thread_entry_point, 0);
+  w32_sock_state->session_rw_mutex = rw_mutex_alloc();
 }
 
 internal void
@@ -223,6 +165,7 @@ sock_async_tick(void)
   struct SendTask
   {
     SendTask *next;
+    SOCK_Session session;
     SOCK_Endpoint endpoint;
     String8 data;
   };
@@ -235,32 +178,38 @@ sock_async_tick(void)
     for(;;)
     {
       B32 got_more = 0;
-      RingGuard g = guarded_ring_open(w32_sock_state->u2s_ring);
+      RWMutexScope(w32_sock_state->session_rw_mutex, 0)
       {
-        U64 header[5] = {0};
-        if(guarded_ring_try_read(&g, sizeof(header), header))
+        for EachNode(s, W32_SOCK_Session, w32_sock_state->first_session)
         {
-          got_more = 1;
-          SOCK_Protocol protocol = (SOCK_Protocol)header[0];
-          U16 port = (U16)header[1];
-          SOCK_Endpoint endpoint = {0};
-          endpoint.address_u64[0] = header[2];
-          endpoint.address_u64[1] = header[3];
-          U64 data_size = header[4];
-          U8 *data = push_array(scratch.arena, U8, data_size);
-          guarded_ring_read_or_wait(&g, data_size, data, max_U64);
-          SendTask *t = push_array(scratch.arena, SendTask, 1);
-          t->endpoint = endpoint;
-          t->data = str8(data, data_size);
-          switch(protocol)
+          RingGuard g = guarded_ring_open(s->u2s_ring);
           {
-            default:{}break;
-            case SOCK_Protocol_TCP:{SLLQueuePush(first_tcp_send, last_tcp_send, t);}break;
-            case SOCK_Protocol_UDP:{SLLQueuePush(first_tcp_send, last_tcp_send, t);}break;
+            U64 header[5] = {0};
+            if(guarded_ring_try_read(&g, sizeof(header), header))
+            {
+              got_more = 1;
+              SOCK_Protocol protocol = (SOCK_Protocol)header[0];
+              U16 port = (U16)header[1];
+              SOCK_Endpoint endpoint = {0};
+              endpoint.address_u64[0] = header[2];
+              endpoint.address_u64[1] = header[3];
+              U64 data_size = header[4];
+              U8 *data = push_array(scratch.arena, U8, data_size);
+              guarded_ring_read_or_wait(&g, data_size, data, max_U64);
+              SendTask *t = push_array(scratch.arena, SendTask, 1);
+              t->endpoint = endpoint;
+              t->data = str8(data, data_size);
+              switch(protocol)
+              {
+                default:{}break;
+                case SOCK_Protocol_TCP:{SLLQueuePush(first_tcp_send, last_tcp_send, t);}break;
+                case SOCK_Protocol_UDP:{SLLQueuePush(first_tcp_send, last_tcp_send, t);}break;
+              }
+            }
           }
+          guarded_ring_close(&g);
         }
       }
-      guarded_ring_close(&g);
       if(!got_more)
       {
         break;
@@ -274,10 +223,11 @@ sock_async_tick(void)
   //
   for(SendTask *t = first_tcp_send; t != 0; t = t->next)
   {
+    W32_SOCK_Session *session = (W32_SOCK_Session *)t->session.u64[0];
     U64 hash = u64_hash_from_str8(str8_struct(&t->endpoint));
-    U64 slot_idx = hash%w32_sock_state->connection_slots_count;
-    W32_SOCK_ConnectionSlot *slot = &w32_sock_state->connection_slots[slot_idx];
-    Stripe *stripe = stripe_from_slot_idx(&w32_sock_state->connection_stripes, slot_idx);
+    U64 slot_idx = hash%session->connection_slots_count;
+    W32_SOCK_ConnectionSlot *slot = &session->connection_slots[slot_idx];
+    Stripe *stripe = stripe_from_slot_idx(&session->connection_stripes, slot_idx);
     RWMutexScope(stripe->rw_mutex, 1)
     {
       for(W32_SOCK_Connection *c = slot->first; c != 0; c = c->next)
@@ -302,23 +252,109 @@ sock_async_tick(void)
   scratch_end(scratch);
 }
 
-internal void
-sock_set_wakeup_hook(SOCK_WakeupFunctionType *hook)
+////////////////////////////////
+//~ rjf: @per_os_impl Session Creation/Closing
+
+internal SOCK_Session
+sock_session_open(U16 listener_port, SOCK_WakeupFunctionType *wakeup_hook)
 {
-  w32_sock_state->wakeup_hook = hook;
+  //- rjf: set up state
+  Arena *arena = arena_alloc();
+  W32_SOCK_Session *session = push_array(arena, W32_SOCK_Session, 1);
+  session->arena = arena;
+  session->u2s_ring = guarded_ring_alloc(arena, KB(256));
+  session->s2u_ring = guarded_ring_alloc(arena, KB(256));
+  
+  //- rjf: set up IOCP
+  session->iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, 0);
+  
+  //- rjf: create listener(s)
+  session->tcp_listen_socket = WSASocketA(AF_INET, SOCK_STREAM, IPPROTO_TCP, 0, 0, WSA_FLAG_OVERLAPPED);
+  {
+    DWORD ipv6only = 0;
+    setsockopt(session->tcp_listen_socket, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&ipv6only, sizeof(ipv6only));
+  }
+  
+  //- rjf: bind listener sockets
+  {
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(listener_port);
+    bind(session->tcp_listen_socket, (SOCKADDR *)&server_addr, sizeof(server_addr));
+  }
+  
+  //- rjf: start listening for TCP connections
+  {
+    listen(session->tcp_listen_socket, SOMAXCONN);
+  }
+  
+  //- rjf: associate listener sockets with IOCP
+  {
+    CreateIoCompletionPort((HANDLE)session->tcp_listen_socket, session->iocp, 0, 0);
+  }
+  
+  //- rjf: load AcceptEx function
+  DWORD dwBytes = 0;
+  GUID AcceptEx_guid = WSAID_ACCEPTEX;
+  WSAIoctl(session->tcp_listen_socket, SIO_GET_EXTENSION_FUNCTION_POINTER, &AcceptEx_guid, sizeof(AcceptEx_guid), &session->lpfnAcceptEx, sizeof(session->lpfnAcceptEx), &dwBytes, 0, 0);
+  
+  //- rjf: create accepting socket
+  {
+    session->tcp_accept_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  }
+  
+  //- rjf: associate accepting socket with IOCP
+  {
+    CreateIoCompletionPort((HANDLE)session->tcp_accept_socket, session->iocp, 0, 0);
+  }
+  
+  //- rjf: kick off accept
+  {
+    session->lpfnAcceptEx(session->tcp_listen_socket, session->tcp_accept_socket, session->tcp_accept_buffer, 0, sizeof(struct sockaddr_storage) + 16, sizeof(struct sockaddr_storage) + 16, &session->tcp_accept_size_out, &session->tcp_accept_overlapped);
+  }
+  
+  //- rjf: set up connection cache
+  session->connection_slots_count = 8;
+  session->connection_slots = push_array(arena, W32_SOCK_ConnectionSlot, session->connection_slots_count);
+  session->connection_stripes = stripe_array_alloc(arena);
+  
+  //- rjf: set wakeup hook
+  session->wakeup_hook = wakeup_hook;
+  
+  //- rjf: launch one-off listener threads to block & accept connections
+  session->tcp_listener_thread = thread_launch(w32_sock_listener_thread_entry_point, session);
+  
+  //- rjf: connect to top-level state
+  RWMutexScope(w32_sock_state->session_rw_mutex, 1)
+  {
+    DLLPushBack(w32_sock_state->first_session, w32_sock_state->last_session, session);
+  }
+  
+  //- rjf: bundle as handle
+  SOCK_Session result = {(U64)session};
+  return result;
+}
+
+internal void
+sock_session_close(SOCK_Session session)
+{
+  W32_SOCK_Session *s = (W32_SOCK_Session *)session.u64[0];
+  arena_release(s->arena);
 }
 
 ////////////////////////////////
 //~ rjf: @per_os_impl Sends
 
 internal B32
-sock_send(SOCK_Protocol protocol, SOCK_Endpoint endpoint, String8 data, U64 endt_us)
+sock_send(SOCK_Session session, SOCK_Protocol protocol, SOCK_Endpoint endpoint, String8 data, U64 endt_us)
 {
   B32 result = 0;
-  RingGuard guard = guarded_ring_open(w32_sock_state->u2s_ring);
+  W32_SOCK_Session *s = (W32_SOCK_Session *)session.u64[0];
+  RingGuard guard = guarded_ring_open(s->u2s_ring);
   {
     U64 header[5] = {0};
-    U64 size_cap = w32_sock_state->u2s_ring->ring->size - sizeof(header);
+    U64 size_cap = s->u2s_ring->ring->size - sizeof(header);
     U64 size = Min(data.size, size_cap);
     {
       header[0] = (U64)protocol;
@@ -346,17 +382,18 @@ sock_send(SOCK_Protocol protocol, SOCK_Endpoint endpoint, String8 data, U64 endt
 //~ rjf: @per_os_impl Receives
 
 internal B32
-sock_recv(Arena *arena, SOCK_Protocol *protocol_out, SOCK_Endpoint *endpoint_out, String8 *data_out, U64 endt_us)
+sock_recv(Arena *arena, SOCK_Session session, SOCK_Protocol *protocol_out, SOCK_Endpoint *endpoint_out, String8 *data_out, U64 endt_us)
 {
   B32 result = 0;
   U64 header_size = sizeof(*protocol_out) + sizeof(*endpoint_out) + sizeof(U64);
   {
-    RingGuard guard = guarded_ring_open(w32_sock_state->s2u_ring);
+    W32_SOCK_Session *s = (W32_SOCK_Session *)session.u64[0];
+    RingGuard guard = guarded_ring_open(s->s2u_ring);
     {
       U64 header[5] = {0};
       if(guarded_ring_read_or_wait(&guard, sizeof(header), header, endt_us))
       {
-        U64 size_cap = w32_sock_state->s2u_ring->ring->size - sizeof(header);
+        U64 size_cap = s->s2u_ring->ring->size - sizeof(header);
         protocol_out[0] = (SOCK_Protocol)header[0];
         endpoint_out->port = (U16)header[1];
         endpoint_out->address_u64[0] = header[2];

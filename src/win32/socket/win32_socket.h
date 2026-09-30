@@ -27,9 +27,11 @@ struct W32_SOCK_ConnectionSlot
   W32_SOCK_Connection *last;
 };
 
-typedef struct W32_SOCK_State W32_SOCK_State;
-struct W32_SOCK_State
+typedef struct W32_SOCK_Session W32_SOCK_Session;
+struct W32_SOCK_Session
 {
+  W32_SOCK_Session *next;
+  W32_SOCK_Session *prev;
   Arena *arena;
   GuardedRing *u2s_ring;
   GuardedRing *s2u_ring;
@@ -46,6 +48,18 @@ struct W32_SOCK_State
   LPFN_ACCEPTEX lpfnAcceptEx;
   SOCK_WakeupFunctionType *wakeup_hook;
 };
+
+typedef struct W32_SOCK_State W32_SOCK_State;
+struct W32_SOCK_State
+{
+  Arena *arena;
+  RWMutex session_rw_mutex;
+  W32_SOCK_Session *first_session;
+  W32_SOCK_Session *last_session;
+};
+
+////////////////////////////////
+//~ rjf: Globals
 
 global W32_SOCK_State *w32_sock_state = 0;
 

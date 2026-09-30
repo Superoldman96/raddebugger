@@ -728,7 +728,6 @@ entry_point(CmdLine *cmd_line)
         fnt_init();
         rd_init(cmd_line);
         d_set_wakeup_hook(wakeup_hook_ctrl);
-        sock_set_wakeup_hook(wakeup_hook_ctrl);
       }
       
       //- rjf: set up shared resources for ipc to this instance; launch IPC signaler thread
@@ -766,6 +765,9 @@ entry_point(CmdLine *cmd_line)
         
         scratch_end(scratch);
       }
+      
+      //- rjf: set up socket session for ICP
+      SOCK_Session icp_sock_session = sock_session_open(7423, wakeup_hook_ctrl);
       
       //- rjf: main application loop
       {
@@ -839,7 +841,7 @@ entry_point(CmdLine *cmd_line)
             SOCK_Protocol protocol = SOCK_Protocol_TCP;
             SOCK_Endpoint endpoint = {0};
             String8 msg = {0};
-            if(sock_recv(scratch.arena, &protocol, &endpoint, &msg, 0))
+            if(sock_recv(scratch.arena, icp_sock_session, &protocol, &endpoint, &msg, 0))
             {
               String8List cmd_parts_of_msg = str8_split(scratch.arena, msg, (U8 *)";", 1, 0);
               RD_WindowState *dst_ws = rd_state->first_window_state;
